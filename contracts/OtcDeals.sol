@@ -3,6 +3,10 @@ pragma solidity ^0.8.20;
 
 import "./IOtcDeals.sol";
 
+interface IERC20 {
+    function balanceOf(address) external view returns (uint256);
+}
+
 /// One offer to swap two ERC-20 amounts between a maker and a taker. The contract holds the maker's
 /// tokens from createDeal until the fill or the cancel, and nothing else: no owner, no fee, no upgrade.
 contract OtcDeals is IOtcDeals {
@@ -16,7 +20,10 @@ contract OtcDeals is IOtcDeals {
         id = ++dealCount;
         deals[id] = Deal(msg.sender, taker, sellToken, sellAmount, buyToken, buyAmount, expiry, Status.Open);
         emit DealCreated(id, msg.sender, taker);
+        uint256 held = IERC20(sellToken).balanceOf(address(this));
         _transfer(sellToken, msg.sender, address(this), sellAmount);
+        // a token that takes a fee on the way in would leave a deal that can neither fill nor cancel
+        require(IERC20(sellToken).balanceOf(address(this)) - held == sellAmount, "token took a fee");
     }
 
     function fill(uint256 id) external {
