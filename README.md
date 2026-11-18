@@ -9,18 +9,26 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** This is the base of round 1: the fixed contract interface, a placeholder page and the
-round's checks. There is no deal contract and no deal page yet. Nothing here has been reviewed for
-security, and nothing is deployed.
+**Where it stands.** Round 1 built the deal contract, the deal page and the deployment. What was chosen
+where the brief left it open:
+
+- The contract holds the maker's sell tokens from `createDeal` until the fill or the cancel, so a fill
+  never fails for lack of the maker's tokens. Each deal's status is written before any token is called:
+  a token that re-enters `fill` or `cancel` finds the deal closed.
+- Tokens are called by a low-level `call`: one that returns nothing (USDT) is accepted, one that returns
+  `false`, reverts, or is not a contract is refused. No library.
+- The page is one HTML file with no dependency and no bundler: it encodes and decodes the few ABI calls
+  it needs by hand and talks JSON-RPC with `fetch`. `npm run build` copies `web/` to `dist/`.
+- Nothing here has been audited, and nothing is deployed yet.
 
 ## What is in the repository
 
 | Path | What it is |
 | --- | --- |
-| `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed: round 1 implements it in `contracts/OtcDeals.sol`. |
+| `contracts/IOtcDeals.sol`, `contracts/OtcDeals.sol` | The deal contract's fixed interface, and the contract. |
 | `web/` | The page. `npm run build` makes the static site in `dist/`. |
 | `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
-| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment (round 1's to write). |
+| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment: it compiles the contract as the checks do and deploys it with ethers. |
 | `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
 | `.launchpad/checks/round-1/` | Round 1's checks. |
 
@@ -34,7 +42,7 @@ npm run build                      # dist/ is the site: serve it with any static
 python3 -m http.server -d dist 8080
 ```
 
-Deploying the contract (once round 1 has built it) takes the network and the key from the environment,
+Deploying the contract takes the network and the key from the environment,
 never from a file:
 
 ```sh
