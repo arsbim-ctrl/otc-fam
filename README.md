@@ -18,7 +18,7 @@ the deployment script. Nothing here has been reviewed for security, and nothing 
 | --- | --- |
 | `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed. |
 | `contracts/OtcDeals.sol` | The deal contract: one contract for every deal, no owner, no fee. |
-| `web/` | The page, plain files and no dependency: `app.js` (the two pages), `eth.js` (the chain and the wallet), `units.js` (amounts), `style.css`. `npm run build` copies it into `dist/`. |
+| `web/` | The page, plain files and no dependency. `app.js` reads the config and routes to `deal-page.js` (`#/d/<id>`) or `new-deal-page.js` (`#/new`); `eth.js` reads the chain and sends through the wallet; `ui.js` and `units.js` build the page and word its amounts. `npm run build` copies it into `dist/`. |
 | `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
 | `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment. |
 | `test/` | The entry's own tests (`npm test`): what the round's checks leave out. |
@@ -69,9 +69,9 @@ npm test
 
 | File | What it shows |
 | --- | --- |
-| `contract.test.mjs` | A sell token that keeps a fee is refused; a token that answers `false`, or an address with no contract, cannot be traded; deals of the same token each pay out exactly their own amount; no call back into `createDeal`, `fill` or `cancel` goes through while tokens move. |
+| `contract.test.mjs` | A token that keeps a fee is refused, sold or bought; a token that answers `false`, or an address with no contract, cannot be traded; deals of the same token each pay out exactly their own amount; no call back into `createDeal`, `fill` or `cancel` goes through while tokens move. |
 | `page.test.mjs` | A token with no decimals; an amount with more decimals than its token has; a wallet on another network; a press declined in the wallet; a transaction refused before it is sent, or failed on the chain; a token that wants its approval set to zero first (as USDT); the maker cancelling an open or an expired deal. |
-| `amounts.test.mjs`, `abi.test.mjs` | Amounts are never rounded; the page's hand-written selectors and error words match the compiled contract. |
+| `amounts.test.mjs`, `abi.test.mjs` | Amounts are never rounded; the page's hand-written selectors and error words match the compiled contract; a symbol is read as a string or as bytes32, without characters that turn the text around. |
 | `deploy.test.mjs` | `npm run deploy` against a local node, with a fresh key. |
 
 ## The deal contract
@@ -80,9 +80,11 @@ npm test
 transaction, and `cancel` gives the tokens back to the maker. An open link is therefore always backed, and
 every approval is for the exact amount of one deal. Where the brief left the choice:
 
-- **What it holds**: exactly what its open deals add up to. `createDeal` checks that it received the whole
-  `sellAmount`, and refuses a token that keeps a fee on transfers (`TokenTookAFee`): a deal left short would
-  be paid out of another deal's tokens.
+- **What it holds**: exactly what its open deals add up to. Tokens come in through one function, which checks
+  that the whole amount arrived, and go out through another. A token that keeps a fee on transfers is
+  refused on either side (`TokenTookAFee`): sold, a deal left short would be paid out of another deal's
+  tokens; bought, the maker would get less than the deal says. That is also why `fill` takes the taker's
+  payment into the contract before passing it to the maker.
 - **Tokens.** `transfer` and `transferFrom` may answer `true` or nothing at all (as USDT does); `false`, a
   revert, or an address with no contract behind it fails the call (`TransferFailed`, `NotAToken`). Not
   covered: tokens whose balances change without a transfer (rebasing), and tokens that can freeze an
@@ -100,7 +102,8 @@ every approval is for the exact amount of one deal. Where the brief left the cho
 
 - `#/d/<id>` reads the deal from `rpcUrl`, with or without a wallet. Its one button takes the taker through
   each step and says what the step does: connect, switch network if needed, approve exactly the amount to
-  pay, fill. The maker who opens their own deal gets a button to cancel it instead.
+  pay, fill. The maker who opens their own deal, open or expired, gets a button to cancel it and take the
+  tokens back instead.
 - Before the wallet is asked to sign, the page runs the transaction as a call: one that the chain would refuse
   is not sent, and the contract's reason is shown in words.
 - A deal shows as expired once the latest block or the browser's clock has reached its expiry. A deal made at

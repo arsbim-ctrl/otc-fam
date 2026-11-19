@@ -33,12 +33,20 @@ async function revertsWith(sending) {
   assert.fail("the call went through: it must revert");
 }
 
-test("a sell token that keeps a fee on transfers is refused, so a deal never holds less than it pays out", async () => {
+test("a token that keeps a fee on transfers is refused on either side: no deal holds less than it pays out, no maker gets less than asked", async () => {
   const { w, token } = await worldWith("Fee", "FEE");
   await token.as(w.maker).approve(w.deals.address, 1000n);
   assert.equal(await revertsWith(w.create(w.maker, await w.terms({ sellToken: token.address, sellAmount: 1000n }))), "TokenTookAFee");
   assert.equal(await token.read.balanceOf(w.deals.address), 0n);
   assert.equal((await w.deals.read.getDeal(1)).status, STATUS.None);
+
+  const id = await w.offer({ buyToken: token.address, buyAmount: 1000n }); // ALFA for FEE
+  const before = await w.holdings(), makers = await token.read.balanceOf(w.maker);
+  await token.as(w.taker).approve(w.deals.address, 1000n);
+  assert.equal(await revertsWith(w.deals.as(w.taker).fill(id)), "TokenTookAFee");
+  await w.moved(before, {}, "after a fill paid in a token that keeps a fee");
+  assert.equal(await token.read.balanceOf(w.maker), makers);
+  assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Open, "the deal is still open, and its maker can cancel it");
 });
 
 test("a token that answers false moves nothing: it cannot be sold, and a fill paid with it fails and changes no balance", async () => {

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { id, Interface } from "ethers";
 import { artifacts } from "../.launchpad/checks/round-1/world.mjs";
-import { explain } from "../web/eth.js";
+import { Chain, explain } from "../web/eth.js";
 
 const source = readFileSync("web/eth.js", "utf8");
 const contract = new Interface(artifacts().entry.abi);
@@ -23,4 +23,23 @@ test("every error of OtcDeals has words on the page, and the words carry its arg
   assert.equal(explain({ code: -32000, data: { data } }), `This deal is reserved for ${taker}: only that address can fill it.`);
   assert.equal(explain({ code: 3, data: contract.encodeErrorResult("DealExpired", [7n]) }), "This deal has expired: it can no longer be filled.");
   assert.equal(explain({ code: 4001, message: "User rejected the request." }), "You declined in your wallet. Nothing was sent.");
+});
+
+test("a token's symbol is read as an ABI string or as bytes32 (as MKR's is), without characters that change the text's direction", async () => {
+  const hex = (text) => Buffer.from(text, "utf8").toString("hex");
+  const word = (n) => n.toString(16).padStart(64, "0");
+  const asString = (text) => `0x${word(32)}${word(Buffer.byteLength(text))}${hex(text).padEnd(64, "0")}`;
+  const symbols = { "0x00000000000000000000000000000000000000aa": asString("ALFA"), "0x00000000000000000000000000000000000000bb": `0x${hex("MKR").padEnd(64, "0")}`,
+    "0x00000000000000000000000000000000000000cc": asString("USD‮C") };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, { body }) => {
+    const [{ to, data }] = JSON.parse(body).params;
+    return { ok: true, json: async () => ({ result: data === "0x313ce567" ? `0x${word(18)}` : symbols[to] }) }; // decimals(), else symbol()
+  };
+  try {
+    const chain = new Chain("http://rpc.invalid", `0x${"0".repeat(40)}`);
+    assert.deepEqual(await Promise.all(Object.keys(symbols).map(async (a) => (await chain.token(a)).symbol)), ["ALFA", "MKR", "USDC"]);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

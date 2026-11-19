@@ -12,8 +12,9 @@ interface IERC20Minimal {
 
 /// @title OtcDeals: the deals of otc.fam, each one an offer to swap two tokens.
 /// @notice createDeal moves the maker's sellAmount into this contract, where it stays until the deal ends:
-/// fill gives it to the taker in the same transaction as the taker's buyAmount goes to the maker, and cancel
-/// gives it back to the maker. Nothing else moves tokens. There is no owner, no fee, no upgrade, no pause.
+/// fill gives it to the taker in the same transaction as the taker's buyAmount goes, through this contract,
+/// to the maker, and cancel gives it back to the maker. Nothing else moves tokens. There is no owner, no fee,
+/// no upgrade, no pause.
 /// @dev Every transfer happens after the deal's new status is written, and a lock refuses any call back
 /// into createDeal, fill or cancel while one of them runs (a token's transfer can call this contract).
 /// Not covered: a token whose balances change without a transfer (rebasing), or that can freeze an address,
@@ -62,16 +63,12 @@ contract OtcDeals is IOtcDeals {
         deals[id] = Deal(msg.sender, taker, sellToken, sellAmount, buyToken, buyAmount, expiry, Status.Open);
         emit DealCreated(id, msg.sender, taker);
 
-        // The deal must hold exactly sellAmount: a token that keeps part of a transfer would leave it short,
-        // and its fill or cancel would then be paid with the tokens of another maker's deal.
-        uint256 held = IERC20Minimal(sellToken).balanceOf(address(this));
-        _transferFrom(sellToken, msg.sender, address(this), sellAmount);
-        if (IERC20Minimal(sellToken).balanceOf(address(this)) != held + sellAmount) revert TokenTookAFee(sellToken);
+        _pull(sellToken, msg.sender, sellAmount);
     }
 
-    /// @notice Swaps deal `id`: the caller pays `buyAmount` of `buyToken` to the maker and receives the deal's
-    /// `sellAmount` of `sellToken`, both in this transaction or neither. The caller must have approved this
-    /// contract for `buyAmount`.
+    /// @notice Swaps deal `id`: the caller's `buyAmount` of `buyToken` goes to the maker and the deal's
+    /// `sellAmount` of `sellToken` to the caller, both in this transaction or neither. The caller must have
+    /// approved this contract for `buyAmount`.
     function fill(uint256 id) external oneAtATime {
         Deal storage deal = deals[id];
         if (deal.status != Status.Open) revert NotOpen(id);
@@ -81,8 +78,9 @@ contract OtcDeals is IOtcDeals {
         deal.status = Status.Filled;
         emit DealFilled(id, msg.sender);
 
-        _transferFrom(deal.buyToken, msg.sender, deal.maker, deal.buyAmount);
-        _transfer(deal.sellToken, msg.sender, deal.sellAmount);
+        _pull(deal.buyToken, msg.sender, deal.buyAmount);
+        _push(deal.buyToken, deal.maker, deal.buyAmount);
+        _push(deal.sellToken, msg.sender, deal.sellAmount);
     }
 
     /// @notice Withdraws deal `id`, open or expired, and gives its `sellAmount` back to the maker, its only caller.
@@ -94,7 +92,7 @@ contract OtcDeals is IOtcDeals {
         deal.status = Status.Cancelled;
         emit DealCancelled(id);
 
-        _transfer(deal.sellToken, deal.maker, deal.sellAmount);
+        _push(deal.sellToken, deal.maker, deal.sellAmount);
     }
 
     /// @notice Deal `id` as it stands; for an id no deal has, a deal of zeros with status None.
@@ -102,12 +100,18 @@ contract OtcDeals is IOtcDeals {
         return deals[id];
     }
 
-    function _transfer(address token, address to, uint256 amount) private {
-        _callToken(token, abi.encodeCall(IERC20Minimal.transfer, (to, amount)));
+    /// Takes exactly `amount` of `token` from `from` into this contract, the only way a token comes in. A token
+    /// that delivers less, as one that keeps a fee on transfers does, fails the call: a deal would be short, and
+    /// paid out of another deal's tokens, or its maker paid less than the deal says.
+    function _pull(address token, address from, uint256 amount) private {
+        uint256 held = IERC20Minimal(token).balanceOf(address(this));
+        _callToken(token, abi.encodeCall(IERC20Minimal.transferFrom, (from, address(this), amount)));
+        if (IERC20Minimal(token).balanceOf(address(this)) != held + amount) revert TokenTookAFee(token);
     }
 
-    function _transferFrom(address token, address from, address to, uint256 amount) private {
-        _callToken(token, abi.encodeCall(IERC20Minimal.transferFrom, (from, to, amount)));
+    /// Gives `amount` of `token` from this contract to `to`, the only way a token goes out.
+    function _push(address token, address to, uint256 amount) private {
+        _callToken(token, abi.encodeCall(IERC20Minimal.transfer, (to, amount)));
     }
 
     /// Calls `token` and fails unless it answers as an ERC-20 that did the transfer: `true`, or nothing at all

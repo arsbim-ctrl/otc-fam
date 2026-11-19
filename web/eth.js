@@ -1,6 +1,7 @@
 // The chain, as the page uses it: reads by JSON-RPC at the config's rpcUrl (no wallet needed), transactions through
 // the browser's wallet (window.ethereum, EIP-1193). The few ABI encodings the page needs are written by hand: every
 // argument it sends is one 32-byte word, and every answer it reads is words, or a string for symbol().
+import { formatAmount } from "./units.js";
 
 export const ZERO_ADDRESS = `0x${"0".repeat(40)}`;
 
@@ -27,7 +28,7 @@ const address = (w) => `0x${w.slice(24)}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
-export const approveData = (spender, amount) => encode(SELECTOR.approve, spender, amount);
+const approveData = (spender, amount) => encode(SELECTOR.approve, spender, amount);
 export const fillData = (id) => encode(SELECTOR.fill, id);
 export const cancelData = (id) => encode(SELECTOR.cancel, id);
 export const createDealData = ({ sellToken, sellAmount, buyToken, buyAmount, taker, expiry }) =>
@@ -170,13 +171,37 @@ export class Wallet {
   }
 }
 
+/**
+ * Sends `data` to `to` from the app's wallet, once a call has shown that the chain would take it, and waits until it
+ * is mined. `stage(text)` tells the person where it stands. A transaction the chain would refuse is never sent.
+ */
+export async function transact({ chain, wallet, config }, to, data, stage, what) {
+  await chain.call(to, data, wallet.account);
+  stage(`${what}. Confirm it in your wallet.`);
+  const hash = await wallet.send({ to, data }, config.chainId);
+  stage(`${what}. Sent: waiting for the network to confirm it.`);
+  const receipt = await chain.receipt(hash);
+  if (receipt.status !== "0x1") throw new Error("The transaction failed on the chain, and nothing moved. Try again.");
+  return receipt;
+}
+
+/** Approves the deal contract for exactly `units` of `token`, the amount of one deal and never more. */
+export async function approveExactly(app, token, units, allowance, stage) {
+  const data = approveData(app.config.contract, units);
+  // Some tokens (USDT among them) refuse to change an approval that is not zero: it is set to zero first.
+  if (allowance > 0n && (await app.chain.call(token.address, data, app.wallet.account).then(() => false, () => true))) {
+    await transact(app, token.address, approveData(app.config.contract, 0n), stage, `Setting your ${token.symbol} approval to zero first`);
+  }
+  await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`);
+}
+
 // Why the deal contract refused a call, in words: its errors by selector, with their arguments' words.
 const REASONS = {
   "0x1f2a2005": () => "Both amounts must be more than zero.", // ZeroAmount()
   "0x201b580a": () => "The token you give and the token you get must be different.", // SameToken()
   "0xed8adeb1": () => "The deal must end in the future.", // ExpiryNotInFuture()
   "0xf0ae59ab": ([token]) => `${address(token)} is not a token contract on this network.`, // NotAToken(address)
-  "0x6e779af5": ([token]) => `The token ${address(token)} keeps part of every transfer, so a deal could not hold the full amount. It cannot be offered here.`, // TokenTookAFee(address)
+  "0x6e779af5": ([token]) => `The token ${address(token)} keeps part of every transfer, so it cannot move a deal's exact amount: deals in it cannot go through.`, // TokenTookAFee(address)
   "0x341b372a": () => "This deal is no longer open: it was filled or cancelled.", // NotOpen(uint256)
   "0x4877925c": () => "This deal has expired: it can no longer be filled.", // DealExpired(uint256)
   "0x64c4c47b": ([, taker]) => `This deal is reserved for ${address(taker)}: only that address can fill it.`, // NotYourDeal(uint256,address)
