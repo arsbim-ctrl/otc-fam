@@ -7,7 +7,8 @@ const short = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '';
 const network = (id) => ({ 1: 'Ethereum', 8453: 'Base', 84532: 'Base Sepolia', 31337: 'Local network' }[id] ?? `Network ${id}`);
 const fields = ['sell-token', 'sell-amount', 'buy-token', 'buy-amount', 'taker', 'expiry-hours'];
 const state = { account: null, walletChain: null, busy: false, refreshing: false, epoch: 0, revision: 0,
-  message: '', error: '', step: '', mode: 'wait', prepared: null, created: null, pending: null };
+  message: '', error: '', step: '', mode: 'wait', prepared: null, created: null };
+const transactions = new Map(), creations = new Map(), receiptChecks = new Map();
 let chain, config, timer, debounce;
 const custody = '<div class="noncustody"><span class="shield" aria-hidden="true">◇</span><div><strong>Open offers do not reserve funds.</strong><br>Tokens stay in the maker’s wallet until the swap. Funds and approval must still be available.</div></div>';
 const intro = (title, subtitle) => `<div class="intro"><p class="eyebrow">DIRECT WALLET-TO-WALLET TRADES</p><h1>${title}</h1><p>${subtitle}</p></div>`;
@@ -44,7 +45,7 @@ function renderDeal() {
   const description = { open: 'Exact amounts. Both sides swap together.', filled: 'The swap has been completed.', cancelled: 'The maker withdrew this offer.', expired: 'The time to accept this offer has passed.', 'not-found': 'Check the link with the person who sent it.' }[status];
   $('#app').innerHTML = intro(title, description) + `<section class="card"><div class="card-head"><h2>Deal #${escape(state.route.id ?? '—')}</h2><span data-testid="deal-status" data-status="${status}" class="badge ${status === 'open' || status === 'filled' ? '' : 'neutral'}">${{ open: 'Open', filled: 'Completed', cancelled: 'Cancelled', expired: 'Expired', 'not-found': 'Not found' }[status]}</span></div>` +
     (status === 'not-found' ? '<div class="empty"><p>There is no deal at this address.<br>Ask the maker for the complete link.</p><a href="#/new">Create a new deal</a></div>' :
-      tokenPanel('You pay', d.buyAmount, state.buy, 'pay') + '<div class="exchange" aria-hidden="true"><span>↓</span></div>' + tokenPanel('You receive', d.sellAmount, state.sell, 'receive', true) + details(d) +
+      (state.buy && state.sell ? tokenPanel('You pay', d.buyAmount, state.buy, 'pay') + '<div class="exchange" aria-hidden="true"><span>↓</span></div>' + tokenPanel('You receive', d.sellAmount, state.sell, 'receive', true) : '<p>Token amounts are unavailable.</p>') + details(d) +
       (status === 'open' ? custody : `<p class="status-message">${status === 'filled' ? 'This deal is finished and cannot be filled again.' : status === 'cancelled' ? 'This offer is no longer available. Cancelling did not transfer or lock any tokens.' : 'This offer can no longer be filled. The maker’s tokens were never locked.'}</p>`)) + actionArea + (status === 'not-found' ? '' : technical(d)) + '</section>';
   bindActions();
   if ($('.technical')) $('.technical').open = Boolean(detailsOpen);
@@ -86,36 +87,49 @@ function updateActions() {
   notice.textContent = state.error || state.message;
   notice.className = `notice${state.error ? ' error' : ''}`;
   $('#wallet').textContent = state.account ? `${short(state.account)} · ${network(state.walletChain)}${state.walletChain !== config.chainId ? ' (wrong network)' : ''}` : '';
-  if (state.pending) $('#receipt').textContent = `Transaction: ${state.pending.hash}`;
-  else if (state.lastHash) $('#receipt').innerHTML = `<details><summary>${escape({ approve: 'Approval', reset: 'Approval reset', fill: 'Swap', cancel: 'Cancellation', create: 'Deal creation' }[state.lastKind] || 'Transaction')} confirmed · details</summary><p>${escape(state.lastHash)}</p></details>`;
+  const pending = currentPending();
+  if (pending) $('#receipt').textContent = pending.hash ? `Transaction: ${pending.hash}` : 'Wallet submission outcome unknown. Verify the transaction in your wallet.';
+  else if (state.lastReceipt && matchesPage(state.lastReceipt)) $('#receipt').innerHTML = `<details><summary>${escape({ approve: 'Approval', reset: 'Approval reset', fill: 'Swap', cancel: 'Cancellation', create: 'Deal creation' }[state.lastReceipt.kind])} confirmed · details</summary><p>${escape(state.lastReceipt.hash)}</p></details>`;
   else $('#receipt').replaceChildren();
+  if (state.route.kind === 'new') {
+    const saved = [...creations.values()].filter(r => same(r.account, state.account));
+    for (const receipt of saved) {
+      const link = document.createElement('a'), url = new URL(location.href);
+      url.hash = '/d/' + receipt.id; link.href = url.href;
+      if (receipt === saved.at(-1)) link.dataset.testid = 'deal-link';
+      link.textContent = `Created deal #${receipt.id} · share link`;
+      const row = document.createElement('p'); row.append(link); $('#receipt').append(row);
+    }
+  }
   const secondary = $('#secondary'); secondary.replaceChildren();
   if (!state.busy && !state.refreshing) {
-    if (!state.pending && state.deal && same(state.account, state.deal.maker) && Number(state.deal.status) === 1) {
+    if (pending?.kind !== 'cancel' && state.deal && same(state.account, state.deal.maker) && Number(state.deal.status) === 1) {
       const cancel = document.createElement('button'); cancel.className = 'secondary'; cancel.textContent = state.walletChain !== config.chainId ? 'Switch network to cancel' : 'Cancel offer';
       cancel.onclick = () => { if (state.walletChain !== config.chainId) act('switch'); else if (window.confirm('Cancel this offer? It will no longer be fillable. Your funds stay in your wallet; token approvals are unchanged.')) act('cancel'); };
       secondary.append(cancel);
     }
-    if (!state.pending && window.ethereum && !state.account && state.deal && Number(state.deal.status) === 1 && dealState(state.deal) === 'expired') {
+    if (window.ethereum && !state.account && state.deal && Number(state.deal.status) === 1 && (dealState(state.deal) === 'expired' || !state.sell || !state.buy)) {
       const connect = document.createElement('button'); connect.className = 'secondary'; connect.textContent = 'Connect to manage offer'; connect.onclick = () => act('connect'); secondary.append(connect);
     }
-    if (state.error || (state.mode === 'blocked' && window.ethereum) || state.pending) {
+    if (state.error || (state.mode === 'blocked' && window.ethereum) || pending) {
       const retry = document.createElement('button'); retry.className = 'secondary'; retry.textContent = 'Refresh status'; retry.onclick = () => refresh(); secondary.append(retry);
     }
     if (!window.ethereum && state.deal && Number(state.deal.status) === 1 && dealState(state.deal) === 'open') {
       const copy = document.createElement('button'); copy.className = 'secondary'; copy.textContent = 'Copy link for your wallet';
       copy.onclick = async () => { try { await navigator.clipboard.writeText(location.href); state.message = 'Link copied. Open it in your wallet app’s browser.'; } catch { state.message = 'Copy this page’s address from your browser, then open it in your wallet app’s browser.'; } updateActions(); }; secondary.append(copy);
     }
-    if (state.pending && state.mode === 'terminal') {
+    if (pending && state.mode === 'terminal') {
       const check = document.createElement('button'); check.className = 'secondary'; check.textContent = 'Check pending transaction'; check.onclick = () => act('pending'); secondary.append(check);
     }
-    if (state.pending?.replaced) {
-      const clear = document.createElement('button'); clear.className = 'secondary'; clear.textContent = 'Clear replaced transaction';
-      clear.onclick = () => { if (window.confirm('The original transaction is unavailable and its nonce has been used. Verify the replacement or cancellation in your wallet before continuing. Have you checked it?')) { state.pending = null; savePending(); refresh(); } };
+    if (pending && !pending.confirmed && (pending.unseen || !pending.hash || pending.replaced) && !pending.sending && !receiptChecks.has(pending)) {
+      const recover = document.createElement('button'); recover.className = 'secondary'; recover.textContent = 'Recover with wallet transaction hash';
+      recover.onclick = () => act('recover'); secondary.append(recover);
+      const clear = document.createElement('button'); clear.className = 'secondary'; clear.textContent = pending.replaced ? 'Clear replaced transaction' : 'Resolve from wallet activity';
+      clear.onclick = () => { if (window.confirm('Check this account’s activity on the deal network. Only continue if the wallet confirms the request was never sent, failed, or was permanently cancelled. A missing transaction is inconclusive. If it succeeded, recover with its hash. Have you verified that it cannot complete?')) { forgetPending(pending); refresh(); } };
       secondary.append(clear);
     }
   }
-  for (const id of fields) if ($(`#${id}`)) $(`#${id}`).disabled = state.busy || Boolean(state.pending);
+  for (const id of fields) if ($(`#${id}`)) $(`#${id}`).disabled = Boolean(state.busy || (pending && matchesPage(pending)));
 }
 async function walletState() {
   if (!window.ethereum) return { account: null, walletChain: null };
@@ -151,15 +165,18 @@ async function refresh() {
     const wallet = await walletState();
     if (epoch !== state.epoch || revision !== state.revision) return;
     Object.assign(state, wallet);
-    let prepared, d, sell, buy, blockTime;
+    let prepared, d, sell, buy, blockTime, metadataError;
     if (state.route.kind === 'deal') {
       [d, blockTime] = await Promise.all([chain.deal(state.route.id), chain.now()]);
-      if (Number(d.status) !== 0) [sell, buy] = await Promise.all([chain.token(d.sellToken), chain.token(d.buyToken)]);
-    } else if (state.route.kind === 'new' && !state.created) prepared = await prepareForm();
+      if (Number(d.status) !== 0) {
+        try { [sell, buy] = await Promise.all([chain.token(d.sellToken), chain.token(d.buyToken)]); }
+        catch (error) { metadataError = friendly(error); }
+      }
+    } else if (state.route.kind === 'new' && !state.created && ![...transactions.values()].some(matchesPage)) prepared = await prepareForm();
     else if (state.route.kind === 'missing') d = { status: 0n };
     if (epoch !== state.epoch || revision !== state.revision) return;
     if (blockTime !== undefined) state.blockTime = blockTime;
-    state.error = ''; state.message = '';
+    state.error = metadataError || ''; state.message = '';
     if (d) { state.deal = d; state.sell = sell; state.buy = buy; renderDeal(); }
     if (state.created) return;
     state.prepared = prepared;
@@ -168,9 +185,10 @@ async function refresh() {
       for (const id of fields) { $(`#${id}`).removeAttribute('aria-invalid'); $(`#${id}`).classList.remove('invalid'); if (document.getElementById(id + '-error')) document.getElementById(id + '-error').hidden = true; }
     }
     if (d && dealState(d) !== 'open') { setMode('terminal', { filled: 'Deal completed', cancelled: 'Offer cancelled', expired: 'Offer expired', 'not-found': 'Deal not found' }[dealState(d)]); return; }
-    if (state.pending) {
-      setMode('pending', 'Check transaction', 'A transaction is still unconfirmed. Check its status before sending another.'); return;
+    if (currentPending()) {
+      setMode('pending', 'Check transaction', 'Check this transaction in your wallet before repeating it.'); return;
     }
+    if (metadataError) { setMode('blocked', 'Token details unavailable'); return; }
     if (!window.ethereum) { setMode('blocked', 'Open in a wallet browser', 'You can read this deal without a wallet. To transact, open this link in a browser with an Ethereum wallet.'); return; }
     if (!state.account) { setMode('connect', 'Connect wallet', 'Connecting lets you check your balance. It does not move tokens.'); return; }
     if (d && !same(d.taker, ZERO) && !same(d.taker, state.account)) {
@@ -222,60 +240,115 @@ function friendly(error) {
   return String(error.message || 'Something went wrong. Refresh and try again.').slice(0, 350);
 }
 function storageKey() { return `otc-pending:${config.chainId}:${config.contract.toLowerCase()}`; }
-function savePending() { try { if (state.pending) sessionStorage.setItem(storageKey(), JSON.stringify(state.pending)); else sessionStorage.removeItem(storageKey()); } catch { /* tracking in memory remains */ } }
+function historyKey() { return `otc-created:${config.chainId}:${config.contract.toLowerCase()}`; }
+function matchesPage(tx) {
+  return same(tx.account, state.account) && (tx.deal === undefined
+    ? state.route.kind === 'new' : state.route.kind === 'deal' && tx.deal === String(state.route.id));
+}
+function currentPending() {
+  const own = [...transactions.values()].find(matchesPage);
+  if (own) return own;
+  const token = state.route.kind === 'deal' ? state.deal?.buyToken : state.prepared?.sellToken;
+  for (const tx of transactions.values()) {
+    if (token && same(tx.account, state.account) && ['approve', 'reset'].includes(tx.kind) && same(tx.to, token)) return tx;
+  }
+}
+function savePending(tx) {
+  const { sending, ...record } = tx;
+  sessionStorage.setItem(tx.key, JSON.stringify(record));
+  transactions.set(tx.key, tx);
+}
+function forgetPending(tx) { sessionStorage.removeItem(tx.key); transactions.delete(tx.key); }
+function loadTransactions() {
+  const prefix = storageKey();
+  for (const key of Object.keys(sessionStorage)) {
+    if (key !== prefix && !key.startsWith(prefix + ':')) continue;
+    try {
+      const tx = JSON.parse(sessionStorage.getItem(key));
+      if (tx?.account && ['approve', 'reset', 'fill', 'cancel', 'create'].includes(tx.kind)) transactions.set(key, { ...tx, key });
+    } catch { /* Ignore an unreadable record. */ }
+  }
+  for (const receipt of JSON.parse(sessionStorage.getItem(historyKey()) || '[]')) creations.set(receipt.hash, receipt);
+}
 async function checkContext(account, epoch) {
   const [accounts, id] = await Promise.all([window.ethereum.request({ method: 'eth_accounts' }), window.ethereum.request({ method: 'eth_chainId' })]);
   if (epoch !== state.epoch || !same(accounts[0], account) || Number(BigInt(id)) !== config.chainId) throw new Error('The wallet, network or page changed. Review the current details before trying again.');
 }
-async function waitForReceipt() {
-  const pending = state.pending;
-  if (!pending) return;
+async function recoverHash(pending) {
+  const input = window.prompt('Paste the confirmed transaction hash from this account’s wallet activity on the deal network.');
+  if (input === null) return false;
+  const hash = input.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('Enter the full transaction hash from your wallet.');
+  const tx = await chain.rpc('eth_getTransactionByHash', [hash]);
+  const matchesCall = pending.data ? tx && same(tx.to, pending.to) && same(tx.input, pending.data) : same(hash, pending.hash);
+  if (!tx?.blockHash || !same(tx.from, pending.account) || !matchesCall ||
+      (pending.nonce !== undefined && BigInt(tx.nonce) !== BigInt(pending.nonce))) {
+    throw new Error('This hash does not identify the confirmed wallet transaction for this action.');
+  }
+  pending.hash = hash; pending.nonce = tx.nonce; pending.replaced = false;
+  savePending(pending);
+  return true;
+}
+async function waitForReceipt(pending) {
+  if (!pending.hash) throw new Error('Check your wallet activity. Recover a confirmed transaction with its hash.');
+  if (!receiptChecks.has(pending)) {
+    receiptChecks.set(pending, pollReceipt(pending).finally(() => receiptChecks.delete(pending)));
+  }
+  return receiptChecks.get(pending);
+}
+async function pollReceipt(pending) {
   const until = Date.now() + 90_000;
-  while (Date.now() < until) {
+  while (transactions.has(pending.key) && Date.now() < until) {
     const receipt = await chain.rpc('eth_getTransactionReceipt', [pending.hash]);
     if (receipt) {
       if (BigInt(receipt.status) !== 1n) {
-        state.pending = null; savePending();
+        forgetPending(pending);
         throw new Error('The transaction reverted. No partial swap was kept. Network gas may have been spent. Refresh the offer and try again.');
       }
-      // Retain the receipt identity until the confirmed creation has been read successfully.
-      // A failed follow-up RPC must never offer a second create transaction.
-      pending.confirmed = true; savePending();
-      state.lastHash = pending.hash; state.lastKind = pending.kind;
-      if (pending.kind === 'create' && state.route.kind === 'new') {
+      state.lastReceipt = pending;
+      if (pending.kind === 'create') {
+        pending.confirmed = true; savePending(pending);
         const event = receipt.logs.filter(l => same(l.address, config.contract)).map(l => { try { return dealsABI.parseLog(l); } catch { return null; } }).find(e => e?.name === 'DealCreated' && same(e.args.maker, pending.account));
         if (!event) throw new Error('The transaction confirmed, but its deal could not be identified. Check the transaction in your wallet before creating another.');
-        const id = event.args.id, deal = await chain.deal(id);
-        const [sell, buy] = await Promise.all([chain.token(deal.sellToken), chain.token(deal.buyToken)]);
-        state.created = { id, deal, sell, buy }; renderCreated();
+        const id = event.args.id.toString();
+        creations.set(pending.hash, { id, account: pending.account, hash: pending.hash });
+        sessionStorage.setItem(historyKey(), JSON.stringify([...creations.values()]));
+        if (matchesPage(pending)) {
+          const deal = await chain.deal(id);
+          const [sell, buy] = await Promise.all([chain.token(deal.sellToken), chain.token(deal.buyToken)]);
+          if (matchesPage(pending)) { state.created = { id, deal, sell, buy }; renderCreated(); }
+        }
       }
-      state.pending = null; savePending();
+      forgetPending(pending);
       return;
     }
     const transaction = await chain.rpc('eth_getTransactionByHash', [pending.hash]);
-    if (transaction?.nonce && same(transaction.from, pending.account)) { pending.nonce = transaction.nonce; savePending(); }
-    if (!transaction && pending.nonce !== undefined) {
+    if (transaction?.nonce && same(transaction.from, pending.account)) { pending.nonce = transaction.nonce; savePending(pending); }
+    if (!transaction) {
+      pending.unseen = true; savePending(pending);
+      if (pending.nonce === undefined) throw new Error('The network cannot find this transaction. Check its outcome in your wallet.');
       const used = await chain.rpc('eth_getTransactionCount', [pending.account, 'latest']);
       if (BigInt(used) > BigInt(pending.nonce)) {
-        pending.replaced = true; savePending();
-        throw new Error('The original transaction is unavailable and its nonce was used. Check the replacement or cancellation in your wallet, then clear the replaced transaction.');
+        pending.replaced = true; savePending(pending);
+        throw new Error('The original transaction is unavailable and its nonce was used. Check the replacement or cancellation in your wallet.');
       }
     }
     await new Promise(resolve => setTimeout(resolve, 700));
   }
-  throw new Error('Still waiting for confirmation. Use Check transaction, or inspect it in your wallet. Do not send another until its outcome is known.');
+  throw new Error('Still waiting for confirmation. Check its status or inspect it in your wallet.');
 }
 async function act(forced) {
   if (state.busy || state.refreshing || (!forced && ['wait', 'blocked', 'terminal'].includes(state.mode))) return;
   const mode = forced || state.mode, epoch = state.epoch, account = state.account;
   const prepared = state.prepared, approval = state.approval, route = state.route;
-  state.busy = true; state.error = ''; state.message = ''; state.step = 'Confirm in your wallet…'; updateActions();
-  let failure;
+  const action = {}; state.busy = action; state.error = ''; state.message = ''; state.step = 'Confirm in your wallet…'; updateActions();
+  let failure, pending = currentPending();
   try {
     if (mode === 'connect') { await window.ethereum.request({ method: 'eth_requestAccounts' }); return; }
     if (mode === 'switch') { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x' + config.chainId.toString(16) }] }); return; }
-    if (mode === 'pending') { state.step = 'Checking confirmation…'; updateActions(); await waitForReceipt(); return; }
-    if (state.pending) throw new Error('Check your pending transaction before sending another.');
+    if (mode === 'recover' && !await recoverHash(pending)) return;
+    if (mode === 'pending' || mode === 'recover') { state.step = 'Checking confirmation…'; updateActions(); await waitForReceipt(pending); return; }
+    if (pending && (mode !== 'cancel' || pending.kind === 'cancel')) throw new Error('Check your pending transaction before sending another.');
     await checkContext(account, epoch);
     let to = config.contract, data;
     if (mode === 'approve' || mode === 'reset') { to = approval.token.address; data = tokenABI.encodeFunctionData('approve', [config.contract, mode === 'reset' ? 0n : approval.amount]); }
@@ -289,41 +362,53 @@ async function act(forced) {
     const result = await chain.rpc('eth_call', [tx, 'latest']);
     if ((mode === 'approve' || mode === 'reset') && result !== '0x' && !tokenABI.decodeFunctionResult('approve', result)[0]) throw new Error('This token refused the approval. Check the token with the maker.');
     await checkContext(account, epoch);
-    const hash = await window.ethereum.request({ method: 'eth_sendTransaction', params: [tx] });
-    if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('The wallet did not return a transaction id. Check its activity before trying again.');
-    state.pending = { hash, kind: mode, account, deal: route.id?.toString() }; savePending();
-    state.step = 'Waiting for confirmation…'; updateActions();
-    await waitForReceipt();
+    const key = `${storageKey()}:${account.toLowerCase()}:${route.id ?? 'new'}:${mode}`;
+    if (transactions.has(key)) throw new Error('Check the existing transaction for this action in your wallet.');
+    pending = { key, kind: mode, account, deal: route.id?.toString(), to, data, sending: true };
+    // Write before handing control to the wallet. A reload or lost response must retain this intent.
+    savePending(pending);
+    try {
+      const hash = await window.ethereum.request({ method: 'eth_sendTransaction', params: [{ ...tx, chainId: '0x' + config.chainId.toString(16) }] });
+      if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('The wallet did not return a transaction id. Check its activity.');
+      pending.hash = hash; savePending(pending);
+    } catch (error) {
+      if (Number(error.code) === 4001 || error.code === 'ACTION_REJECTED') forgetPending(pending);
+      throw error;
+    } finally { pending.sending = false; }
+    if (state.busy === action) { state.step = 'Waiting for confirmation…'; updateActions(); }
+    await waitForReceipt(pending);
   } catch (error) {
-    failure = state.pending?.confirmed ? 'The transaction confirmed, but its deal could not be loaded yet. Check transaction to recover the link; do not create another offer.'
-      : state.pending && !state.pending.replaced
+    failure = pending?.confirmed ? 'The transaction confirmed, but its deal could not be loaded yet. Check transaction to recover the link; do not create another offer.'
+      : mode !== 'recover' && pending && transactions.has(pending.key) && !pending.replaced
       ? 'Confirmation is not yet known. This transaction may still complete. Check its status or activity in your wallet before sending another.'
       : friendly(error);
   }
   finally {
-    state.busy = false; state.step = ''; state.refreshing = false;
-    if (!state.created) await refresh();
-    if (failure) { state.error = failure; updateActions(); }
+    if (state.busy === action) {
+      state.busy = false; state.step = ''; state.refreshing = false;
+      if (!state.created) await refresh();
+      if (failure && epoch === state.epoch) { state.error = failure; updateActions(); }
+    } else if (!state.busy && !state.created) await refresh();
   }
 }
 async function routeChanged() {
-  clearTimeout(debounce); state.epoch++; state.revision++; state.refreshing = false;
+  clearTimeout(debounce); state.epoch++; state.revision++; state.busy = false; state.refreshing = false;
   state.route = dealRoute(location.hash); state.deal = null; state.created = null; state.prepared = null; state.error = ''; state.message = ''; state.mode = 'wait';
   if (state.route.kind === 'new') renderForm();
   else $('#app').innerHTML = intro('One deal. One link.', 'A simple way to agree, share and swap.') + '<section class="card loading"><span class="spinner"></span><p>Reading the deal from the chain…</p></section>';
   await refresh();
 }
-const changed = () => { state.epoch++; state.refreshing = false; state.prepared = null; state.approval = null; if (!state.busy) refresh(); };
+const changed = () => { state.epoch++; state.busy = false; state.refreshing = false; state.account = null; state.prepared = null; state.approval = null; if (state.created) { state.created = null; renderForm(); } refresh(); };
 async function start() {
   try {
     config = await loadConfig(); chain = new Chain(config);
     if (Number(BigInt(await chain.rpc('eth_chainId'))) !== config.chainId) throw new Error('The configured RPC is on a different network. Ask the site operator to correct config.json.');
     if (await chain.rpc('eth_getCode', [config.contract, 'latest']) === '0x') throw new Error('No deal contract is deployed at the configured address.');
-    try { const p = JSON.parse(sessionStorage.getItem(storageKey())); if (p && /^0x[0-9a-fA-F]{64}$/.test(p.hash) && ['approve', 'reset', 'fill', 'cancel', 'create'].includes(p.kind)) state.pending = p; } catch { /* no recoverable pending transaction */ }
+    try { loadTransactions(); } catch { /* Public deal reading also works without session storage. */ }
     window.addEventListener('hashchange', routeChanged);
     window.ethereum?.on?.('accountsChanged', changed); window.ethereum?.on?.('chainChanged', changed); window.ethereum?.on?.('disconnect', changed);
     await routeChanged();
-    timer = setInterval(() => { if (!state.busy && !state.refreshing && state.route.kind === 'deal' && !state.pending) refresh(); }, 10_000);
+    timer = setInterval(() => { if (!state.busy && !state.refreshing && state.route.kind === 'deal' && !currentPending()) refresh(); }, 10_000);
   } catch (error) {
     $('#app').innerHTML = intro('A little connection trouble.', 'Your funds stay in your wallet.') + `<section class="card"><p class="notice error" role="alert">${escape(friendly(error))}</p><button class="primary" id="reload">Try again</button></section>`;
     $('#reload').onclick = () => location.reload(); $('#app').setAttribute('aria-busy', 'false');

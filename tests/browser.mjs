@@ -10,7 +10,8 @@ const folder = process.env.SCREEN_DIR;
 if (folder) mkdirSync(folder, { recursive: true });
 const browser = await chromium.launch();
 let count = 0;
-const test = async (name, fn) => { try { await fn(); console.log(`PASS ${++count}: ${name}`); } catch (e) { console.error(`FAIL: ${name}`); throw e; } };
+const selected = new RegExp(process.argv[2] || '');
+const test = async (name, fn) => { if (!selected.test(name)) return; try { await fn(); console.log(`PASS ${++count}: ${name}`); } catch (e) { console.error(`FAIL: ${name}`); throw e; } };
 const button = p => p.getByTestId('primary-action');
 async function ready(p, text) { await p.waitForFunction(t => { const b = document.querySelector('[data-testid="primary-action"]'); return b && !b.disabled && b.textContent.includes(t); }, text); }
 async function click(p, text) { await ready(p, text); await button(p).click(); }
@@ -58,6 +59,7 @@ await test('complete fill with actual receipts, exact approvals and three presse
     await click(page, 'Swap'); await status(page, 'filled'); await screenshot(page, 'fill-3-complete');
     assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Filled);
     assert.equal(wallet.sends.length, 2);
+    assert(wallet.sends.every(tx => tx.chainId === '0x7a69'));
     const approval = w.bravo.interface.decodeFunctionData('approve', wallet.sends[0].data);
     assert.equal(approval[1], w.BUY);
   });
@@ -271,6 +273,103 @@ await test('very large ids and uint64 expiry render without numeric rounding or 
     await status(page, 'open'); assert.match(await page.getByTestId('expires').innerText(), /18446744073709551615/);
     await page.goto(server.url + '#/d/' + ((1n << 256n) - 1n)); await status(page, 'not-found');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  } finally { await context.close(); await server.close(); }
+});
+async function enterOffer(w, page) {
+  for (const [field, value] of Object.entries({ 'sell-token': w.alfa.address, 'sell-amount': '1', 'buy-token': w.bravo.address, 'buy-amount': '2' })) {
+    await page.getByTestId(field).fill(value);
+  }
+}
+
+await test('regression: ambiguous creation survives reload and requires a matching wallet receipt', async () => {
+  const w = await world(), server = await site(w), wallet = testWallet(w, w.maker);
+  const answer = wallet.answer;
+  let createdHash, approvalHash;
+  wallet.answer = async request => {
+    const reply = await answer(request);
+    if (request.method === 'eth_sendTransaction') {
+      assert.equal(request.params[0].chainId, '0x7a69');
+      if (request.params[0].to.toLowerCase() === w.deals.address.toLowerCase()) {
+        createdHash = reply.result;
+        return { error: { code: -32000, message: 'Lost wallet response' } };
+      }
+      approvalHash = reply.result;
+    }
+    return reply;
+  };
+  const { page, context } = await browserPage(browser, server.url + '#/new', wallet);
+  try {
+    await enterOffer(w, page); await click(page, 'Connect'); await click(page, 'Approve'); await click(page, 'Create');
+    await ready(page, 'Check transaction'); await page.reload(); await ready(page, 'Check transaction');
+    const recover = page.getByRole('button', { name: 'Recover with wallet transaction hash' });
+    page.once('dialog', d => d.accept(approvalHash)); await recover.click(); await notice(page, 'does not identify');
+    await ready(page, 'Check transaction');
+    page.once('dialog', d => d.accept(createdHash)); await recover.click();
+    await page.getByRole('heading', { name: 'Your deal is live' }).waitFor();
+    assert.equal(await page.getByTestId('deal-link').getAttribute('href'), server.url + '#/d/1');
+    assert.equal(wallet.sends.length, 2); assert.equal((await w.deals.read.getDeal(2)).status, STATUS.None);
+  } finally { await context.close(); await server.close(); }
+});
+
+await test('regression: unseen transaction allows another account and unrelated cancellation', async () => {
+  let hiddenHash;
+  await withDeal(async ({ page, w, wallet, id, server }) => {
+    const second = await w.offer({}, w.taker);
+    const answer = wallet.answer;
+    wallet.answer = async request => {
+      const reply = await answer(request);
+      if (!hiddenHash && request.method === 'eth_sendTransaction') hiddenHash = reply.result;
+      return reply;
+    };
+    await click(page, 'Connect'); await click(page, 'Approve'); await ready(page, 'Check transaction');
+    wallet.account = w.other; await page.evaluate(a => window.__testEmit('accountsChanged', [a]), w.other);
+    await ready(page, 'Approve');
+    wallet.account = w.taker; await page.evaluate(a => window.__testEmit('accountsChanged', [a]), w.taker);
+    await ready(page, 'Check transaction');
+    await page.goto(server.url + '#/d/' + second);
+    page.once('dialog', d => d.accept()); await page.getByRole('button', { name: 'Cancel offer' }).click();
+    await status(page, 'cancelled');
+    await page.goto(server.url + '#/d/' + id); await ready(page, 'Check transaction');
+    const hash = hiddenHash; hiddenHash = null;
+    page.once('dialog', d => d.accept(hash));
+    await page.getByRole('button', { name: 'Recover with wallet transaction hash' }).click();
+    await ready(page, 'Swap');
+    assert.equal(wallet.sends.length, 2);
+  }, { serverOptions: { rpcHook: async q => hiddenHash && q.params[0] === hiddenHash && ['eth_getTransactionByHash', 'eth_getTransactionReceipt'].includes(q.method) ? { jsonrpc: '2.0', id: q.id, result: null } : undefined } });
+});
+
+await test('regression: metadata failure permits maker cancellation and displays terminal status', async () => {
+  await withDeal(async ({ page, w, wallet, id, server }) => {
+    await status(page, 'open'); await notice(page, 'Amounts will not be guessed');
+    assert.equal(await page.getByTestId('pay-amount').count(), 0);
+    await page.getByRole('button', { name: 'Connect to manage offer' }).click();
+    page.once('dialog', d => d.accept()); await page.getByRole('button', { name: 'Cancel offer' }).click();
+    await status(page, 'cancelled'); await page.reload(); await status(page, 'cancelled');
+    assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Cancelled);
+    assert.equal(wallet.sends[0].chainId, '0x7a69');
+    const filled = await w.offer(); await w.accept(filled);
+    await page.goto(server.url + '#/d/' + filled); await status(page, 'filled');
+    const expired = await w.offer(); await w.chain.setNextTime(Number((await w.deals.read.getDeal(expired)).expiry)); await w.chain.mine();
+    await page.goto(server.url + '#/d/' + expired); await status(page, 'expired');
+  }, { walletAccount: 'maker', serverOptions: { rpcHook: async q => q.method === 'eth_call' && q.params[0].data === '0x313ce567' ? { jsonrpc: '2.0', id: q.id, result: '0x' } : undefined } });
+});
+
+await test('regression: creation confirms on another route and its link survives navigation and reload', async () => {
+  const w = await world(), first = await w.offer(), wallet = testWallet(w, w.maker);
+  let hold = true;
+  const server = await site(w, { rpcHook: async q => hold && q.method === 'eth_getTransactionReceipt' ? { jsonrpc: '2.0', id: q.id, result: null } : undefined });
+  const { page, context } = await browserPage(browser, server.url + '#/new', wallet);
+  try {
+    await enterOffer(w, page); await click(page, 'Connect'); await click(page, 'Create');
+    await page.waitForFunction(() => document.querySelector('#receipt')?.textContent.includes('Transaction:'));
+    await page.goto(server.url + '#/d/' + first);
+    await status(page, 'open'); await page.getByRole('button', { name: 'Cancel offer' }).waitFor();
+    hold = false;
+    await page.waitForFunction(() => Object.keys(sessionStorage).some(k => k.startsWith('otc-created:')));
+    assert.equal(await page.getByTestId('deal-status').getAttribute('data-status'), 'open');
+    await page.goto(server.url + '#/new'); await page.reload(); await page.getByTestId('deal-link').waitFor();
+    assert.equal(await page.getByTestId('deal-link').getAttribute('href'), server.url + '#/d/2');
+    assert.equal(wallet.sends.length, 1);
   } finally { await context.close(); await server.close(); }
 });
 console.log(`${count} adversarial browser tests passed.`);

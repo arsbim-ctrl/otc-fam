@@ -67,10 +67,12 @@ of that duration; the confirmed deadline is shown after creation.
 
 The action lock is set before awaiting anything. Account, network, route and form changes invalidate
 preparation. Success requires a successful receipt; new deal ids come from this contract's creation
-event. Pending transaction hashes are kept in session storage, scoped to chain and contract. Unknown
-outcomes are not treated as failures that are safe to resubmit. Replacements require a consumed nonce
-and explicit wallet review before clearing. These checks trust the configured RPC's canonical state;
-chain reorganizations remain possible after a first confirmation.
+event. The page journals the account, operation and calldata in session storage before requesting
+a chain-bound transaction. It retains confirmed creation IDs and hashes across navigation in the tab.
+An uncertain send blocks the affected action until reconciliation. A supplied recovery hash must
+match the sender, destination and calldata, and the original nonce when known. Clearing an unseen
+or replaced transaction requires explicit verification in the wallet. These checks trust the configured RPC's
+canonical state. Chain reorganizations remain possible after a first confirmation.
 
 The deployment script reads environment values without persisting or printing them. Tests generate
 an ephemeral local-only key in memory. The implementation has not received an independent audit.

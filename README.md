@@ -55,10 +55,10 @@ injected EIP-1193 wallet on the configured chain.
   calling either token. It does not revoke token allowances or restore tokens spent elsewhere.
 - Several offers may rely on the same wallet balance and allowance. Filling one can make another
   temporarily unavailable. Restore funds/approval in the maker's wallet, then refresh the link.
-- If a transaction remains unconfirmed, check its status or inspect it in your wallet. The page
-  records its hash in session storage and does not offer another send. For a replaced transaction,
-  it checks that the original is unavailable and its nonce consumed, then asks you to verify wallet
-  activity before clearing it. An unresolved dropped transaction stays blocked until resolved.
+- If the wallet response or confirmation is lost, the page remembers the action in this tab. Check
+  wallet activity on the deal network and use the confirmed transaction hash to recover it. Clear
+  the action only after verifying it failed, was permanently cancelled, or was never sent.
+  Previously confirmed share links are available on the new-deal page for the connected maker.
 
 No price oracle, exchange rate, token allowlist, partial fill, platform fee, relayer or permit is used.
 Token symbols are untrusted labels; verify contract addresses under **Token & network details**.
