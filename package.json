@@ -11,12 +11,16 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "deploy": "node scripts/deploy.mjs",
-    "check": "node .launchpad/checks/round-1/run.mjs"
+    "check": "node .launchpad/checks/round-1/run.mjs",
+    "test": "node tests/amounts.mjs && node tests/contracts.mjs && npm run build && node tests/browser.mjs && node tests/deploy.mjs"
   },
   "devDependencies": {
     "@nomicfoundation/edr": "0.25.1",
     "ethers": "6.17.0",
     "playwright": "1.63.0",
     "solc": "0.8.38"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.4.0"
   }
 }
