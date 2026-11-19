@@ -43,7 +43,8 @@ function storePending(job) {
   try {
     if (!job) sessionStorage.removeItem(pendingKey);
     else sessionStorage.setItem(pendingKey, JSON.stringify({
-      hash: job.hash, kind: job.kind, account: job.owner.account, taker: job.taker, token: job.token,
+      hash: job.hash, unknownSubmission: job.unknownSubmission || undefined,
+      kind: job.kind, account: job.owner.account, taker: job.taker, token: job.token,
       chainId: chain.chainId, contract: chain.contract, screen: job.page.screen,
       dealId: job.page.id?.toString(), amount: job.amount.toString(),
     }));
@@ -182,7 +183,9 @@ function actionFor(page) {
 
 function guidance(page, action, dealStatus) {
   if (operation?.busy) return message(operation.text);
-  if (operation?.unknownSubmission) return message("Your wallet did not return a transaction hash. Check its activity before trying another transaction.", "error");
+  if (operation?.unknownSubmission) return message(
+    "Your wallet didn’t confirm whether it sent the transaction. Check Activity in the same wallet and network. Repeating a pending or successful transaction can duplicate it.", "error",
+  );
   if (operation?.receiptProblem) return message("The transaction succeeded, but the deal link could not be recovered from its receipt. Check the transaction in your wallet before trying again.", "error");
   if (operation?.needsNetwork) return message("The saved transaction could not be checked with the site’s current network connection. Check your wallet activity.", "error");
   if (operation?.hash) return message("The transaction was sent and still needs a receipt. Check its status before trying another transaction.");
@@ -222,6 +225,7 @@ function paint() {
   const screen = page.screen === "deal" && !raw ? (page.loading ? "loading" : "error") : page.screen;
   const pending = Boolean(operation?.busy);
   const awaitingReceipt = Boolean(operation?.hash) && !pending;
+  const uncertain = Boolean(operation?.unknownSubmission) && !pending;
   const enabled = action?.enabled && !pending && !walletReading;
   displayed = enabled ? {
     page, action, owner: identity, draft: page.draft,
@@ -230,8 +234,8 @@ function paint() {
   render({
     screen, deal, chainId: chain?.chainId, account: identity.account, pending,
     action: action && { ...action, enabled },
-    notice: guidance(page, action, dealStatus), retry: (Boolean(page.error) || awaitingReceipt) && !pending,
-    retryLabel: awaitingReceipt ? "Check transaction status" : undefined,
+    notice: guidance(page, action, dealStatus), retry: (Boolean(page.error) || awaitingReceipt || uncertain) && !pending,
+    retryLabel: uncertain ? "I checked wallet activity" : awaitingReceipt ? "Check transaction status" : undefined,
     formErrors: page.attempted ? page.formErrors : null, dealLink: page.link,
   });
 }
@@ -248,8 +252,9 @@ async function refresh(page) {
       const deal = await api.deal(page.id);
       const sameTokens = page.deal?.sellToken === deal.sellToken && page.deal?.buyToken === deal.buyToken;
       if (deal.status === "not-found") {
-        if (isCurrent()) Object.assign(page, { deal, error: null, funds: null, loading: false });
-        return;
+        if (!isCurrent()) return;
+        Object.assign(page, { deal, error: null, funds: null, loading: false });
+        return true;
       }
       const [block, sell, buy] = await Promise.allSettled([
         api.latestTime(), sameTokens && page.sell ? page.sell : api.token(deal.sellToken), sameTokens && page.buy ? page.buy : api.token(deal.buyToken),
@@ -276,7 +281,9 @@ async function refresh(page) {
     const canReadFunds = payment && owner.account && owner.chainId === BigInt(api.chainId)
       && (page.screen === "new" ? !page.link : status(page.deal, page.blockTime) === "open" && !wrongWallet(page.deal, owner.account));
     const funds = canReadFunds ? { ...await api.funds(payment.token, owner.account), owner } : null;
-    if (isCurrent()) page.funds = funds;
+    if (!isCurrent()) return;
+    page.funds = funds;
+    return true;
   } catch (error) {
     if (isCurrent()) {
       page.loading = false;
@@ -392,15 +399,17 @@ async function recoverPending() {
   } catch {
     return;
   }
-  if (!transactionHash(saved?.hash) || !["create", "fill", "approve", "reset"].includes(saved.kind)
+  const hash = transactionHash(saved?.hash) ? saved.hash : null;
+  if ((!hash && saved?.unknownSubmission !== true) || !["create", "fill", "approve", "reset"].includes(saved.kind)
       || !address(saved.account) || !/^\d{1,78}$/.test(saved.amount)) return;
   const page = saved.screen === "new" ? newPage : (
     current?.screen === "deal" && current.id?.toString() === saved.dealId ? current : { screen: "deal" }
   );
-  const job = { page, hash: saved.hash, kind: saved.kind, owner: { account: saved.account }, taker: saved.taker, token: address(saved.token),
-    amount: BigInt(saved.amount), busy: true, text: "Recovering a transaction from this tab…" };
+  const job = { page, hash, kind: saved.kind, owner: { account: saved.account }, taker: saved.taker, token: address(saved.token),
+    amount: BigInt(saved.amount), unknownSubmission: !hash, busy: Boolean(hash), text: "Recovering a transaction from this tab…" };
   operation = job;
   paint();
+  if (!hash) return;
   try {
     const api = await network();
     if (api.chainId !== saved.chainId || api.contract !== saved.contract) {
@@ -414,7 +423,22 @@ async function recoverPending() {
   }
 }
 
-function retry() {
+async function retry() {
+  if (operation?.unknownSubmission && !operation.busy) {
+    const job = operation;
+    const page = current;
+    job.busy = true;
+    job.text = "Refreshing the deal and wallet…";
+    paint();
+    await syncWallet(false);
+    const refreshed = await refresh(page);
+    if (refreshed && page === current) {
+      storePending(null);
+      operation = null;
+    } else job.busy = false;
+    paint();
+    return;
+  }
   if (operation?.hash && !operation.busy) {
     if (operation.needsNetwork) return recoverPending();
     return checkReceipt(operation);
@@ -509,15 +533,29 @@ async function runAction() {
     }
     job.text = "Review and confirm the transaction in your wallet…";
     paint();
-    const hash = await wallet.request({
-      method: "eth_sendTransaction", params: [{ ...tx, from: owner.account, chainId: `0x${chain.chainId.toString(16)}` }],
-    });
+    // Persist uncertainty before prompting so a lost reply stays guarded after reload.
+    job.unknownSubmission = true;
+    storePending(job);
+    let hash;
+    try {
+      hash = await wallet.request({
+        method: "eth_sendTransaction", params: [{ ...tx, from: owner.account, chainId: `0x${chain.chainId.toString(16)}` }],
+      });
+    } catch (error) {
+      const code = Number(error?.code);
+      if ([4001, 4100, 4200, -32601, -32602].includes(code)) {
+        job.unknownSubmission = false;
+        storePending(null);
+        throw code === 4001 ? userFailure("You declined the request in your wallet. You can try again when ready.")
+          : userFailure("Your wallet refused the request before sending it. Check the selected account and try again.");
+      }
+    }
     if (!transactionHash(hash)) {
       job.busy = false;
-      job.unknownSubmission = true;
       return;
     }
     job.hash = hash;
+    job.unknownSubmission = false;
     storePending(job);
     await checkReceipt(job);
   } catch (error) {

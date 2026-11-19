@@ -139,8 +139,8 @@
       </section>
       <div id="actions" class="actions" hidden>
         <button class="button" data-testid="primary-action" type="button" hidden disabled></button>
-        <button class="button retry-button" id="retry-action" type="button" hidden>Try again</button>
-        <p class="notice" data-testid="notice" role="status"></p>
+        <button class="button retry-button" id="retry-action" type="button" aria-describedby="action-notice" hidden>Try again</button>
+        <p class="notice" id="action-notice" data-testid="notice" role="status"></p>
       </div>
       <noscript><p class="notice">This page needs JavaScript to read deals from the chain.</p></noscript>
     </main>

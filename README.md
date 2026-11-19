@@ -61,6 +61,10 @@ If a deployment error includes a transaction hash, check its on-chain status bef
   in one transaction. The maker can cancel an unfilled deal on-chain, including after expiry, to recover
   the escrowed tokens.
 
+If the wallet cannot confirm a submission, open its activity on the network you used and check the
+transaction before continuing. Refreshing the same tab preserves this pause when session storage is
+available.
+
 Use the token contract addresses to verify what is traded. Symbols are display metadata. The contract
 supports exact-transfer ERC-20s, including tokens that omit transfer return values. Fee-on-transfer and
 rebasing tokens are outside the supported model. The contract has no administrator or recovery key.
