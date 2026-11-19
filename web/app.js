@@ -163,7 +163,7 @@ function guidance(page, action, dealStatus) {
     return message(`This wallet needs ${formatAmount(amount, meta.precision)} ${meta.symbol} to continue.`, "error");
   }
   if (action?.kind === "fill") return message("Review the terms and confirm the swap in your wallet.");
-  if (action?.kind === "create") return message("Creating the deal locks the tokens you offer until the deal is filled or you cancel it.");
+  if (action?.kind === "create") return message("Review the terms and confirm the new deal in your wallet.");
   return null;
 }
 
@@ -371,6 +371,7 @@ async function runAction() {
   const page = current;
   const action = actionFor(page);
   if (!action?.enabled || walletReading || operation?.busy) return;
+  clearTimeout(formTimer);
   const startedAt = navigation;
   const kind = action.kind;
   const owner = identity;
