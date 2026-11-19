@@ -9,18 +9,17 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** This is the base of round 1: the fixed contract interface, a placeholder page and the
-round's checks. There is no deal contract and no deal page yet. Nothing here has been reviewed for
-security, and nothing is deployed.
+**Round 1** implements the deal contract, the shareable deal page and the deployment script. Use a local
+chain or a test network until the contract has had an independent security review.
 
 ## What is in the repository
 
 | Path | What it is |
 | --- | --- |
-| `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed: round 1 implements it in `contracts/OtcDeals.sol`. |
-| `web/` | The page. `npm run build` makes the static site in `dist/`. |
+| `contracts/IOtcDeals.sol`, `contracts/OtcDeals.sol` | The fixed interface and its implementation. |
+| `web/` | The create and fill pages. `npm run build` copies the static site to `dist/`. |
 | `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
-| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment (round 1's to write). |
+| `scripts/build.mjs`, `scripts/deploy.mjs` | Build the site and deploy the contract. |
 | `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
 | `.launchpad/checks/round-1/` | Round 1's checks. |
 
@@ -34,14 +33,32 @@ npm run build                      # dist/ is the site: serve it with any static
 python3 -m http.server -d dist 8080
 ```
 
-Deploying the contract (once round 1 has built it) takes the network and the key from the environment,
-never from a file:
+For a test deployment, set `RPC_URL` and `DEPLOYER_KEY` in the environment using a test wallet. Then run:
 
 ```sh
-RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy
+npm run deploy
 ```
 
-It prints the contract's address: put it in `web/config.json`, with the network's chain id and RPC URL.
+Put the printed contract address, the matching chain ID and a browser-accessible JSON-RPC URL in
+`web/config.json`, then rebuild. The RPC endpoint must accept cross-origin requests from the site if it
+is served from a different origin. The site can be served from a subdirectory. Its only runtime
+network calls are to its own static files and the configured RPC endpoint.
+
+## Create and fill a deal
+
+- Open `/#/new`, enter both token addresses and exact amounts, and set the expiry. Leave the taker blank
+  for an open deal, or enter the wallet address of the only person who may fill it. A reserved deal's
+  terms are publicly readable on-chain.
+- Connect the maker's wallet, approve the sell amount if needed, then create the deal. Creation locks
+  the sell tokens in `OtcDeals`. Share the resulting `/#/d/<id>` link.
+- Open the link to see the amounts, maker and expiry without a wallet. To fill, connect on the configured
+  chain, approve the buy amount if needed, and confirm the fill. The two transfers settle in one
+  transaction. The maker can cancel an unfilled deal on-chain, including after expiry, to recover the
+  escrowed tokens.
+
+Use the token contract addresses to verify what is traded. Symbols are display metadata. The contract
+supports exact-transfer ERC-20s, including tokens that omit transfer return values. Fee-on-transfer and
+rebasing tokens are outside the supported model. The contract has no administrator or recovery key.
 
 ## Run the checks
 
@@ -49,6 +66,7 @@ It prints the contract's address: put it in `web/config.json`, with the network'
 npm ci
 npx playwright install chromium    # the browser the page tests drive
 npm run check
+node .launchpad/checks/round-1/play.mjs
 ```
 
 They compile `contracts/OtcDeals.sol`, deploy it on a chain that lives inside the check, trade the checks'
