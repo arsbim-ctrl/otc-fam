@@ -24,7 +24,7 @@ contract OtcDeals is IOtcDeals {
     error SameToken();
     error ExpiryNotInFuture();
     error NotAToken(address token);
-    error TokenTookAFee(address token);
+    error InexactTransfer(address token);
     error NotOpen(uint256 id);
     error DealExpired(uint256 id);
     error NotYourDeal(uint256 id, address taker);
@@ -100,18 +100,27 @@ contract OtcDeals is IOtcDeals {
         return deals[id];
     }
 
-    /// Takes exactly `amount` of `token` from `from` into this contract, the only way a token comes in. A token
-    /// that delivers less, as one that keeps a fee on transfers does, fails the call: a deal would be short, and
-    /// paid out of another deal's tokens, or its maker paid less than the deal says.
+    /// Takes `amount` of `token` from `from` into this contract, the only way a token comes in. Both balances must
+    /// move by exactly `amount`: a token that keeps a fee, charges one on top, or moves any other amount fails the
+    /// call. Held, it would leave a deal short and paid out of another deal's tokens; bought, it would pay the
+    /// maker less than the deal says.
     function _pull(address token, address from, uint256 amount) private {
-        uint256 held = IERC20Minimal(token).balanceOf(address(this));
+        uint256 held = _balanceOf(token, address(this));
+        uint256 had = _balanceOf(token, from);
         _callToken(token, abi.encodeCall(IERC20Minimal.transferFrom, (from, address(this), amount)));
-        if (IERC20Minimal(token).balanceOf(address(this)) != held + amount) revert TokenTookAFee(token);
+        if (_balanceOf(token, address(this)) != held + amount || _balanceOf(token, from) + amount != had) revert InexactTransfer(token);
     }
 
-    /// Gives `amount` of `token` from this contract to `to`, the only way a token goes out.
+    /// Gives `amount` of `token` from this contract to `to`, the only way a token goes out. This contract's balance
+    /// must fall by exactly `amount`, so that no deal is ever paid out of another deal's tokens.
     function _push(address token, address to, uint256 amount) private {
+        uint256 held = _balanceOf(token, address(this));
         _callToken(token, abi.encodeCall(IERC20Minimal.transfer, (to, amount)));
+        if (_balanceOf(token, address(this)) + amount != held) revert InexactTransfer(token);
+    }
+
+    function _balanceOf(address token, address owner) private view returns (uint256) {
+        return IERC20Minimal(token).balanceOf(owner);
     }
 
     /// Calls `token` and fails unless it answers as an ERC-20 that did the transfer: `true`, or nothing at all

@@ -12,6 +12,7 @@ import { STATUS, world } from "../.launchpad/checks/round-1/world.mjs";
 
 const { EdgeToken } = compile(ROOT, "test/tokens/EdgeToken.sol");
 const FILL = "0x3fda5389"; // fill(uint256)
+const KIND = { Plain: 0, Fee: 1, FeeOnTop: 2, False: 3, Reset: 4 }; // EdgeToken.Kind
 
 /** Runs `steps(site, w)` on a fresh world `w` whose page is served at `site`. */
 async function onSite(steps) {
@@ -106,19 +107,19 @@ test("a transaction that fails on the chain is reported, nothing moves, and the 
 }));
 
 test("a deal the contract would refuse is not sent, and the page says why", () => onSite(async (site, w) => {
-  const feeToken = await deploy(w.chain, w.deployer, EdgeToken, ["FEE", 18, 0], { label: "FEE" });
+  const feeToken = await deploy(w.chain, w.deployer, EdgeToken, ["FEE", 18, KIND.Fee], { label: "FEE" });
   await feeToken.as(w.deployer).mint(w.maker, 10n ** 24n);
   const sent = [];
   const counting = walletWith(w, w.maker, (request) => void (request.method === "eth_sendTransaction" && sent.push(request.params[0].to)));
   await withPage(site, "#/new", counting, async (page) => {
     await fillForm(page, { "sell-token": feeToken.address, "sell-amount": "100", "buy-token": w.bravo.address, "buy-amount": "1", "expiry-hours": "24" });
-    await pressUntil(page, async () => (await seen(page, "notice"))?.includes("keeps part of every transfer"), "the reason the deal is refused");
+    await pressUntil(page, async () => (await seen(page, "notice"))?.includes("does not move exactly the amount asked"), "the reason the deal is refused");
   });
   assert.deepEqual(sent.map((to) => to.toLowerCase()), [feeToken.address.toLowerCase()], "only the approval was sent, never the deal");
 }));
 
 test("a token that wants its approval set to zero first (as USDT) is reset and approved in one press", () => onSite(async (site, w) => {
-  const usdt = await deploy(w.chain, w.deployer, EdgeToken, ["RESET", 6, 2], { label: "RESET" });
+  const usdt = await deploy(w.chain, w.deployer, EdgeToken, ["RESET", 6, KIND.Reset], { label: "RESET" });
   await usdt.as(w.deployer).mint(w.taker, 10n ** 12n);
   const id = await w.offer({ buyToken: usdt.address, buyAmount: 5_000_000n });
   await usdt.as(w.taker).approve(w.deals.address, 1n); // an approval left from before

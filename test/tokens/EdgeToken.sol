@@ -1,21 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// Tokens that behave as some real ones do, for the tests in test/. Anyone can mint; never deploy them anywhere real.
-/// Fee keeps 1% of every transfer. False answers false to every transfer and moves nothing. Reset refuses to change
-/// an allowance that is not zero to another that is not zero, as USDT does.
+/// Tokens that behave as some real ones do, for the tests in test/. Anyone can mint, and anyone can change how
+/// the token behaves (as an upgradeable token's owner can); never deploy it anywhere real.
+/// Fee: the recipient gets 1% less than sent. FeeOnTop: the sender pays 1% more than sent. False: every transfer
+/// answers false and moves nothing. Reset: an allowance that is not zero cannot be changed to another that is not
+/// zero, as USDT does.
 contract EdgeToken {
-    enum Kind { Fee, False, Reset }
+    enum Kind { Plain, Fee, FeeOnTop, False, Reset }
 
     string public symbol;
     uint8 public immutable decimals;
-    Kind public immutable kind;
+    Kind public kind;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
     constructor(string memory symbol_, uint8 decimals_, Kind kind_) {
         symbol = symbol_;
         decimals = decimals_;
+        kind = kind_;
+    }
+
+    function setKind(Kind kind_) external {
         kind = kind_;
     }
 
@@ -41,8 +47,9 @@ contract EdgeToken {
 
     function _move(address from, address to, uint256 value) private returns (bool) {
         if (kind == Kind.False) return false;
-        balanceOf[from] -= value;
-        balanceOf[to] += kind == Kind.Fee ? value - value / 100 : value;
+        uint256 fee = value / 100;
+        balanceOf[from] -= kind == Kind.FeeOnTop ? value + fee : value;
+        balanceOf[to] += kind == Kind.Fee ? value - fee : value;
         return true;
     }
 }

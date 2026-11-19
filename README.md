@@ -69,7 +69,7 @@ npm test
 
 | File | What it shows |
 | --- | --- |
-| `contract.test.mjs` | A token that keeps a fee is refused, sold or bought; a token that answers `false`, or an address with no contract, cannot be traded; deals of the same token each pay out exactly their own amount; no call back into `createDeal`, `fill` or `cancel` goes through while tokens move. |
+| `contract.test.mjs` | A token that takes a fee is refused, sold or bought, and one that starts taking fees later never pays a deal out of another's tokens; a token that answers `false`, or an address with no contract, cannot be traded; deals of the same token each pay out exactly their own amount; no call back into `createDeal`, `fill` or `cancel` goes through while tokens move. |
 | `page.test.mjs` | A token with no decimals; an amount with more decimals than its token has; a wallet on another network; a press declined in the wallet; a transaction refused before it is sent, or failed on the chain; a token that wants its approval set to zero first (as USDT); the maker cancelling an open or an expired deal. |
 | `amounts.test.mjs`, `abi.test.mjs` | Amounts are never rounded; the page's hand-written selectors and error words match the compiled contract; a symbol is read as a string or as bytes32, without characters that turn the text around. |
 | `deploy.test.mjs` | `npm run deploy` against a local node, with a fresh key. |
@@ -80,11 +80,15 @@ npm test
 transaction, and `cancel` gives the tokens back to the maker. An open link is therefore always backed, and
 every approval is for the exact amount of one deal. Where the brief left the choice:
 
-- **What it holds**: exactly what its open deals add up to. Tokens come in through one function, which checks
-  that the whole amount arrived, and go out through another. A token that keeps a fee on transfers is
-  refused on either side (`TokenTookAFee`): sold, a deal left short would be paid out of another deal's
-  tokens; bought, the maker would get less than the deal says. That is also why `fill` takes the taker's
-  payment into the contract before passing it to the maker.
+- **What it holds**: exactly what its open deals add up to. Tokens come in through one function and go out
+  through another, and both read the balances: what comes in must leave its sender and reach the contract
+  whole, and what goes out must leave the contract exactly. A token that takes a fee, from the amount or on
+  top of it, is refused on either side (`InexactTransfer`): sold, a deal left short would be paid out of
+  another deal's tokens; bought, the maker would get less than the deal says. A token that starts taking
+  fees once deals hold it cannot make the contract pay out more than a deal's amount either. That is also why
+  `fill` takes the taker's payment into the contract before passing it to the maker.
+- **Terms.** A deal's terms never change once `createDeal` has made it, and an id is never used twice: what a
+  link shows is what `fill` does.
 - **Tokens.** `transfer` and `transferFrom` may answer `true` or nothing at all (as USDT does); `false`, a
   revert, or an address with no contract behind it fails the call (`TransferFailed`, `NotAToken`). Not
   covered: tokens whose balances change without a transfer (rebasing), and tokens that can freeze an
@@ -95,7 +99,7 @@ every approval is for the exact amount of one deal. Where the brief left the cho
 - **Expiry.** A deal cannot be filled from its expiry on; its maker can still cancel it, and must, to take the
   tokens back.
 - **Errors**, for whoever reads the chain: `ZeroAmount`, `SameToken`, `ExpiryNotInFuture`, `NotAToken(token)`,
-  `TokenTookAFee(token)`, `NotOpen(id)`, `DealExpired(id)`, `NotYourDeal(id, taker)`, `NotMaker(id)`,
+  `InexactTransfer(token)`, `NotOpen(id)`, `DealExpired(id)`, `NotYourDeal(id, taker)`, `NotMaker(id)`,
   `TransferFailed(token)`, `Reentered()`.
 
 ## The page
