@@ -1,5 +1,6 @@
 export const ZERO_ADDRESS = `0x${"0".repeat(40)}`;
 export const MAX_AMOUNT = (1n << 256n) - 1n;
+const READ_TIMEOUT = 10_000;
 
 // The fixed OtcDeals interface and the ERC-20 methods used by the page. Each
 // selector is the first four bytes of the keccak256 hash of its signature.
@@ -66,7 +67,7 @@ function tokenSymbol(data) {
 
 export async function loadChain() {
   const response = await fetch(new URL("./config.json", import.meta.url), {
-    cache: "no-store", signal: AbortSignal.timeout(10_000),
+    cache: "no-store", signal: AbortSignal.timeout(READ_TIMEOUT),
   });
   if (!response.ok) throw new Error("The site’s network settings could not be loaded.");
   const config = await response.json();
@@ -87,7 +88,7 @@ export async function loadChain() {
     const response = await fetch(rpcUrl, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(READ_TIMEOUT),
     });
     if (!response.ok) throw new Error("Network request failed");
     const body = await response.json();
@@ -102,10 +103,17 @@ export async function loadChain() {
     throw new Error("No deal contract was found at the site’s configured address.");
   }
 
-  async function call(to, data, from) {
-    const result = await rpc("eth_call", [{ to, data, ...(from ? { from } : {}) }, "latest"]);
+  async function call(to, data, { from, provider } = {}) {
+    const params = [{ to, data, ...(from ? { from } : {}) }, "latest"];
+    const result = await (provider ? walletCall(provider, params) : rpc("eth_call", params));
     if (typeof result !== "string" || !/^0x(?:[0-9a-f]{2})*$/i.test(result)) throw new Error("Invalid contract result");
     return result;
+  }
+
+  async function tokenPrecision(token, provider) {
+    const precision = uint(await call(token, encode(DECIMALS), { provider }));
+    if (precision > 255n) throw new Error("Invalid token decimals");
+    return Number(precision);
   }
 
   return {
@@ -114,8 +122,8 @@ export async function loadChain() {
     async latestTime() {
       return quantity((await rpc("eth_getBlockByNumber", ["latest", false]))?.timestamp);
     },
-    async deal(id) {
-      const data = await call(contract, encode(GET_DEAL, id));
+    async deal(id, provider) {
+      const data = await call(contract, encode(GET_DEAL, id), { provider });
       const status = ["not-found", "open", "filled", "cancelled"][Number(uint(data, 7))];
       if (!status) throw new Error("Unrecognized deal status");
       return {
@@ -125,11 +133,10 @@ export async function loadChain() {
       };
     },
     async token(token) {
-      const [decimals, symbol] = await Promise.all([call(token, encode(DECIMALS)), call(token, encode(SYMBOL))]);
-      const precision = uint(decimals);
-      if (precision > 255n) throw new Error("Invalid token decimals");
-      return { precision: Number(precision), symbol: tokenSymbol(symbol) };
+      const [precision, symbol] = await Promise.all([tokenPrecision(token), call(token, encode(SYMBOL))]);
+      return { precision, symbol: tokenSymbol(symbol) };
     },
+    tokenPrecision,
     async funds(token, account) {
       const [balance, allowance] = await Promise.all([
         call(token, encode(BALANCE, account)), call(token, encode(ALLOWANCE, account, contract)),
@@ -146,7 +153,7 @@ export async function loadChain() {
       return { to: contract, data: encode(CREATE, sellToken, sellAmount, buyToken, buyAmount, taker, expiry) };
     },
     async simulate({ to, data }, account, approval) {
-      const result = await call(to, data, account);
+      const result = await call(to, data, { from: account });
       if (approval && result !== "0x" && uint(result) !== 1n) throw new Error("Token refused approval");
     },
     receipt(hash) {
@@ -159,6 +166,18 @@ export async function loadChain() {
       return event ? uint(event.topics[1]) : null;
     },
   };
+}
+
+async function walletCall(provider, params) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("Wallet verification timed out")), READ_TIMEOUT);
+  });
+  try {
+    return await Promise.race([provider.request({ method: "eth_call", params }), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function walletState(wallet, method = "eth_accounts") {

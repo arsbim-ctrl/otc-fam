@@ -12,6 +12,7 @@ const transactionHash = (value) => typeof value === "string" && /^0x[0-9a-f]{64}
 
 let chain, loadingChain;
 let current;
+let displayed;
 let navigation = 0;
 let formTimer;
 let identity = { account: null, chainId: null };
@@ -30,6 +31,12 @@ function network() {
 
 function status(deal, blockTime) {
   return deal?.status === "open" && (deal.expiry <= now() || deal.expiry <= blockTime) ? "expired" : deal?.status;
+}
+
+function sameDeal(a, b) {
+  return b && a.id === b.id && a.status === b.status && a.maker === b.maker && a.taker === b.taker
+    && a.sellToken === b.sellToken && a.sellAmount === b.sellAmount && a.buyToken === b.buyToken
+    && a.buyAmount === b.buyAmount && a.expiry === b.expiry;
 }
 
 function storePending(job) {
@@ -139,7 +146,8 @@ async function readDraft(fields, api) {
     }
   });
   if (Object.keys(errors).length) return { errors };
-  return { draft: { sellToken, buyToken, taker, duration, sellAmount: amounts[0], buyAmount: amounts[1], sell: tokens[0].value } };
+  const [sell, buy] = tokens.map((token) => token.value);
+  return { draft: { sellToken, buyToken, taker, duration, sellAmount: amounts[0], buyAmount: amounts[1], sell, buy } };
 }
 
 function spend(page) {
@@ -214,9 +222,14 @@ function paint() {
   const screen = page.screen === "deal" && !raw ? (page.loading ? "loading" : "error") : page.screen;
   const pending = Boolean(operation?.busy);
   const awaitingReceipt = Boolean(operation?.hash) && !pending;
+  const enabled = action?.enabled && !pending && !walletReading;
+  displayed = enabled ? {
+    page, action, owner: identity, draft: page.draft,
+    quote: raw && { deal: raw, sellPrecision: page.sell?.precision, buyPrecision: page.buy?.precision },
+  } : null;
   render({
     screen, deal, chainId: chain?.chainId, account: identity.account, pending,
-    action: action && { ...action, enabled: action.enabled && !pending && !walletReading },
+    action: action && { ...action, enabled },
     notice: guidance(page, action, dealStatus), retry: (Boolean(page.error) || awaitingReceipt) && !pending,
     retryLabel: awaitingReceipt ? "Check transaction status" : undefined,
     formErrors: page.attempted ? page.formErrors : null, dealLink: page.link,
@@ -409,14 +422,36 @@ function retry() {
   return refresh(current);
 }
 
+async function verifyWalletQuote(page, quote, draft) {
+  if (quote) {
+    const walletDeal = await chain.deal(page.id, wallet).catch(() => null);
+    if (!walletDeal) throw userFailure("Couldn’t verify the deal through your wallet. No transaction was sent.");
+    if (!sameDeal(quote.deal, walletDeal)) {
+      throw userFailure("Your wallet sees different deal terms from this page. No transaction was sent. Refresh this link and review it again.");
+    }
+  }
+  const terms = quote?.deal ?? draft;
+  const sellPrecision = quote?.sellPrecision ?? draft?.sell.precision;
+  const buyPrecision = quote?.buyPrecision ?? draft?.buy.precision;
+  const precision = await Promise.all([
+    chain.tokenPrecision(terms.sellToken, wallet), chain.tokenPrecision(terms.buyToken, wallet),
+  ]).catch(() => null);
+  if (!precision) throw userFailure("Couldn’t verify the token decimal places through your wallet. No transaction was sent.");
+  if (precision[0] !== sellPrecision || precision[1] !== buyPrecision) {
+    page.sell = null;
+    page.buy = null;
+    page.draft = null;
+    await refresh(page);
+    throw userFailure("Your wallet sees different token decimal places from this page. No transaction was sent. Check the updated terms before trying again.");
+  }
+}
+
 async function runAction() {
-  const page = current;
-  const action = actionFor(page);
-  if (!action?.enabled || walletReading || operation?.busy) return;
+  if (!displayed || displayed.page !== current || displayed.owner !== identity || walletReading || operation?.busy) return;
+  const { page, action, owner, quote, draft } = displayed;
   clearTimeout(formTimer);
   const startedAt = navigation;
   const kind = action.kind;
-  const owner = identity;
   const job = { page, kind, owner, busy: true, text: "Checking the latest details…" };
   operation = job;
   page.notice = null;
@@ -434,7 +469,10 @@ async function runAction() {
     }
     await refresh(page);
     if (navigation !== startedAt || ["connect", "switch", "review"].includes(kind)) return;
-    if (owner !== identity || actionFor(page)?.kind !== kind) {
+    if (quote && !sameDeal(quote.deal, page.deal)) {
+      throw userFailure("The deal terms changed while you were reviewing them. Check the updated deal before trying again.");
+    }
+    if (owner !== identity || actionFor(page)?.kind !== kind || (draft && draft !== page.draft)) {
       page.notice = page.error ? null : message("The deal or your wallet changed. Review the updated details before continuing.");
       return;
     }
@@ -459,11 +497,15 @@ async function runAction() {
         ? "This token refused the approval. No transaction was sent."
         : "The transaction would fail with the current deal terms or wallet balance. No transaction was sent.");
     }
+    if (quote || draft) await verifyWalletQuote(page, quote, draft);
     const actual = await walletState(wallet);
     if (navigation !== startedAt) return;
     if (actual.chainId !== BigInt(chain.chainId) || actual.account !== owner.account || owner !== identity) {
       await syncWallet(false);
       throw userFailure("Your wallet changed while the transaction was being prepared. Review the details and try again.");
+    }
+    if (quote && status(quote.deal, page.blockTime) === "expired") {
+      throw userFailure("The deal expired before the wallet request. No transaction was sent.");
     }
     job.text = "Review and confirm the transaction in your wallet…";
     paint();

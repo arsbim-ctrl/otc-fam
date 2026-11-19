@@ -40,9 +40,10 @@ npm run deploy
 ```
 
 Put the printed contract address, the matching chain ID and a browser-accessible JSON-RPC URL in
-`web/config.json`, then rebuild. The RPC endpoint must accept cross-origin requests from the site if it
-is served from a different origin. The site can be served from a subdirectory. Its only runtime
-network calls are to its own static files and the configured RPC endpoint.
+`web/config.json`, then rebuild. The build copies this file to the public site, so use a browser-safe
+endpoint and keep deployment credentials in the environment. The RPC endpoint must accept cross-origin
+requests from the site if it is served from a different origin. The site can be served from a
+subdirectory. It reads through the configured RPC and uses the injected wallet for transaction actions.
 
 If a deployment error includes a transaction hash, check its on-chain status before retrying.
 
@@ -55,9 +56,10 @@ If a deployment error includes a transaction hash, check its on-chain status bef
   the sell tokens in `OtcDeals`. Share the resulting `/#/d/<id>` link. The creation page keeps the last
   confirmed link through a refresh in the same tab, until you select **New deal**.
 - Open the link to see the amounts, maker and expiry without a wallet. To fill, connect on the configured
-  chain, approve the buy amount if needed, and confirm the fill. The two transfers settle in one
-  transaction. The maker can cancel an unfilled deal on-chain, including after expiry, to recover the
-  escrowed tokens.
+  chain, approve the buy amount if needed, and confirm the fill. Before either transaction, the page
+  checks that the wallet's view of the deal agrees with the displayed terms. The two transfers settle
+  in one transaction. The maker can cancel an unfilled deal on-chain, including after expiry, to recover
+  the escrowed tokens.
 
 Use the token contract addresses to verify what is traded. Symbols are display metadata. The contract
 supports exact-transfer ERC-20s, including tokens that omit transfer return values. Fee-on-transfer and
