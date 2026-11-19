@@ -3,10 +3,15 @@
 import { Chain, Wallet, ZERO_ADDRESS, approveData, cancelData, createDealData, createdId, explain, fillData, same } from "./eth.js";
 import { formatAmount, isAddress, parseAmount } from "./units.js";
 
-const NETWORKS = { 1: "Ethereum", 10: "OP Mainnet", 137: "Polygon", 8453: "Base", 42161: "Arbitrum One", 84532: "Base Sepolia", 11155111: "Sepolia", 31337: "Local test chain" };
+const NETWORKS = {
+  1: "Ethereum", 10: "OP Mainnet", 137: "Polygon", 8453: "Base", 42161: "Arbitrum One", 84532: "Base Sepolia", 11155111: "Sepolia", 31337: "Local test chain",
+};
 const STATUS_WORDS = { open: "Open", filled: "Filled", cancelled: "Cancelled", expired: "Expired", "not-found": "No such deal" };
-const NO_WALLET = "There is no wallet in this browser. Open this link in your wallet app's browser (MetaMask, Rabby, Coinbase Wallet…) or in a browser with a wallet extension.";
-const DATE = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+const NO_WALLET = "There is no wallet in this browser. Open this link in your wallet app's browser (MetaMask, Rabby, Coinbase Wallet…) "
+  + "or in a browser with a wallet extension.";
+const DATE = new Intl.DateTimeFormat(undefined, {
+  weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+});
 const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
 const main = document.getElementById("app");
@@ -19,7 +24,9 @@ async function start() {
     const response = await fetch("config.json", { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     config = await response.json();
-    if (!Number.isSafeInteger(config.chainId) || !isAddress(config.contract) || typeof config.rpcUrl !== "string") throw new Error("it must give chainId, contract and rpcUrl");
+    if (!Number.isSafeInteger(config.chainId) || !isAddress(config.contract) || typeof config.rpcUrl !== "string") {
+      throw new Error("it must give chainId, contract and rpcUrl");
+    }
   } catch (e) {
     main.replaceChildren(card(h("h1", {}, "This site is not set up"), h("p", { class: "lead" }, `Its config.json could not be read (${e.message}).`)));
     return;
@@ -61,7 +68,8 @@ function dealPage(idText) {
     const read = ++reads;
     try {
       const deal = id === null ? { status: "none" } : await chain.deal(id);
-      const [chainTime, sell, buy, funds] = deal.status === "none" ? [0] : await Promise.all([chain.now(), chain.token(deal.sellToken), chain.token(deal.buyToken), fundsFor(deal)]);
+      const [chainTime, sell, buy, funds] = deal.status === "none" ? [0]
+        : await Promise.all([chain.now(), chain.token(deal.sellToken), chain.token(deal.buyToken), fundsFor(deal)]);
       if (read !== reads) return; // a later read is on its way
       Object.assign(s, { deal, chainTime, sell, buy, funds, failed: null });
     } catch (e) {
@@ -121,22 +129,30 @@ function dealPage(idText) {
           : `There is no deal #${idText} on ${networkName(config.chainId)}. Check that you have the whole link, or ask the person who sent it.`),
         h("a", { class: "button secondary", href: "#/new" }, "Make a deal of your own"));
     }
-    const d = s.deal, sell = s.sell, buy = s.buy, me = wallet?.account;
+    const d = s.deal, me = wallet?.account;
     const status = d.status === "open" && now() >= Number(d.expiry) ? "expired" : d.status;
     const mine = Boolean(me && same(me, d.maker));
     const taking = status === "open" && !mine && (!me || mayFill(d, me));
-    const [payLabel, receiveLabel] = s.done === "filled" ? ["You paid", "You received"] : mine ? ["You get", "You give"] : taking ? ["You pay", "You receive"] : ["The taker pays", "The taker receives"];
+    const [payLabel, receiveLabel] = s.done?.filled ? ["You paid", "You received"]
+      : mine ? ["You get", "You give"] : taking ? ["You pay", "You receive"] : ["The taker pays", "The taker receives"];
+    const pay = amount(d.buyAmount, s.buy), get = amount(d.sellAmount, s.sell);
+    document.title = `Deal #${idText}: ${pay} for ${get} · otc.fam`;
     return card(
       head(`Deal #${idText}`, status),
       h("p", { class: "lead" }, lead(status, mine, taking)),
-      leg(payLabel, d.buyAmount, buy, "pay"),
+      leg(payLabel, d.buyAmount, s.buy, "pay"),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
-      leg(receiveLabel, d.sellAmount, sell, "receive"),
+      leg(receiveLabel, d.sellAmount, s.sell, "receive"),
+      status === "open" && h("p", { class: "held" }, mine
+        ? `Your ${get} are locked in the deal contract until the deal is filled or you cancel it.`
+        : `The maker's ${get} are already locked in the deal contract. Filling swaps both sides in one transaction.`),
       h("dl", { class: "facts" },
-        h("div", {}, h("dt", {}, "From"), h("dd", {}, h("span", { class: "mono", testid: "maker" }, d.maker), mine && " (you)")),
-        h("div", {}, h("dt", {}, "Who can fill"), h("dd", {}, d.taker === ZERO_ADDRESS ? "Anyone who has this link" : ["Only ", h("span", { class: "mono" }, d.taker), me && same(me, d.taker) ? " (you)" : ""])),
-        h("div", {}, h("dt", {}, status === "expired" ? "Expired" : status === "open" ? "Expires" : "Ends"), h("dd", { testid: "expires", "data-expiry": String(d.expiry) }, when(Number(d.expiry), now()))),
-        status === "open" && h("div", {}, h("dt", {}, "Held"), h("dd", {}, `${mine ? "Your" : "The maker's"} ${amount(d.sellAmount, sell)} are locked in the deal contract until the deal is filled or cancelled.`))),
+        fact("From", h("span", { class: "mono", testid: "maker" }, d.maker), mine && " (you)"),
+        (status === "open" || status === "expired") && (d.taker === ZERO_ADDRESS ? fact("Who can fill", "Anyone who has this link")
+          : fact("Reserved for", h("span", { class: "mono" }, d.taker), me && same(me, d.taker) && " (you)")),
+        (status === "open" || status === "expired") && h("div", {}, h("dt", {}, status === "open" ? "Expires" : "Expired"),
+          h("dd", { testid: "expires", "data-expiry": String(d.expiry), class: status === "open" && Number(d.expiry) - now() < 900 ? "soon" : null },
+            when(Number(d.expiry), now())))),
       status === "open" ? actions(d) : ended(status, mine));
   }
 
@@ -144,24 +160,38 @@ function dealPage(idText) {
     const d = s.deal, pay = amount(d.buyAmount, s.buy), get = amount(d.sellAmount, s.sell);
     if (status === "open") {
       if (mine) return "Your offer is open. Send this link to the other side: they fill it from their wallet.";
-      return taking ? "You are offered a swap. Check what you pay and what you receive, then fill it from your wallet." : "This deal is reserved for another address.";
+      if (taking) return "You are offered a swap. Check what you pay and what you receive, then fill it from your wallet.";
+      return "This deal is reserved for another address.";
     }
     if (status === "filled") {
-      if (s.done === "filled") return `Done. You paid ${pay} and received ${get}.`;
-      return mine ? `Your deal was filled: you received ${pay} for your ${get}.` : "This deal was filled: the two sides swapped their tokens. Nothing is left to do.";
+      if (s.done?.filled) return `Done: you paid ${pay} and received ${get}.`;
+      if (mine) return `Your deal was filled: you received ${pay} for your ${get}.`;
+      return "This deal was filled: the two sides swapped their tokens. Nothing is left to do.";
     }
-    if (status === "cancelled") return mine ? `You cancelled this deal: your ${get} went back to your wallet.` : `The maker cancelled this deal and took back their ${get}. It can no longer be filled.`;
+    if (status === "cancelled") {
+      if (mine) return `You cancelled this deal: your ${get} went back to your wallet.`;
+      return `The maker cancelled this deal and took back their ${get}. It can no longer be filled.`;
+    }
     return `This deal expired ${fromNow(Number(d.expiry) - now())}. It can no longer be filled.`;
   }
 
   /** What a filled, cancelled or expired deal offers: nothing to fill; to its maker, an expired deal's tokens back. */
   function ended(status, mine) {
-    if (status === "filled" && s.done === "filled") return h("p", { class: "success" }, `The swap is done: ${amount(s.deal.sellAmount, s.sell)} are now in your wallet.`);
-    if (status !== "expired") return s.notice && notice(s.notice);
-    if (!mine) return h("p", { class: "hint" }, `The maker's ${amount(s.deal.sellAmount, s.sell)} stay in the deal contract until they cancel the deal and take them back.`);
+    const get = amount(s.deal.sellAmount, s.sell);
+    if (status === "filled" && s.done?.filled) {
+      return h("p", { class: "success" }, `The swap went through in transaction ${s.done.hash.slice(0, 10)}…${s.done.hash.slice(-8)}. The ${get} are in your wallet.`);
+    }
+    if (status !== "expired") return s.notice && h("div", { class: "action" }, notice(s.notice));
+    if (!mine) {
+      return h("div", { class: "action" },
+        h("p", { class: "hint" }, `The maker's ${get} stay in the deal contract until they cancel the deal and take them back.`),
+        wallet && !wallet.account && h("button", { class: "secondary", type: "button", testid: "connect-action", disabled: Boolean(s.busy), onclick: (e) => press(e, connect) },
+          s.busy ? s.busy.label : "Made this deal? Connect to take your tokens back"),
+        s.notice && notice(s.notice));
+    }
     return h("div", { class: "action" },
-      s.busy ? h("button", { class: "secondary", type: "button", testid: "cancel-action", disabled: true }, s.busy.label)
-        : h("button", { class: "secondary", type: "button", testid: "cancel-action", onclick: (e) => press(e, cancel) }, `Cancel it and take back ${amount(s.deal.sellAmount, s.sell)}`),
+      h("button", { class: "secondary", type: "button", testid: "cancel-action", disabled: Boolean(s.busy), onclick: (e) => press(e, cancel) },
+        s.busy ? s.busy.label : `Cancel it and take back your ${get}`),
       s.busy?.hint && h("p", { class: "hint" }, s.busy.hint),
       s.notice && notice(s.notice));
   }
@@ -179,7 +209,8 @@ function dealPage(idText) {
         extra: h("button", { class: "secondary", type: "button", testid: "cancel-action", onclick: (e) => press(e, cancel) }, `Cancel the deal and take back ${get}`) });
     }
     if (!mayFill(d, me)) {
-      return action({ notice: { kind: "warn", text: `This deal is for another address: only ${d.taker} can fill it. The wallet you connected is ${me}. If the other address is yours too, switch to it in your wallet.` } });
+      return action({ notice: { kind: "warn", text: `This deal is for another address: only ${d.taker} can fill it. `
+        + `Your wallet is connected as ${me.slice(0, 6)}…${me.slice(-4)}, so it cannot. If that other address is yours too, switch to it in your wallet.` } });
     }
     if (wallet.chainId !== config.chainId) {
       return action({ steps, step: 0, button: { label: `Switch to ${networkName(config.chainId)}`, run: switchNetwork },
@@ -202,13 +233,10 @@ function dealPage(idText) {
   const switchNetwork = () => act("Switching network…", 0, () => wallet.switchTo(config.chainId));
   const approve = () => act(`Approving ${amount(s.deal.buyAmount, s.buy)}…`, 1, (stage) => approveToken(s.buy, s.deal.buyAmount, s.funds.allowance, stage));
   const fill = () => act("Filling the deal…", 2, async (stage) => {
-    await transact(config.contract, fillData(id), stage, `Paying ${amount(s.deal.buyAmount, s.buy)} for ${amount(s.deal.sellAmount, s.sell)}`);
-    s.done = "filled";
+    const receipt = await transact(config.contract, fillData(id), stage, `Paying ${amount(s.deal.buyAmount, s.buy)} for ${amount(s.deal.sellAmount, s.sell)}`);
+    s.done = { filled: true, hash: receipt.transactionHash };
   });
-  const cancel = () => act("Cancelling…", null, async (stage) => {
-    await transact(config.contract, cancelData(id), stage, "Cancelling the deal");
-    s.done = "cancelled";
-  });
+  const cancel = () => act("Cancelling…", null, (stage) => transact(config.contract, cancelData(id), stage, "Cancelling the deal"));
 
   load();
   return {
@@ -241,14 +269,16 @@ function newDealPage() {
   const note = { sell: h("p", { class: "note" }), buy: h("p", { class: "note" }), taker: h("p", { class: "note" }), hours: h("p", { class: "note" }) };
   const summary = h("div", { class: "summary" });
   const actionArea = h("div");
+  const legOf = (label, amountInput, tokenPill, tokenInput, tokenNote) => h("div", { class: "leg" },
+    h("label", { class: "leg-label", for: amountInput.id }, label),
+    h("div", { class: "leg-row" }, amountInput, tokenPill),
+    h("label", { class: "small", for: tokenInput.id }, "Token"), tokenInput, tokenNote);
   const form = card(
     h("h1", {}, "Make a deal"),
     h("p", { class: "lead" }, "Offer tokens for other tokens. You get a link to send to the other side, who fills the deal from their wallet."),
-    h("div", { class: "leg" }, h("label", { class: "leg-label", for: "sell-amount" }, "You give"), h("div", { class: "leg-row" }, field.sellAmount, pill.sell),
-      h("label", { class: "small", for: "sell-token" }, "Token"), field.sellToken, note.sell),
+    legOf("You give", field.sellAmount, pill.sell, field.sellToken, note.sell),
     h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
-    h("div", { class: "leg" }, h("label", { class: "leg-label", for: "buy-amount" }, "You get"), h("div", { class: "leg-row" }, field.buyAmount, pill.buy),
-      h("label", { class: "small", for: "buy-token" }, "Token"), field.buyToken, note.buy),
+    legOf("You get", field.buyAmount, pill.buy, field.buyToken, note.buy),
     h("div", { class: "field" }, h("label", { for: "taker" }, "Who can fill it"), field.taker, note.taker),
     h("div", { class: "field" }, h("label", { for: "expiry-hours" }, "Expires in (hours)"), field.hours, note.hours),
     summary, actionArea);
@@ -287,8 +317,10 @@ function newDealPage() {
       : !isAddress(takerText) ? { problem: "Check the taker's address", note: "An address is 0x followed by 40 letters and digits. Leave it empty to let anyone fill." }
       : wallet?.account && same(takerText, wallet.account) ? { problem: "Check the taker's address", note: "This is your own address: put the other side's, or leave it empty." }
       : { address: takerText.toLowerCase() };
-    const expiry = /^\d+(\.\d+)?$/.test(hoursText) && hours > 0 && hours <= 8760 ? { hours } : { problem: "Check the hours", note: "Write a number of hours, more than 0 and at most 8760 (a year), like 24 or 0.5." };
-    const distinct = sell.token && buy.token && sell.token.address === buy.token.address ? { problem: "Pick two different tokens", note: "The token you give and the token you get are the same." } : {};
+    const expiry = /^\d+(\.\d+)?$/.test(hoursText) && hours > 0 && hours <= 8760 ? { hours }
+      : { problem: "Check the hours", note: "Write a number of hours, more than 0 and at most 8760 (a year), like 24 or 0.5." };
+    const distinct = sell.token && buy.token && sell.token.address === buy.token.address
+      ? { problem: "Pick two different tokens", note: "The token you give and the token you get are the same." } : {};
     const problem = [sell, buy, distinct, taker, expiry].find((x) => x.problem)?.problem;
     return { sell, buy, taker, expiry, distinct, problem, pending: sell.pending || buy.pending };
   }
@@ -334,19 +366,22 @@ function newDealPage() {
   function update() {
     if (!live) return;
     if (s.created) return main.replaceChildren(created());
-    const t = terms();
+    const t = terms(), anyone = t.taker.address === ZERO_ADDRESS;
     for (const [key, x] of [["sell", t.sell], ["buy", t.buy]]) {
       pill[key].replaceChildren(...(x.token ? [h("i", { class: "dot", style: `--hue:${hue(x.token.address)}` }), x.token.symbol] : ["Token"]));
       pill[key].classList.toggle("empty", !x.token);
-      const holds = key === "sell" && x.token && wallet?.account && s.funds?.key === `${wallet.account}:${x.token.address}` ? ` · you hold ${amount(s.funds.balance, x.token)}` : "";
-      setNote(note[key], x.note ?? (x.pending ? "Looking up the token…" : x.token ? `${x.token.symbol}, ${x.token.decimals} decimals${holds}` : ""), Boolean(x.note));
+      const funds = key === "sell" && x.token && wallet?.account && s.funds?.key === `${wallet.account}:${x.token.address}` && s.funds;
+      const about = x.token && `${x.token.symbol}, ${x.token.decimals} decimals${funds ? ` · you hold ${amount(funds.balance, x.token)}` : ""}`;
+      setNote(note[key], x.note ?? (x.pending ? "Looking up the token…" : about || ""), Boolean(x.note));
     }
     if (t.distinct.note) setNote(note.buy, t.distinct.note, true);
-    setNote(note.taker, t.taker.note ?? (t.taker.address === ZERO_ADDRESS ? "Anyone who has the link can fill it." : "Only this address can fill it."), Boolean(t.taker.note));
+    setNote(note.taker, t.taker.note ?? (anyone ? "Anyone who has the link can fill it." : "Only this address can fill it."), Boolean(t.taker.note));
     setNote(note.hours, t.expiry.note ?? `Until ${DATE.format(new Date(Date.now() + t.expiry.hours * 3_600_000))}.`, Boolean(t.expiry.note));
-    summary.replaceChildren(...(t.problem || t.pending ? [] : [
-      h("p", {}, `You give ${amount(t.sell.units, t.sell.token)} and get ${amount(t.buy.units, t.buy.token)}.`),
-      h("p", {}, `${t.taker.address === ZERO_ADDRESS ? "Anyone with the link" : "Only the address you named"} can fill it, for ${t.expiry.hours} hour${t.expiry.hours === 1 ? "" : "s"}. Until then your ${amount(t.sell.units, t.sell.token)} stay locked in the deal contract, and you can cancel to take them back.`)]));
+    const give = !t.problem && !t.pending && amount(t.sell.units, t.sell.token);
+    summary.replaceChildren(...(!give ? [] : [
+      h("p", {}, `You give ${give} and get ${amount(t.buy.units, t.buy.token)}.`),
+      h("p", {}, `${anyone ? "Anyone with the link" : "Only the address you named"} can fill it, for ${t.expiry.hours} hour${t.expiry.hours === 1 ? "" : "s"}. `
+        + `Until then your ${give} stay locked in the deal contract, and you can cancel to take them back.`)]));
     actionArea.replaceChildren(actions(t));
   }
 
@@ -354,7 +389,9 @@ function newDealPage() {
     const steps = ["Connect", `Approve ${t.sell.token?.symbol ?? "token"}`, "Create"];
     if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: s.busy.hint });
     if (!wallet) return action({ button: { label: "Connect a wallet to make a deal" }, notice: { kind: "info", text: NO_WALLET } });
-    if (!wallet.account) return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: "Connect the wallet that holds what you give. Nothing is sent yet.", notice: s.notice });
+    if (!wallet.account) {
+      return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: "Connect the wallet that holds what you give. Nothing is sent yet.", notice: s.notice });
+    }
     if (wallet.chainId !== config.chainId) {
       return action({ steps, step: 0, button: { label: `Switch to ${networkName(config.chainId)}`, run: switchNetwork },
         hint: `Your wallet is on ${networkName(wallet.chainId)}; deals are on ${networkName(config.chainId)}.`, notice: s.notice });
@@ -363,7 +400,10 @@ function newDealPage() {
     if (t.problem) return action({ steps, step: 1, button: { label: t.problem }, notice: s.notice });
     const f = fundsOf(t.sell.token), give = amount(t.sell.units, t.sell.token);
     if (!f) return action({ steps, step: 1, button: { label: `Checking your ${t.sell.token.symbol}…` } });
-    if (f.balance < t.sell.units) return action({ steps, step: 1, button: { label: `Not enough ${t.sell.token.symbol}` }, notice: { kind: "warn", text: `You give ${give}, and this wallet holds ${amount(f.balance, t.sell.token)}.` } });
+    if (f.balance < t.sell.units) {
+      return action({ steps, step: 1, button: { label: `Not enough ${t.sell.token.symbol}` },
+        notice: { kind: "warn", text: `You give ${give}, and this wallet holds ${amount(f.balance, t.sell.token)}.` } });
+    }
     if (f.allowance < t.sell.units) {
       return action({ steps, step: 1, button: { label: `Approve ${give}`, run: () => approve(t, f) },
         hint: `This lets the deal contract take exactly ${give} from your wallet when you create the deal. Nothing moves yet.`, notice: s.notice });
@@ -392,11 +432,12 @@ function newDealPage() {
       h("div", { class: "linkbox" }, h("a", { testid: "deal-link", href: c.link }, c.link)),
       h("div", { class: "row" }, copyButton(c.link), h("a", { class: "button secondary", href: c.link }, "Open the deal")),
       h("dl", { class: "facts" },
-        h("div", {}, h("dt", {}, "They pay"), h("dd", {}, amount(c.buyAmount, c.buy))),
-        h("div", {}, h("dt", {}, "They get"), h("dd", {}, amount(c.sellAmount, c.sell))),
-        h("div", {}, h("dt", {}, "Who can fill"), h("dd", {}, c.taker === ZERO_ADDRESS ? "Anyone who has the link" : ["Only ", h("span", { class: "mono" }, c.taker)])),
-        h("div", {}, h("dt", {}, "Expires"), h("dd", {}, when(Number(c.expiry), Date.now() / 1000)))),
-      h("p", { class: "hint" }, `Your ${amount(c.sellAmount, c.sell)} are locked in the deal contract. To take them back before someone fills the deal, open it with this wallet and cancel it.`));
+        fact("They pay", amount(c.buyAmount, c.buy)),
+        fact("They get", amount(c.sellAmount, c.sell)),
+        c.taker === ZERO_ADDRESS ? fact("Who can fill", "Anyone who has the link") : fact("Reserved for", h("span", { class: "mono" }, c.taker)),
+        fact("Expires", when(Number(c.expiry), Date.now() / 1000))),
+      h("p", { class: "hint" }, `Your ${amount(c.sellAmount, c.sell)} are locked in the deal contract. `
+        + "To take them back before someone fills the deal, open it with this wallet and cancel it."));
   }
 
   main.replaceChildren(form);
@@ -476,6 +517,9 @@ function copyButton(text) {
   } }, "Copy link");
 }
 
+/** One line of a deal's facts: what it is, then its value. */
+const fact = (term, ...value) => h("div", {}, h("dt", {}, term), h("dd", {}, ...value));
+
 function head(title, status) {
   return h("div", { class: "card-head" }, h("h1", {}, title), h("span", { class: `status ${status}`, testid: "deal-status", "data-status": status }, STATUS_WORDS[status]));
 }
@@ -509,10 +553,10 @@ function when(seconds, now) {
 }
 
 function fromNow(seconds) {
-  const abs = Math.abs(seconds);
-  if (abs < 60) return seconds >= 0 ? "in less than a minute" : "less than a minute ago";
-  if (abs < 3600) return RELATIVE.format(Math.round(seconds / 60), "minute");
-  if (abs < 172_800) return RELATIVE.format(Math.round(seconds / 3600), "hour");
+  const minutes = Math.round(seconds / 60), hours = Math.round(seconds / 3600);
+  if (minutes === 0) return seconds >= 0 ? "in less than a minute" : "less than a minute ago";
+  if (Math.abs(minutes) < 60) return RELATIVE.format(minutes, "minute");
+  if (Math.abs(hours) < 48) return RELATIVE.format(hours, "hour");
   return RELATIVE.format(Math.round(seconds / 86_400), "day");
 }
 

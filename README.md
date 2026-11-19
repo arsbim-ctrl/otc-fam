@@ -9,18 +9,19 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** This is the base of round 1: the fixed contract interface, a placeholder page and the
-round's checks. There is no deal contract and no deal page yet. Nothing here has been reviewed for
-security, and nothing is deployed.
+**Where it stands.** Round 1: the deal contract, the page that shows a deal from its link and fills it, and
+the deployment script. Nothing here has been reviewed for security, and nothing is deployed.
 
 ## What is in the repository
 
 | Path | What it is |
 | --- | --- |
-| `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed: round 1 implements it in `contracts/OtcDeals.sol`. |
-| `web/` | The page. `npm run build` makes the static site in `dist/`. |
+| `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed. |
+| `contracts/OtcDeals.sol` | The deal contract: one contract for every deal, no owner, no fee. |
+| `web/` | The page, plain files and no dependency: `app.js` (the two pages), `eth.js` (the chain and the wallet), `units.js` (amounts), `style.css`. `npm run build` copies it into `dist/`. |
 | `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
-| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment (round 1's to write). |
+| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment. |
+| `test/` | The entry's own tests (`npm test`): what the round's checks leave out. |
 | `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
 | `.launchpad/checks/round-1/` | Round 1's checks. |
 
@@ -34,14 +35,15 @@ npm run build                      # dist/ is the site: serve it with any static
 python3 -m http.server -d dist 8080
 ```
 
-Deploying the contract (once round 1 has built it) takes the network and the key from the environment,
-never from a file:
+Deploying the contract takes the network and the key from the environment, never from a file:
 
 ```sh
 RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy
 ```
 
-It prints the contract's address: put it in `web/config.json`, with the network's chain id and RPC URL.
+It compiles `contracts/OtcDeals.sol` as the checks do, prints the contract's address (and nothing else) on
+stdout, and never prints `RPC_URL` or the key. Put the address in `web/config.json`, with the network's chain
+id and a public RPC URL.
 
 ## Run the checks
 
@@ -54,6 +56,57 @@ npm run check
 They compile `contracts/OtcDeals.sol`, deploy it on a chain that lives inside the check, trade the checks'
 own tokens through it, then build the page and use it in a browser. Nothing leaves the machine. Hotpod
 runs the same checks on every entry, in a container with no network.
+
+## Run the tests
+
+```sh
+npm ci
+npx playwright install chromium    # test/page.test.mjs drives the page in it, as the checks do
+npm test
+```
+
+`test/` covers what the round's checks leave out, on the same local chain and with the same stand-in wallet:
+
+| File | What it shows |
+| --- | --- |
+| `contract.test.mjs` | A sell token that keeps a fee is refused; a token that answers `false`, or an address with no contract, cannot be traded; deals of the same token each pay out exactly their own amount; no call back into `createDeal`, `fill` or `cancel` goes through while tokens move. |
+| `page.test.mjs` | A token with no decimals; an amount with more decimals than its token has; a wallet on another network; a press declined in the wallet; a transaction refused before it is sent, or failed on the chain; a token that wants its approval set to zero first (as USDT); the maker cancelling an open or an expired deal. |
+| `amounts.test.mjs`, `abi.test.mjs` | Amounts are never rounded; the page's hand-written selectors and error words match the compiled contract. |
+| `deploy.test.mjs` | `npm run deploy` against a local node, with a fresh key. |
+
+## The deal contract
+
+`OtcDeals` holds the maker's tokens from `createDeal` until the deal ends: `fill` swaps both sides in one
+transaction, and `cancel` gives the tokens back to the maker. An open link is therefore always backed, and
+every approval is for the exact amount of one deal. Where the brief left the choice:
+
+- **What it holds**: exactly what its open deals add up to. `createDeal` checks that it received the whole
+  `sellAmount`, and refuses a token that keeps a fee on transfers (`TokenTookAFee`): a deal left short would
+  be paid out of another deal's tokens.
+- **Tokens.** `transfer` and `transferFrom` may answer `true` or nothing at all (as USDT does); `false`, a
+  revert, or an address with no contract behind it fails the call (`TransferFailed`, `NotAToken`). Not
+  covered: tokens whose balances change without a transfer (rebasing), and tokens that can freeze an
+  address. They can leave a deal in that same token unpaid or stuck; they cannot touch any other token.
+- **Re-entry.** Each call writes the deal's new status before it moves a token, and a lock refuses any call
+  back into `createDeal`, `fill` or `cancel` while one of them runs. The lock is in transient storage
+  (EIP-1153), so the contract needs an EVM with Cancun, the version the checks compile for.
+- **Expiry.** A deal cannot be filled from its expiry on; its maker can still cancel it, and must, to take the
+  tokens back.
+- **Errors**, for whoever reads the chain: `ZeroAmount`, `SameToken`, `ExpiryNotInFuture`, `NotAToken(token)`,
+  `TokenTookAFee(token)`, `NotOpen(id)`, `DealExpired(id)`, `NotYourDeal(id, taker)`, `NotMaker(id)`,
+  `TransferFailed(token)`, `Reentered()`.
+
+## The page
+
+- `#/d/<id>` reads the deal from `rpcUrl`, with or without a wallet. Its one button takes the taker through
+  each step and says what the step does: connect, switch network if needed, approve exactly the amount to
+  pay, fill. The maker who opens their own deal gets a button to cancel it instead.
+- Before the wallet is asked to sign, the page runs the transaction as a call: one that the chain would refuse
+  is not sent, and the contract's reason is shown in words.
+- A deal shows as expired once the latest block or the browser's clock has reached its expiry. A deal made at
+  `#/new` expires `expiry-hours` after the later of the two.
+- Amounts are typed with a dot for decimals (`1500.25`) and shown with every digit and commas between
+  thousands (`1,500.25`). An amount with more decimals than its token has is refused, never rounded.
 
 ## Build it with your agent
 

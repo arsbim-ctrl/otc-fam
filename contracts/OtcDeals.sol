@@ -16,6 +16,8 @@ interface IERC20Minimal {
 /// gives it back to the maker. Nothing else moves tokens. There is no owner, no fee, no upgrade, no pause.
 /// @dev Every transfer happens after the deal's new status is written, and a lock refuses any call back
 /// into createDeal, fill or cancel while one of them runs (a token's transfer can call this contract).
+/// Not covered: a token whose balances change without a transfer (rebasing), or that can freeze an address,
+/// can leave deals in that same token unpaid or stuck. It cannot move any other token.
 contract OtcDeals is IOtcDeals {
     error ZeroAmount();
     error SameToken();
