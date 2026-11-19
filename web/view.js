@@ -179,10 +179,13 @@ export function bind({ onAction, onInput, onRetry, onReset }) {
   form.addEventListener("input", () => onInput());
   retry.addEventListener("click", () => onRetry());
   copy.addEventListener("click", copyLink);
-  byId("new-link").addEventListener("click", (event) => {
-    if (!onReset || activeScreen !== "new" || share.hidden || location.hash !== "#/new") return;
-    event.preventDefault();
-    form.reset();
-    onReset();
-  });
+  for (const newLink of document.querySelectorAll('a[href="#/new"]')) {
+    newLink.addEventListener("click", (event) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (activeScreen === "new" && share.hidden) return;
+      if (!onReset?.()) return;
+      form.reset();
+      if (location.hash === "#/new") event.preventDefault();
+    });
+  }
 }

@@ -5,6 +5,7 @@ import {IOtcDeals} from "./IOtcDeals.sol";
 
 interface IDealToken {
     function balanceOf(address account) external view returns (uint256);
+    function allowance(address account, address spender) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 }
@@ -18,6 +19,8 @@ contract OtcDeals is IOtcDeals {
     error DealNotOpen();
     error WrongTaker();
     error OnlyMaker();
+    error InvalidTokenAllowance(address token);
+    error InsufficientAllowance(address token);
     error TokenTransferFailed(address token);
     error InexactTransfer(address token);
     error InsufficientEscrow(address token);
@@ -47,6 +50,10 @@ contract OtcDeals is IOtcDeals {
         if (expiry <= block.timestamp) revert DealExpired();
         if (sellToken.code.length == 0) revert TokenHasNoCode(sellToken);
         if (buyToken.code.length == 0) revert TokenHasNoCode(buyToken);
+        if (_allowance(sellToken, msg.sender) < sellAmount) revert InsufficientAllowance(sellToken);
+
+        // ERC-721 shares balanceOf and transferFrom with ERC-20. Check both sides before taking escrow.
+        _allowance(buyToken, msg.sender);
 
         (, uint256 collateral) = _moveExact(sellToken, msg.sender, address(this), sellAmount);
         uint256 required = _reserved[sellToken] + sellAmount;
@@ -82,6 +89,13 @@ contract OtcDeals is IOtcDeals {
 
     function getDeal(uint256 id) external view override returns (Deal memory) {
         return _deals[id];
+    }
+
+    function _allowance(address token, address account) private view returns (uint256) {
+        (bool success, bytes memory result) =
+            token.staticcall(abi.encodeCall(IDealToken.allowance, (account, address(this))));
+        if (!success || result.length != 32) revert InvalidTokenAllowance(token);
+        return abi.decode(result, (uint256));
     }
 
     function _release(Deal storage deal, address recipient) private {

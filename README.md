@@ -44,13 +44,16 @@ Put the printed contract address, the matching chain ID and a browser-accessible
 is served from a different origin. The site can be served from a subdirectory. Its only runtime
 network calls are to its own static files and the configured RPC endpoint.
 
+If a deployment error includes a transaction hash, check its on-chain status before retrying.
+
 ## Create and fill a deal
 
 - Open `/#/new`, enter both token addresses and exact amounts, and set the expiry. Leave the taker blank
   for an open deal, or enter the wallet address of the only person who may fill it. A reserved deal's
   terms are publicly readable on-chain.
 - Connect the maker's wallet, approve the sell amount if needed, then create the deal. Creation locks
-  the sell tokens in `OtcDeals`. Share the resulting `/#/d/<id>` link.
+  the sell tokens in `OtcDeals`. Share the resulting `/#/d/<id>` link. The creation page keeps the last
+  confirmed link through a refresh in the same tab, until you select **New deal**.
 - Open the link to see the amounts, maker and expiry without a wallet. To fill, connect on the configured
   chain, approve the buy amount if needed, and confirm the fill. The two transfers settle in one
   transaction. The maker can cancel an unfilled deal on-chain, including after expiry, to recover the

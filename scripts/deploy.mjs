@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { ContractFactory, FetchRequest, JsonRpcProvider, Wallet } from "ethers";
+import { FetchRequest, JsonRpcProvider, Wallet, getCreateAddress, keccak256 } from "ethers";
 import solc from "solc";
 
 const entry = "contracts/OtcDeals.sol";
@@ -14,7 +14,7 @@ function compileDeal() {
     settings: {
       optimizer: { enabled: true, runs: 200 },
       evmVersion: "cancun",
-      outputSelection: { [entry]: { OtcDeals: ["abi", "evm.bytecode.object"] } },
+      outputSelection: { [entry]: { OtcDeals: ["evm.bytecode.object"] } },
     },
   };
 
@@ -25,7 +25,7 @@ function compileDeal() {
   const contract = compiled.contracts?.[entry]?.OtcDeals;
   const bytecode = contract?.evm?.bytecode?.object;
   if (!bytecode) throw new Error("OtcDeals has no deployable bytecode.");
-  return { abi: contract.abi, bytecode: `0x${bytecode}` };
+  return `0x${bytecode}`;
 }
 
 async function deploy() {
@@ -48,17 +48,22 @@ async function deploy() {
     throw new Error("Set DEPLOYER_KEY to a valid 32-byte hex private key.");
   }
 
-  const { abi, bytecode } = compileDeal();
+  const bytecode = compileDeal();
   const request = new FetchRequest(endpoint.href);
   request.timeout = 30_000;
   const provider = new JsonRpcProvider(request, undefined, { batchMaxCount: 1 });
-  let transaction;
+  let transactionHash;
 
   try {
-    const contract = await new ContractFactory(abi, bytecode, wallet.connect(provider)).deploy();
-    transaction = contract.deploymentTransaction();
+    const signer = wallet.connect(provider);
+    const deployment = await signer.populateTransaction({ data: bytecode });
+    const expectedAddress = getCreateAddress({ from: signer.address, nonce: deployment.nonce });
+    const signed = await signer.signTransaction(deployment);
+    // Retain the public hash even if the node accepts the transaction and its response is lost.
+    transactionHash = keccak256(signed);
+    const transaction = await provider.broadcastTransaction(signed);
     const receipt = await transaction.wait(1, 180_000);
-    if (receipt?.status !== 1 || receipt.contractAddress !== await contract.getAddress()) {
+    if (receipt?.status !== 1 || receipt.contractAddress !== expectedAddress) {
       throw new Error("Deployment was not confirmed.");
     }
     console.log(receipt.contractAddress);
@@ -71,7 +76,7 @@ async function deploy() {
       NETWORK_ERROR: "Could not connect to the deployment network.",
       CALL_EXCEPTION: "The deployment was rejected by the network.",
     }[error.code] ?? "Deployment failed. Check the RPC endpoint, network and deployer balance.";
-    throw new Error(transaction ? `${reason} Check transaction ${transaction.hash} before retrying.` : reason);
+    throw new Error(transactionHash ? `${reason} Check transaction ${transactionHash} before retrying.` : reason);
   } finally {
     provider.destroy();
   }

@@ -7,6 +7,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const message = (text, tone = "info") => ({ text, tone });
 const wrongWallet = (deal, account) => account && deal.taker !== ZERO_ADDRESS && account !== deal.taker;
 const pendingKey = `otc.fam:pending-transaction:${location.pathname}`;
+const shareKey = `otc.fam:confirmed-deal:${location.pathname}`;
 const transactionHash = (value) => typeof value === "string" && /^0x[0-9a-f]{64}$/i.test(value);
 
 let chain, loadingChain;
@@ -35,13 +36,43 @@ function storePending(job) {
   try {
     if (!job) sessionStorage.removeItem(pendingKey);
     else sessionStorage.setItem(pendingKey, JSON.stringify({
-      hash: job.hash, kind: job.kind, account: job.owner.account, taker: job.taker,
+      hash: job.hash, kind: job.kind, account: job.owner.account, taker: job.taker, token: job.token,
       chainId: chain.chainId, contract: chain.contract, screen: job.page.screen,
       dealId: job.page.id?.toString(), amount: job.amount.toString(),
     }));
   } catch {
     // Keep tracking in the current page when browser storage is unavailable.
   }
+}
+
+function dealLink(id) {
+  const link = new URL(location.href);
+  link.search = "";
+  link.hash = `/d/${id}`;
+  return link.href;
+}
+
+function storeShare(id) {
+  try {
+    if (id === null) sessionStorage.removeItem(shareKey);
+    else sessionStorage.setItem(shareKey, JSON.stringify({ id: String(id), chainId: chain.chainId, contract: chain.contract }));
+  } catch {
+    // The confirmed link remains available until the tab is closed or reloaded.
+  }
+}
+
+async function restoreShare(api) {
+  let saved;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(shareKey));
+  } catch {
+    return null;
+  }
+  if (saved?.chainId !== api.chainId || saved.contract !== api.contract
+      || typeof saved.id !== "string" || !/^[1-9]\d{0,77}$/.test(saved.id)) return null;
+  const id = BigInt(saved.id);
+  if (id > MAX_AMOUNT || (await api.deal(id)).status === "not-found") return null;
+  return dealLink(id);
 }
 
 export function formatAmount(amount, precision) {
@@ -125,6 +156,7 @@ function spend(page) {
 function actionFor(page) {
   if (operation && !operation.busy) return null;
   if (page.error || page.loading || !chain || page.link || page.screen === "home") return null;
+  if (page.screen === "new" && !page.shareChecked) return null;
   if (page.screen === "deal" && (status(page.deal, page.blockTime) !== "open" || wrongWallet(page.deal, identity.account))) return null;
   if (!wallet) return { kind: "unavailable", label: "Wallet required", enabled: false };
   if (!identity.account) return { kind: "connect", label: "Connect wallet", enabled: true };
@@ -212,6 +244,12 @@ async function refresh(page) {
       if (!isCurrent()) return;
       Object.assign(page, { deal, loading: false, blockTime: block.value, sell: sell.value, buy: buy.value });
       if (!page.buy || !page.sell) throw new Error("Couldn’t verify the deal’s token details. Try the network again.");
+    }
+    if (fields && !page.shareChecked) {
+      const restored = await restoreShare(api);
+      if (!isCurrent()) return;
+      if (restored) page.link = restored;
+      page.shareChecked = true;
     }
     if (fields && !page.link) {
       const key = formKey(fields);
@@ -309,9 +347,8 @@ async function checkReceipt(job) {
     try {
       const id = chain.createdId(receipt, job.owner.account, job.taker);
       if (!id) throw new Error("Missing deal ID");
-      const link = new URL(location.href);
-      link.hash = `/d/${id}`;
-      page.link = link.href;
+      page.link = dealLink(id);
+      storeShare(id);
       page.notice = message("Your deal is live and ready to share.", "success");
     } catch {
       job.busy = false;
@@ -320,7 +357,12 @@ async function checkReceipt(job) {
       return;
     }
   } else if (job.kind === "fill") page.notice = message("Swap complete. The tokens were exchanged in one transaction.", "success");
-  else page.notice = null;
+  else if (job.kind === "reset") {
+    const funds = job.token ? await chain.funds(job.token, job.owner.account).catch(() => null) : null;
+    if (!funds) page.notice = message("The reset was confirmed, but the current approval could not be verified. Check your wallet before trying again.", "error");
+    else if (funds.allowance !== 0n) page.notice = message("The token still has an approval after the reset. Check the transaction in your wallet before trying again.", "error");
+    else page.notice = null;
+  } else page.notice = null;
   if (current?.screen !== "home") await refresh(current);
   if (current === page && job.kind === "approve" && page.funds?.allowance < job.amount && receipt.status === "0x1") {
     page.notice = message("The token didn’t grant the requested approval. Review the transaction in your wallet.", "error");
@@ -342,7 +384,7 @@ async function recoverPending() {
   const page = saved.screen === "new" ? newPage : (
     current?.screen === "deal" && current.id?.toString() === saved.dealId ? current : { screen: "deal" }
   );
-  const job = { page, hash: saved.hash, kind: saved.kind, owner: { account: saved.account }, taker: saved.taker,
+  const job = { page, hash: saved.hash, kind: saved.kind, owner: { account: saved.account }, taker: saved.taker, token: address(saved.token),
     amount: BigInt(saved.amount), busy: true, text: "Recovering a transaction from this tab…" };
   operation = job;
   paint();
@@ -399,12 +441,17 @@ async function runAction() {
 
     const payment = spend(page);
     job.amount = payment.amount;
+    job.token = payment.token;
     job.taker = page.draft?.taker;
     const approval = kind === "approve" || kind === "reset";
     let tx;
     if (approval) tx = chain.approval(payment.token, kind === "reset" ? 0n : payment.amount);
     else if (kind === "fill") tx = chain.fill(page.id);
-    else tx = chain.create({ ...page.draft, expiry: (await chain.latestTime()) + page.draft.duration });
+    else {
+      const blockTime = await chain.latestTime();
+      const currentTime = now();
+      tx = chain.create({ ...page.draft, expiry: (blockTime > currentTime ? blockTime : currentTime) + page.draft.duration });
+    }
     try {
       await chain.simulate(tx, owner.account, approval);
     } catch {
@@ -454,8 +501,11 @@ bind({
   onInput: inputChanged,
   onRetry: () => void retry(),
   onReset: () => {
-    Object.assign(newPage, { draft: null, funds: null, attempted: false, formErrors: null, link: null, notice: null });
-    navigate();
+    if (operation?.page === newPage) return false;
+    storeShare(null);
+    Object.assign(newPage, { draft: null, funds: null, attempted: false, formErrors: null, link: null, notice: null, shareChecked: true });
+    if (location.hash === "#/new") queueMicrotask(navigate);
+    return true;
   },
 });
 window.addEventListener("hashchange", navigate);
