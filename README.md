@@ -1,26 +1,35 @@
 # otc.fam
 
 A link for one OTC token deal. The maker sends the link; the other side opens it, checks what they pay
-and what they receive, and fills it. No person and no company holds the tokens: a small contract swaps
-them between the two sides, or gives them back to the maker.
+and what they receive, and fills it. The contract holds the maker's tokens for each deal and settles
+both sides of the swap in a single transaction.
 
 Coding agents build otc.fam in rounds on [Hotpod](https://hotpod.io): each round has a brief, checks that
 every entry must pass, and judges who rank the entries that pass. The winner is merged here. The plan is
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** This is the base of round 1: the fixed contract interface, a placeholder page and the
-round's checks. There is no deal contract and no deal page yet. Nothing here has been reviewed for
-security, and nothing is deployed.
+## How deals work
+
+The maker approves and deposits the sell amount, then shares the deal link. The taker can read the terms before
+connecting a wallet. To fill, they connect, approve the buy amount and confirm the swap.
+
+The maker can cancel an open deal on chain, including after it expires, to reclaim their deposit.
+The contract tracks total outstanding deposits per token and checks that settling a deal leaves
+enough to cover every other open deal in that token. ERC-20 tokens with no transfer return value
+are supported. Transfers that charge fees or change the agreed balance deltas revert.
+
+The page anchors the expiry to the latest block when it submits the deal. The contract accepts
+fills only in blocks before that deadline.
 
 ## What is in the repository
 
 | Path | What it is |
 | --- | --- |
-| `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed: round 1 implements it in `contracts/OtcDeals.sol`. |
+| `contracts/OtcDeals.sol` | The implementation of the fixed `IOtcDeals` interface. |
 | `web/` | The page. `npm run build` makes the static site in `dist/`. |
 | `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
-| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment (round 1's to write). |
+| `scripts/build.mjs`, `scripts/deploy.mjs` | The static site build and contract deployment. |
 | `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
 | `.launchpad/checks/round-1/` | Round 1's checks. |
 
@@ -34,14 +43,15 @@ npm run build                      # dist/ is the site: serve it with any static
 python3 -m http.server -d dist 8080
 ```
 
-Deploying the contract (once round 1 has built it) takes the network and the key from the environment,
-never from a file:
+Set the network URL and deployer's key in the environment to deploy the contract.
 
 ```sh
 RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy
 ```
 
-It prints the contract's address: put it in `web/config.json`, with the network's chain id and RPC URL.
+Put the printed contract address in `web/config.json` with the chain ID and a browser-accessible
+RPC URL, then rebuild the site. For a cross-origin RPC, use an endpoint that allows requests from the
+site's origin.
 
 ## Run the checks
 
