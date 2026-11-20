@@ -28,7 +28,7 @@
   <template id="deal-template">
     <article class="panel">
       <header class="panel-head">
-        <h1>Deal <span id="deal-number"></span></h1>
+        <h1 id="deal-heading" tabindex="-1">Deal <span id="deal-number"></span></h1>
         <span class="status" data-testid="deal-status" hidden></span>
       </header>
       <section id="quote" class="quote" aria-label="Swap terms" hidden>
@@ -49,10 +49,11 @@
           <div id="taker-row" hidden><dt>Reserved for</dt><dd class="address" id="reserved"></dd></div>
         </dl>
       </section>
-      <div id="state-message" class="state-message" role="status">Reading deal…</div>
+      <div id="state-message" class="state-message" role="status" tabindex="-1">Reading deal…</div>
       <div class="actions">
-        <p class="notice" data-testid="notice" aria-live="polite" hidden></p>
+        <p class="notice" data-testid="notice" aria-live="polite"></p>
         <button type="button" class="action" data-testid="primary-action" hidden></button>
+        <button type="button" class="maker-action" data-testid="maker-action" hidden></button>
       </div>
     </article>
     <footer class="network" hidden></footer>
@@ -89,7 +90,7 @@
           </fieldset>
         </div>
         <div class="actions">
-          <p class="notice" data-testid="notice" aria-live="polite" hidden></p>
+          <p class="notice" data-testid="notice" aria-live="polite"></p>
           <button type="submit" class="action" data-testid="primary-action" disabled>Loading…</button>
         </div>
       </form>

@@ -174,8 +174,18 @@ h2 { font-size: 1.5rem; letter-spacing: -.03em; }
   overflow-wrap: anywhere;
 }
 .state-message { margin-top: .9rem; }
+.notice:empty, .state-message:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
 .actions { display: grid; gap: .55rem; }
-.actions:has(> :not([hidden])) { margin-top: .95rem; }
+.actions:has(> :not([hidden], .notice:empty)) { margin-top: .95rem; }
 
 .action {
   min-height: 2.9rem;
@@ -198,6 +208,22 @@ h2 { font-size: 1.5rem; letter-spacing: -.03em; }
 }
 .action:hover:not(:disabled) { background: #efffc7; }
 .action:disabled { background: #272e40; color: #aeb8ce; border-color: #364057; cursor: default; }
+.maker-action {
+  justify-self: center;
+  min-height: 2.75rem;
+  padding: .4rem .65rem;
+  border: 0;
+  border-radius: .45rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: .83rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: .18em;
+  cursor: pointer;
+}
+.maker-action:hover:not(:disabled) { color: var(--accent); }
+.maker-action:disabled { color: var(--quiet); cursor: default; }
 .network { margin-top: .85rem; text-align: center; color: var(--quiet); font: .73rem/1.5 var(--mono); }
 .network::before { content: "●"; margin-right: .43rem; color: #a5c7a1; font-size: .58em; vertical-align: 18%; }
 

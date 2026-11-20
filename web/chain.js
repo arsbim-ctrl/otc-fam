@@ -6,6 +6,7 @@ const deals = new Interface([
   "function getDeal(uint256 id) view returns (tuple(address maker, address taker, address sellToken, uint256 sellAmount, address buyToken, uint256 buyAmount, uint64 expiry, uint8 status))",
   "function createDeal(address sellToken, uint256 sellAmount, address buyToken, uint256 buyAmount, address taker, uint64 expiry) returns (uint256)",
   "function fill(uint256 id)",
+  "function cancel(uint256 id)",
   "event DealCreated(uint256 indexed id, address indexed maker, address indexed taker)",
 ]);
 const token = new Interface([
@@ -150,6 +151,7 @@ export async function connectChain() {
     },
     approval: (to, value) => ({ to, data: calldata(token, "approve", [contract, value]) }),
     fill: (id) => ({ to: contract, data: calldata(deals, "fill", [id]) }),
+    cancel: (id) => ({ to: contract, data: calldata(deals, "cancel", [id]) }),
     create: (args) => ({ to: contract, data: calldata(deals, "createDeal", args) }),
     receipt: (hash) => rpc("eth_getTransactionReceipt", [hash]),
     createdId(receipt, account) {

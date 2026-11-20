@@ -71,38 +71,82 @@ function userMessage(error, fallback) {
   return fallback;
 }
 
-// The same controller keeps both flows disabled during wallet prompts and tracks submitted transactions.
+function retryRead(error) {
+  return {
+    label: "Retry", pendingLabel: "Checking…", run: async () => {},
+    message: userMessage(error, "Couldn’t read the current chain state. Try again."),
+  };
+}
+
+// Every action on a screen shares the lock through wallet prompts and transaction confirmation.
 function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
   const button = testId(root, "primary-action");
+  const makerButton = testId(root, "maker-action");
   const notice = testId(root, "notice");
   let version = 0;
   let selected;
-  let busy = false;
+  let busyButton;
+  let makerViewStale = false;
+  let restoreMakerFocus = false;
   let submitted;
   let lastError;
 
+  function disableActions() {
+    if (makerButton) {
+      if (document.activeElement === makerButton) restoreMakerFocus = true;
+      makerButton.disabled = true;
+    }
+    button.disabled = true;
+  }
+
   function render(state = {}) {
     button.hidden = !state.label;
-    button.disabled = !state.run || busy;
-    if (state.label) button.textContent = state.label;
-    const text = lastError || state.message || "";
-    notice.hidden = !text;
+    button.disabled = !state.run || Boolean(busyButton);
+    if (state.label && button.textContent !== state.label) button.textContent = state.label;
+
+    if (makerButton) {
+      const maker = makerViewStale ? null : state.makerAction;
+      if (!maker?.label && document.activeElement === makerButton) restoreMakerFocus = true;
+      makerButton.hidden = !maker?.label;
+      makerButton.disabled = !maker?.run || Boolean(busyButton);
+      if (maker?.label && makerButton.textContent !== maker.label) makerButton.textContent = maker.label;
+    }
+
+    const text = lastError && state.restricted ? `${state.message} ${lastError}` : lastError || state.message || "";
     if (notice.textContent !== text) notice.textContent = text;
+
+    if (!busyButton && restoreMakerFocus) {
+      restoreMakerFocus = false;
+      if (document.activeElement === document.body) {
+        const target = !makerButton.hidden && !makerButton.disabled
+          ? makerButton
+          : root.querySelector("#state-message:not(:empty)") ?? root.querySelector("#deal-heading");
+        target.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  function renderProgress(label, message) {
+    if (busyButton === makerButton) render({ ...selected, makerAction: { label }, message });
+    else render({ ...selected, label, message });
+  }
+
+  async function readReceipt(tx) {
+    const receipt = await tx.chain.receipt(tx.hash);
+    if (!receipt || submitted !== tx || signal.aborted) return false;
+    submitted = null;
+    if (BigInt(receipt.status) !== 1n) {
+      throw new UserError("The transaction reverted on chain. Review the current terms and try again.");
+    }
+    await tx.onConfirmed?.(receipt, tx.hash);
+    return true;
   }
 
   async function confirm() {
     const tx = submitted;
     const end = Date.now() + 120_000;
     while (!signal.aborted && Date.now() < end) {
-      const receipt = await tx.chain.receipt(tx.hash);
-      if (receipt) {
-        submitted = null;
-        if (BigInt(receipt.status) !== 1n) {
-          throw new UserError("The transaction reverted on chain. Review the current terms and try again.");
-        }
-        await tx.onConfirmed?.(receipt, tx.hash);
-        return;
-      }
+      if (await readReceipt(tx)) return;
       await sleep(1000);
     }
   }
@@ -115,17 +159,41 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
     }
     signal.throwIfAborted();
     const hash = await request("eth_sendTransaction", [{ ...tx, from: account }]);
-    submitted = { chain, hash, onConfirmed };
-    if (!signal.aborted) render({ label: "Confirming on chain…", message: "Submitted. Waiting for the network to confirm." });
+    submitted = { chain, hash, onConfirmed, button: busyButton };
+    if (!signal.aborted) renderProgress("Confirming on chain…", "Submitted. Waiting for the network to confirm.");
     await confirm();
   }
 
   async function refresh({ clearError = false, background = false } = {}) {
     if (signal.aborted) return;
-    if (clearError) lastError = "";
-    if (busy) return;
+    if (clearError) {
+      lastError = "";
+      if (makerButton) {
+        disableActions();
+        makerViewStale = true;
+        makerButton.hidden = true;
+      }
+    }
+    if (busyButton) return;
     const revision = ++version;
-    if (submitted) {
+    if (!background) {
+      selected = null;
+      disableActions();
+    }
+    if (submitted?.button === makerButton) {
+      // A submitted refund keeps both actions locked, even if the wallet account changes.
+      try {
+        if (await readReceipt(submitted)) lastError = "";
+      } catch (error) {
+        if (!submitted) lastError = userMessage(error, "Couldn’t confirm the refund.");
+      }
+      if (signal.aborted || revision !== version) return;
+      if (submitted) {
+        selected = { message: "The refund is awaiting confirmation. You can check its status in your wallet." };
+        render(selected);
+        return;
+      }
+    } else if (submitted) {
       setFieldsLocked(true);
       selected = {
         label: "Check transaction",
@@ -135,10 +203,6 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
       };
       render(selected);
       return;
-    }
-    if (!background) {
-      selected = null;
-      button.disabled = true;
     }
     try {
       const presentEarly = (present) => {
@@ -150,33 +214,30 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
       selected = result;
     } catch (error) {
       if (signal.aborted || revision !== version) return;
-      selected = {
-        label: "Retry",
-        message: userMessage(error, "Couldn’t read the current chain state. Try again."),
-        pendingLabel: "Checking…",
-        run: async () => {},
-      };
+      selected = retryRead(error);
     }
+    makerViewStale = false;
     render(selected);
   }
 
-  async function press(event) {
+  async function press(event, control = button) {
     event.preventDefault();
-    if (button.disabled || !selected?.run || busy || signal.aborted) return;
-    const action = selected;
-    busy = true;
+    const action = control === makerButton ? selected?.makerAction : selected;
+    if (control.disabled || !action?.run || busyButton || submitted?.button === makerButton || signal.aborted) return;
+    busyButton = control;
     ++version;
     lastError = "";
+    disableActions();
     setFieldsLocked(true);
-    render({ label: action.pendingLabel, message: action.pendingMessage });
+    renderProgress(action.pendingLabel, action.pendingMessage);
     try {
       await action.run();
     } catch (error) {
-      lastError = submitted
+      lastError = submitted?.button === makerButton ? "" : submitted
         ? `Confirmation is unavailable. Check transaction ${submitted.hash} again before sending anything else.`
         : userMessage(error, "The wallet couldn’t complete that request. Check your wallet and try again.");
     } finally {
-      busy = false;
+      busyButton = null;
       if (!signal.aborted) {
         setFieldsLocked(Boolean(submitted));
         void refresh();
@@ -185,12 +246,13 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
   }
 
   (button.form ?? button).addEventListener(button.form ? "submit" : "click", press, { signal });
+  makerButton?.addEventListener("click", (event) => press(event, makerButton), { signal });
   return {
     refresh,
     invalidate() {
       ++version;
       selected = null;
-      button.disabled = true;
+      disableActions();
     },
   };
 }
@@ -227,15 +289,18 @@ function showDeal(root, id, signal) {
   const statusBadge = testId(root, "deal-status");
   const stateMessage = root.querySelector("#state-message");
   const footer = root.querySelector(".network");
+  let refunded = false;
   root.querySelector("#deal-number").textContent = id ? `#${id}` : "";
 
   function showStatus(status) {
-    const [label, explanation] = outcomes[status];
+    const [label, defaultExplanation] = outcomes[status];
+    const explanation = status === "cancelled" && refunded
+      ? "Deal cancelled. The escrowed tokens were returned to the maker."
+      : defaultExplanation;
     statusBadge.hidden = false;
     statusBadge.textContent = label;
     statusBadge.dataset.status = status;
-    stateMessage.textContent = explanation;
-    stateMessage.hidden = !explanation;
+    if (stateMessage.textContent !== explanation) stateMessage.textContent = explanation;
   }
 
   if (!id) {
@@ -245,9 +310,9 @@ function showDeal(root, id, signal) {
 
   function showTerms({ deal, pay, receive, status, chain, state }) {
     showStatus(status);
-    root.querySelector("#quote").hidden = !deal;
+    root.querySelector("#quote").hidden = !pay || !receive;
     showNetwork(footer, chain, state);
-    if (!deal) return;
+    if (!pay || !receive) return;
     for (const [side, info, value, token] of [
       ["pay", pay, deal.buyAmount, deal.buyToken],
       ["receive", receive, deal.sellAmount, deal.sellToken],
@@ -279,7 +344,6 @@ function showDeal(root, id, signal) {
       return {
         label: "Retry", pendingLabel: "Reading deal…", run: async () => {},
         present() {
-          stateMessage.hidden = false;
           statusBadge.hidden = true;
           root.querySelector("#quote").hidden = true;
           stateMessage.textContent = userMessage(error, "Couldn’t read this deal. Check your connection and try again.");
@@ -290,42 +354,74 @@ function showDeal(root, id, signal) {
       return { present: () => showTerms({ status: "not-found", chain }) };
     }
     const expired = deal.expiry <= blockTime || deal.expiry <= BigInt(Math.floor(Date.now() / 1000));
-    const status = deal.status === 1n ? (expired ? "expired" : "open") : deal.status === 2n ? "filled" : "cancelled";
-    let pay, receive;
+    const status = deal.status === 1n && !refunded ? (expired ? "expired" : "open") : deal.status === 2n ? "filled" : "cancelled";
+    let pay, receive, metadataError;
     try {
       [pay, receive] = await Promise.all([chain.tokenInfo(deal.buyToken), chain.tokenInfo(deal.sellToken)]);
     } catch (error) {
-      return { present: () => {
-        showStatus(status);
-        root.querySelector("#quote").hidden = true;
-        showNetwork(footer, chain);
-      }, message: userMessage(error, "Couldn’t read this deal’s tokens.") };
+      metadataError = userMessage(error, "Couldn’t read this deal’s tokens.");
     }
 
     // Render the quote before checking the injected wallet or doing any allowance lookups.
     const snapshot = { deal, pay, receive, status, chain };
-    if (status !== "open") return { present: () => showTerms(snapshot) };
+    if (status === "filled" || status === "cancelled") {
+      return { present: () => showTerms(snapshot), message: metadataError };
+    }
     if (signal.aborted) return {};
     presentEarly(() => showTerms(snapshot));
 
-    const state = await walletState();
-    const present = () => showTerms({ ...snapshot, state });
-    if (state.account && deal.taker !== anyone && deal.taker !== state.account) {
-      return { present, message: `This deal is for another address (${deal.taker}). Connect that address to fill it.` };
+    let state;
+    try {
+      state = await walletState();
+    } catch (error) {
+      if (status === "expired" || metadataError) return { message: metadataError };
+      throw error;
     }
-    const walletStep = walletAction(chain, state);
-    if (walletStep) return { present, ...walletStep };
+    const isMaker = state.account === deal.maker;
+    const present = () => showTerms({ ...snapshot, state: status === "open" || isMaker ? state : undefined });
+    let makerAction;
+    let makerMessage;
+    if (isMaker && networkMatches(chain, state)) {
+      makerAction = {
+        label: "Cancel and reclaim tokens", pendingLabel: "Cancelling deal…",
+        pendingMessage: "Confirm the cancellation and refund in your wallet.",
+        run: () => send({
+          chain, account: state.account, tx: chain.cancel(id),
+          onConfirmed() { refunded = true; },
+        }),
+      };
+    } else if ((status === "expired" || metadataError) && wallet && !state.account) {
+      // These views have no taker action through which a maker can connect.
+      makerAction = { ...walletAction(chain, state), label: "Connect maker wallet" };
+    } else if (isMaker) {
+      makerMessage = `Switch your wallet to ${networkName(chain.chainId)} to reclaim the escrowed tokens.`;
+    }
 
-    const [buyBalance, buyAllowance] = await chain.funds(deal.buyToken, state.account);
+    if (status === "expired") return { present, makerAction, message: makerMessage || metadataError };
+    const actions = { present, makerAction };
+    if (state.account && deal.taker !== anyone && deal.taker !== state.account) {
+      const message = `This deal is for another address (${deal.taker}). Connect that address to fill it.`;
+      return { ...actions, restricted: true, message: makerMessage ? `${message} ${makerMessage}` : message };
+    }
+    if (metadataError) return { ...actions, message: makerMessage || metadataError };
+    const walletStep = walletAction(chain, state);
+    if (walletStep) return { ...actions, ...walletStep };
+
+    let buyBalance, buyAllowance;
+    try {
+      [buyBalance, buyAllowance] = await chain.funds(deal.buyToken, state.account);
+    } catch (error) {
+      return { ...actions, ...retryRead(error) };
+    }
     if (buyBalance < deal.buyAmount) {
-      return { present, message: `This wallet needs ${formatAmount(deal.buyAmount, pay.decimals)} ${pay.symbol} to fill the deal.` };
+      return { ...actions, message: `This wallet needs ${formatAmount(deal.buyAmount, pay.decimals)} ${pay.symbol} to fill the deal.` };
     }
     if (buyAllowance < deal.buyAmount) {
       const amount = { units: deal.buyAmount, text: formatAmount(deal.buyAmount, pay.decimals) };
-      return { present, ...approvalAction(chain, state, deal.buyToken, amount, pay.symbol, buyAllowance, send) };
+      return { ...actions, ...approvalAction(chain, state, deal.buyToken, amount, pay.symbol, buyAllowance, send) };
     }
     return {
-      present, label: "Fill deal", pendingLabel: "Filling deal…",
+      ...actions, label: "Fill deal", pendingLabel: "Filling deal…",
       message: "Both token transfers happen in one transaction.",
       pendingMessage: "Confirm the swap in your wallet.",
       run: () => send({ chain, account: state.account, tx: chain.fill(id) }),
