@@ -3,12 +3,120 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>otc.fam</title>
+  <meta name="theme-color" content="#f5f2eb">
+  <title>otc.fam · Token deals</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <main>
-    <h1>otc.fam</h1>
-    <p>A link for one OTC token deal. This page is the starting point: round 1 builds the deal's page here.</p>
-  </main>
+  <header class="topbar">
+    <a class="wordmark" href="#" aria-label="otc.fam home">
+      <span class="mark" aria-hidden="true">⇄</span> otc.fam
+    </a>
+    <a class="nav-link" href="#/new">New deal <span aria-hidden="true">↗</span></a>
+  </header>
+  <main id="app"></main>
+
+  <template id="deal-screen">
+    <section class="sheet" aria-labelledby="deal-title">
+      <div class="sheet-header">
+        <div>
+          <p class="network" data-network hidden></p>
+          <h1 id="deal-title">Review deal</h1>
+        </div>
+        <div class="badge" data-testid="deal-status" role="status" hidden></div>
+      </div>
+      <div data-terms hidden>
+        <div class="quote">
+          <div class="asset">
+            <p>You pay</p>
+            <div class="amount">
+              <span data-testid="pay-amount"></span>
+              <bdi data-testid="pay-symbol"></bdi>
+            </div>
+          </div>
+          <div class="swap-arrow" aria-hidden="true">↓</div>
+          <div class="asset asset-receive">
+            <p>You receive</p>
+            <div class="amount">
+              <span data-testid="receive-amount"></span>
+              <bdi data-testid="receive-symbol"></bdi>
+            </div>
+          </div>
+        </div>
+        <dl class="facts">
+          <div><dt>Maker</dt><dd class="address" data-testid="maker"></dd></div>
+          <div><dt>Expires</dt><dd data-testid="expires"></dd></div>
+        </dl>
+      </div>
+      <p class="notice" id="deal-notice" data-testid="notice" role="status" tabindex="-1"></p>
+      <button type="button" class="primary" data-testid="primary-action" aria-describedby="deal-notice" disabled hidden>Loading deal…</button>
+      <details class="token-details" data-token-details hidden>
+        <summary>Token addresses</summary>
+        <dl class="facts">
+          <div><dt>Pay token</dt><dd class="address" data-buy-address></dd></div>
+          <div><dt>Receive token</dt><dd class="address" data-sell-address></dd></div>
+        </dl>
+      </details>
+    </section>
+  </template>
+
+  <template id="new-screen">
+    <section class="sheet" aria-labelledby="new-title">
+      <div class="sheet-header">
+        <div>
+          <p class="network" data-network hidden></p>
+          <h1 id="new-title">New deal</h1>
+        </div>
+      </div>
+      <form autocomplete="off" novalidate>
+        <fieldset class="draft">
+          <div class="trade-fields">
+            <fieldset class="asset-form">
+              <legend>You sell</legend>
+              <label>Token address
+                <input type="text" name="sell-token" data-testid="sell-token" placeholder="0x…" spellcheck="false" class="address" required>
+              </label>
+              <label>Amount
+                <input type="text" name="sell-amount" data-testid="sell-amount" placeholder="0.0" inputmode="decimal" maxlength="335" required>
+              </label>
+            </fieldset>
+            <fieldset class="asset-form">
+              <legend>You receive</legend>
+              <label>Token address
+                <input type="text" name="buy-token" data-testid="buy-token" placeholder="0x…" spellcheck="false" class="address" required>
+              </label>
+              <label>Amount
+                <input type="text" name="buy-amount" data-testid="buy-amount" placeholder="0.0" inputmode="decimal" maxlength="335" required>
+              </label>
+            </fieldset>
+          </div>
+          <label>Taker address <small>Optional</small>
+            <input type="text" name="taker" data-testid="taker" placeholder="Leave blank for anyone" spellcheck="false" class="address">
+          </label>
+          <label>Expires after
+            <span class="input-unit">
+              <input type="text" name="expiry-hours" data-testid="expiry-hours" placeholder="24" inputmode="decimal" maxlength="26" aria-describedby="hour-unit" required>
+              <span id="hour-unit">hours</span>
+            </span>
+          </label>
+        </fieldset>
+        <p class="notice" id="create-notice" data-testid="notice" role="status" tabindex="-1"></p>
+        <div class="token-details" data-create-recovery hidden>
+          <label class="recovery-option">
+            <input type="checkbox">
+            <span>My wallet shows this transaction was dropped or cancelled.</span>
+          </label>
+        </div>
+        <button type="submit" class="primary" data-testid="primary-action" aria-describedby="create-notice" disabled>Loading network…</button>
+      </form>
+      <div data-created tabindex="-1" hidden>
+        <p class="notice success" id="created-message">Your deal is open. Send this link to the other side.</p>
+        <a class="deal-link address" data-deal-link aria-describedby="created-message"></a>
+        <button type="button" class="primary" data-copy>Copy deal link</button>
+        <p class="copy-status" role="status" data-copy-status></p>
+      </div>
+    </section>
+  </template>
 </body>
 </html>

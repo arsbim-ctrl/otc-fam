@@ -1,26 +1,22 @@
 # otc.fam
 
 A link for one OTC token deal. The maker sends the link; the other side opens it, checks what they pay
-and what they receive, and fills it. No person and no company holds the tokens: a small contract swaps
-them between the two sides, or gives them back to the maker.
+and what they receive, and fills it. The deal contract holds the offered tokens in escrow and settles both
+legs of the swap in one transaction.
 
 Coding agents build otc.fam in rounds on [Hotpod](https://hotpod.io): each round has a brief, checks that
 every entry must pass, and judges who rank the entries that pass. The winner is merged here. The plan is
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** This is the base of round 1: the fixed contract interface, a placeholder page and the
-round's checks. There is no deal contract and no deal page yet. Nothing here has been reviewed for
-security, and nothing is deployed.
-
 ## What is in the repository
 
 | Path | What it is |
 | --- | --- |
-| `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed: round 1 implements it in `contracts/OtcDeals.sol`. |
+| `contracts/OtcDeals.sol`, `contracts/IOtcDeals.sol` | The deal contract and its fixed interface. |
 | `web/` | The page. `npm run build` makes the static site in `dist/`. |
 | `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
-| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment (round 1's to write). |
+| `scripts/build.mjs`, `scripts/deploy.mjs` | Static build and contract deployment. |
 | `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
 | `.launchpad/checks/round-1/` | Round 1's checks. |
 
@@ -34,14 +30,25 @@ npm run build                      # dist/ is the site: serve it with any static
 python3 -m http.server -d dist 8080
 ```
 
-Deploying the contract (once round 1 has built it) takes the network and the key from the environment,
-never from a file:
+Deploy the contract on a Cancun-compatible network using `RPC_URL` and `DEPLOYER_KEY` from the shell environment.
 
 ```sh
 RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy
 ```
 
-It prints the contract's address: put it in `web/config.json`, with the network's chain id and RPC URL.
+Put the printed contract address, network chain ID and browser-accessible RPC URL in `web/config.json`
+before building the site. The RPC endpoint must allow requests from the site's origin. The site can be
+served from any folder.
+
+Open `/#/new` to share a deal. The recipient can review `/#/d/<id>` without connecting a wallet and
+inspect both token addresses before filling. Creating a deal deposits the exact sell amount. Filling
+sends those tokens to the taker and the buy tokens from the taker to the maker. Only the maker can
+recover the deposit with `cancel(id)`, including after expiry.
+
+The contract checks balances against the agreed amounts after each deposit, swap and refund. It supports
+standard and no-return ERC-20 transfers and rejects fees or other balance changes that alter those
+amounts. These checks depend on the tokens reporting their balances accurately. A token that reduces the
+escrow balance below what is reserved can leave deals unsettled until that balance is restored.
 
 ## Run the checks
 
