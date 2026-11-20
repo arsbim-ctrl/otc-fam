@@ -3,12 +3,147 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f5f7">
+  <meta name="description" content="Create and fill a token deal from a single link.">
   <title>otc.fam</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <main>
-    <h1>otc.fam</h1>
-    <p>A link for one OTC token deal. This page is the starting point: round 1 builds the deal's page here.</p>
-  </main>
+  <div class="sheet">
+    <header class="topbar">
+      <a class="brand" href="#/">
+        <span class="brand-mark" aria-hidden="true"></span>otc.fam
+      </a>
+      <a class="nav-link" id="new-link" href="#/new">New deal</a>
+    </header>
+    <main>
+      <section id="loading-screen" data-screen="loading">
+        <h1>Loading…</h1>
+      </section>
+      <section id="home-screen" data-screen="home" hidden>
+        <h1>One deal, one link</h1>
+        <p class="plain-text">Open the deal link the maker sent you, or create a deal to share.</p>
+        <a class="button" href="#/new">Create a deal</a>
+        <div id="home-actions"></div>
+      </section>
+      <section id="deal-screen" data-screen="deal" hidden>
+        <div class="title-row">
+          <h1 id="deal-title">Deal</h1>
+          <p class="deal-status" data-testid="deal-status" aria-live="polite"></p>
+        </div>
+        <div id="deal-terms">
+          <div class="swap">
+            <div class="panel">
+              <h2>You pay</h2>
+              <p class="quote">
+                <bdi data-testid="pay-amount"></bdi> <bdi data-testid="pay-symbol"></bdi>
+              </p>
+              <span class="swap-arrow" aria-hidden="true">↓</span>
+            </div>
+            <div class="panel panel-receive">
+              <h2>You receive</h2>
+              <p class="quote">
+                <bdi data-testid="receive-amount"></bdi> <bdi data-testid="receive-symbol"></bdi>
+              </p>
+            </div>
+          </div>
+          <dl class="deal-details">
+            <div>
+              <dt>Maker</dt>
+              <dd class="address" data-testid="maker"></dd>
+            </div>
+            <div id="reserved-detail" hidden>
+              <dt>Reserved for</dt>
+              <dd class="address" id="reserved-address"></dd>
+            </div>
+            <div>
+              <dt>Expires</dt>
+              <dd><time data-testid="expires"></time></dd>
+            </div>
+          </dl>
+        </div>
+        <div id="deal-actions"></div>
+        <details class="token-details" id="token-details">
+          <summary>Token addresses</summary>
+          <dl>
+            <div>
+              <dt>Token you pay</dt>
+              <dd class="address" id="pay-token-address"></dd>
+            </div>
+            <div>
+              <dt>Token you receive</dt>
+              <dd class="address" id="receive-token-address"></dd>
+            </div>
+          </dl>
+        </details>
+      </section>
+      <section id="new-screen" data-screen="new" hidden>
+        <h1 id="new-title" tabindex="-1">Create a deal</h1>
+        <div id="new-form-area">
+          <form id="deal-form" novalidate>
+            <div class="swap">
+              <section class="panel field-panel" aria-labelledby="offer-label">
+                <h2 id="offer-label">You offer</h2>
+                <div class="field">
+                  <label class="sr-only" for="sell-amount">Amount you offer</label>
+                  <input id="sell-amount" name="sell-amount" data-testid="sell-amount" inputmode="decimal" placeholder="Amount" aria-describedby="sell-amount-error" required>
+                  <p class="field-error" id="sell-amount-error" hidden></p>
+                </div>
+                <div class="field">
+                  <label class="sr-only" for="sell-token">Token address you offer</label>
+                  <input id="sell-token" name="sell-token" data-testid="sell-token" class="address-input" autocapitalize="off" spellcheck="false" placeholder="Token address (0x…)" aria-describedby="sell-token-error" required>
+                  <p class="field-error" id="sell-token-error" hidden></p>
+                </div>
+              </section>
+              <section class="panel panel-receive field-panel" aria-labelledby="request-label">
+                <h2 id="request-label">You request</h2>
+                <div class="field">
+                  <label class="sr-only" for="buy-amount">Amount you request</label>
+                  <input id="buy-amount" name="buy-amount" data-testid="buy-amount" inputmode="decimal" placeholder="Amount" aria-describedby="buy-amount-error" required>
+                  <p class="field-error" id="buy-amount-error" hidden></p>
+                </div>
+                <div class="field">
+                  <label class="sr-only" for="buy-token">Token address you request</label>
+                  <input id="buy-token" name="buy-token" data-testid="buy-token" class="address-input" autocapitalize="off" spellcheck="false" placeholder="Token address (0x…)" aria-describedby="buy-token-error" required>
+                  <p class="field-error" id="buy-token-error" hidden></p>
+                </div>
+              </section>
+            </div>
+            <div class="form-options">
+              <div class="field">
+                <label for="taker">Reserved for <span class="optional">(optional)</span></label>
+                <input id="taker" name="taker" data-testid="taker" class="address-input" autocapitalize="off" spellcheck="false" placeholder="Anyone if left blank" aria-describedby="taker-error">
+                <p class="field-error" id="taker-error" hidden></p>
+              </div>
+              <div class="field">
+                <label for="expiry-hours">Expires in (hours)</label>
+                <input id="expiry-hours" name="expiry-hours" data-testid="expiry-hours" inputmode="decimal" value="24" aria-describedby="expiry-hours-error" required>
+                <p class="field-error" id="expiry-hours-error" hidden></p>
+              </div>
+            </div>
+            <div id="new-actions"></div>
+          </form>
+          <p class="escrow-note">The deal contract holds the tokens you offer until the deal fills or you cancel it.</p>
+        </div>
+        <div class="share-view" id="share-view" hidden>
+          <p class="plain-text">Send this link to the person you want to trade with.</p>
+          <a class="share-link" id="share-link"></a>
+          <button class="button" id="copy-link" type="button">Copy deal link</button>
+          <p class="notice" id="copy-feedback" role="status"></p>
+        </div>
+      </section>
+      <section id="error-screen" data-screen="error" hidden>
+        <h1>Couldn’t load this page</h1>
+        <div id="error-actions"></div>
+      </section>
+      <div id="actions" class="actions" hidden>
+        <button class="button" data-testid="primary-action" type="button" hidden disabled></button>
+        <button class="button retry-button" id="retry-action" type="button" aria-describedby="action-notice" hidden>Try again</button>
+        <p class="notice" id="action-notice" data-testid="notice" role="status"></p>
+      </div>
+      <noscript><p class="notice">This page needs JavaScript to read deals from the chain.</p></noscript>
+    </main>
+  </div>
 </body>
 </html>
