@@ -131,9 +131,26 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
     else render({ ...selected, label, message });
   }
 
-  async function readReceipt(tx) {
-    const receipt = await tx.chain.receipt(tx.hash);
-    if (!receipt || submitted !== tx || signal.aborted) return false;
+  async function readSettlement(tx) {
+    let receipt, receiptError;
+    try {
+      receipt = await tx.chain.receipt(tx.hash);
+    } catch (error) {
+      receiptError = error;
+    }
+    if (submitted !== tx || signal.aborted) return false;
+
+    if (!receipt && tx.refundDealId !== undefined) {
+      const { status } = await tx.chain.deal(tx.refundDealId);
+      if (submitted !== tx || signal.aborted) return false;
+      if (status === 2n || status === 3n) {
+        // A terminal deal resolves the lock without confirming the original transaction.
+        submitted = null;
+        return true;
+      }
+    }
+    if (receiptError) throw receiptError;
+    if (!receipt) return false;
     submitted = null;
     if (BigInt(receipt.status) !== 1n) {
       throw new UserError("The transaction reverted on chain. Review the current terms and try again.");
@@ -146,12 +163,12 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
     const tx = submitted;
     const end = Date.now() + 120_000;
     while (!signal.aborted && Date.now() < end) {
-      if (await readReceipt(tx)) return;
+      if (await readSettlement(tx)) return;
       await sleep(1000);
     }
   }
 
-  async function send({ chain, account, tx, onConfirmed }) {
+  async function send({ chain, account, tx, onConfirmed, refundDealId }) {
     await chain.simulate(tx, account);
     const current = await walletState();
     if (current.account !== account || !networkMatches(chain, current)) {
@@ -159,7 +176,7 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
     }
     signal.throwIfAborted();
     const hash = await request("eth_sendTransaction", [{ ...tx, from: account }]);
-    submitted = { chain, hash, onConfirmed, button: busyButton };
+    submitted = { chain, hash, onConfirmed, refundDealId, button: busyButton };
     if (!signal.aborted) renderProgress("Confirming on chain…", "Submitted. Waiting for the network to confirm.");
     await confirm();
   }
@@ -183,7 +200,7 @@ function controls(root, signal, prepare, { setFieldsLocked = () => {} } = {}) {
     if (submitted?.button === makerButton) {
       // A submitted refund keeps both actions locked, even if the wallet account changes.
       try {
-        if (await readReceipt(submitted)) lastError = "";
+        if (await readSettlement(submitted)) lastError = "";
       } catch (error) {
         if (!submitted) lastError = userMessage(error, "Couldn’t confirm the refund.");
       }
@@ -386,7 +403,7 @@ function showDeal(root, id, signal) {
         label: "Cancel and reclaim tokens", pendingLabel: "Cancelling deal…",
         pendingMessage: "Confirm the cancellation and refund in your wallet.",
         run: () => send({
-          chain, account: state.account, tx: chain.cancel(id),
+          chain, account: state.account, tx: chain.cancel(id), refundDealId: id,
           onConfirmed() { refunded = true; },
         }),
       };
