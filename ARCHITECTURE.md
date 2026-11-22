@@ -1,63 +1,50 @@
-# otc.fam: the plan
+# otc.fam architecture
 
-otc.fam is a link for one OTC token deal. This file says what is fixed, what each round adds, and which
-parts are the creator's words and which are proposals he can still change.
+The site serves one private funded deal per link. Static JavaScript reads contract state over JSON-RPC without signing in; EIP-1193 handles wallet connection and transactions. `npm run build` copies `web/` to `dist/` without a bundler or runtime dependency.
 
-## What the creator asked for
+## Version boundary
 
-- A link for one deal, like a calendar link, that one side sends to the other.
-- Totally non-custodial.
-- A page that looks like Uniswap, not like a SaaS form.
+`IOtcDeals.sol` and `OtcDeals.sol` preserve the original no-fee interface, constructor and behavior. `/#/new` and `/#/d/<id>` use that ABI and the `contract` config key. Their test handles remain unchanged.
 
-Everything else below is **proposed**: the chain, the contract's shape, the link's format, the rounds.
+`IOtcDealsV2.sol` and `OtcDealsV2.sol` add an explicitly versioned API and one constructor argument, immutable `treasury`. `/#/v2/new` and `/#/v2/d/<id>` require the optional `contractV2` key. `app.js` creates a separate `ChainV2` for these routes. Old configuration shapes remain valid.
 
-## The parts
+| Module | Responsibility |
+| --- | --- |
+| `eth.js` | Legacy ABI, token reads, wallet state, exact approvals, transaction simulation and receipts, shared error text |
+| `eth-v2.js` | V2 tuple encoding, deal/grant decoding, event id and V2 errors |
+| `vesting.js` | Pure BigInt fee, vesting and schedule calculations |
+| `v2-new-deal-page.js` | Persistent form, token lookup, explicit delivery, exact economic preview, funding and private link |
+| `v2-deal-page.js` | Read-only terms, settlement, grant timeline, permissionless beneficiary claims and receipts |
+| `v2-ui.js` | UTC strings, fee facts, token warning and stable action updates |
+| `units.js`, `ui.js` | Exact amount parsing/formatting and text-only DOM construction |
 
-```
-contracts/IOtcDeals.sol   the fixed interface of the deal contract
-contracts/OtcDeals.sol    its implementation (round 1)
-web/                      the page, built into dist/ by "npm run build"
-web/config.json           { "chainId", "contract", "rpcUrl" }: read by the page when it loads
-scripts/deploy.mjs        deploys OtcDeals; RPC_URL and DEPLOYER_KEY come from the environment only
-```
+The legacy expiry node updates in place before comparing the rest of its card. The V2 grant shell stays mounted; polling writes its amount text and progress value directly. Claim button labels are stable while claimable amounts change. Actions read current page state, disable synchronously on a press and use a busy guard to prevent duplicate requests. On-chain checks remain authoritative across two tabs.
 
-**The contract** (Solidity, any EVM chain). One contract holds every deal. A deal says: the maker gives
-`sellAmount` of `sellToken` and wants `buyAmount` of `buyToken`, from one named taker or from anyone,
-until `expiry`. `createDeal` makes it, `fill` swaps the tokens in one transaction, `cancel` gives the
-maker's tokens back, `getDeal` reads it. Ids count up from 1. The contract has no owner, no fee, no
-upgrade and no pause. Whether it keeps the maker's tokens from `createDeal` or takes them at `fill` is
-each entry's choice in round 1.
+## V2 state and asset accounting
 
-**The page** (static files, no server). It reads `config.json`, then the deal from the chain through
-`rpcUrl`: a person sees a deal before connecting any wallet. Sending a transaction goes through the
-browser's wallet (`window.ethereum`).
+Deal ids and grant ids start at 1. Terms are immutable: seller, two tokens, explicit buyer, allocation A, payment Q, expiry, delivery mode and schedule. Deals transition `Funded → Settled` or `Funded → Cancelled`; neither terminal state can be replayed. Each vesting deal has at most one grant; immediate deals have grantId zero.
 
-**The link.** `<site>/#/d/<id>` shows deal `<id>`; `<site>/#/new` makes one.
+1. Creation pulls exactly A into the contract and records funded terms. No fees.
+2. Settlement pulls Q plus floor(Q/200), pays the seller Q minus floor(Q/200), and pays the immutable treasury twice floor(Q/200). Immediate delivery transfers A to the buyer. New vesting assigns A already in the vault to a grant for that buyer.
+3. Cancellation sends A back to the seller. Expiry prevents settlement, not refund.
+4. Claims update total claimed before paying the beneficiary. Callers cannot choose another recipient.
 
-**The handles.** The page marks what it shows with `data-testid` attributes (`deal-status`, `pay-amount`,
-`primary-action`…), listed in round 1's brief. The checks and later rounds rely on them: a round may add
-handles, never rename one.
+All state-changing calls share a transient reentrancy lock. State and events are written before external token calls; any failure rolls back every effect, including allowance consumption, grant creation and fees. Pulls and pushes check sender and recipient balance deltas. The contract accepts ERC-20 calls returning true or no data. No external factory, arbitrary call path or administrator can remove grants.
 
-## The rounds
+The vault balance covers funded allocations plus unclaimed grant allocations. Grant creation needs no external transfer: custody stays in the same contract. A reverting seller or treasury payment cancels the entire settlement and leaves a funded allocation retryable or refundable. A failed claim leaves claimed and balances unchanged.
 
-| Round | Title | What it adds | How it is checked | Prize |
-| --- | --- | --- | --- | --- |
-| 1 | One deal, one link | The deal contract, and the smallest page that shows a deal from its link and fills it | The contract on a local chain with the checks' own tokens; the built page in a browser with a stand-in wallet | 1,000,000 points |
-| 2 | The page people send around (proposed) | The Uniswap look, real wallets, a deployment on a test network, the link's preview in Telegram, warnings about tokens, so that a fake token is noticed | Decided after round 1 | To set |
-| 3 | What a real deal needs (proposed) | Decided after the creator has shown round 2 to three people who do OTC deals | Decided after round 2 | To set |
+## Vesting arithmetic
 
-Only round 1 is specified. Rounds 2 and 3 are added on Hotpod, each after the one before has settled.
+Time is block.timestamp in seconds. A zero fixed start binds to the settlement block. Nonzero fixed starts must be future timestamps at both creation and settlement. Immediate schedules contain only zeros. Vesting requires duration > 0, cliffSeconds < durationSeconds and a representable uint64 end.
 
-## Where it runs
+Before cliff, vested = 0. At/after cliff and before end, vested = floor(A×(t−start)/(end−start)); at/after end, vested = A. Claimable = vested−claimed and locked = A−vested. Accrual starts at start and the cliff releases that accrual.
 
-- **Checks:** a chain inside the check's own process, with no network. The compiler is solc 0.8.38,
-  optimizer on (200 runs), EVM version cancun.
-- **Demo (proposed):** Base Sepolia, after round 1 is merged. The creator deploys with his own key; no key
-  is ever in this repository. `web/config.json` holds Base Sepolia's chain id and a zero address until then.
-- **Any main network:** not before a security review of the winning contract. Depending on the winning
-  design, the contract holds the makers' tokens between `createDeal` and `fill` or `cancel`.
+`_mulDivTime` specializes overflow-safe multiplication/division to the bounded schedule. With n=t−start and d=end−start, 0≤n<d≤uint64.max. It computes `(A/d)*n + ((A%d)*n)/d`. The first product and total are at most A; the remainder product is below 2^128. Thus A can occupy all 256 bits without overflowing an intermediate product. Contract tests compare this decomposition with an independent unbounded BigInt product oracle.
 
-## What it is not
+## Runtime and boundaries
 
-Points only on Hotpod: no token, no fee, nothing to pay. otc.fam takes no custody and gives no advice
-about any token or any deal.
+Solc 0.8.38, optimization with 200 runs, Cancun EVM. The browser has no private keys or backend. Deployment scripts read secrets from the environment only. Tests use a process-local EDR chain, local ERC-20 fixtures and Chromium. Browser screenshots are generated under ignored `screens/`.
+
+Read polling pins V2 deal terms, grant accounting and on-chain time to one block, including during concurrent claims. Token metadata is untrusted and inserted as text. Exact decimals retain every raw unit. Existing positions, revocable rights, screenshots and URLs are refused before wallet approval. External adapters and broker shares are absent; the single treasury payout is the fee path for later extension.
+
+Tokens that rebase, freeze accounts, lie about balances or change implementation remain unsupported risks. No rescue, upgrade or finality mechanism is provided. This is a local/testnet implementation, without an independent audit or production approval. A future broker-deal extension will need separately specified signed terms and receipts; it is not part of this API.

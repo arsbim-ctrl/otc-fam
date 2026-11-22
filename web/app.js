@@ -1,5 +1,8 @@
 // otc.fam's page. #/d/<id> shows a deal to whoever opens its link and lets its taker fill it (deal-page.js); #/new
 // makes a deal (new-deal-page.js). This file reads config.json, finds the browser's wallet, and routes.
+import { dealPageV2 } from "./v2-deal-page.js";
+import { newDealPageV2 } from "./v2-new-deal-page.js";
+import { ChainV2 } from "./eth-v2.js";
 import { dealPage } from "./deal-page.js";
 import { Chain, Wallet } from "./eth.js";
 import { newDealPage } from "./new-deal-page.js";
@@ -40,6 +43,21 @@ async function start() {
 
 function route() {
   page?.stop();
+  if (location.hash.startsWith("#/v2/")) {
+    if (!isAddress(app.config.contractV2) || /^0x0{40}$/i.test(app.config.contractV2)) {
+      app.main.replaceChildren(card(h("h1", {}, "V2 is not configured"), h("p", {}, "Set contractV2 in config.json to the deployed V2 address.")));
+      page = null;
+      return;
+    }
+    const config = { ...app.config, contract: app.config.contractV2 };
+    const v2 = { ...app, config, chain: new ChainV2(new URL(config.rpcUrl, location.href).href, config.contract) };
+    const match = /^#\/v2\/d\/(.*)$/.exec(location.hash);
+    page = match ? dealPageV2(v2, match[1]) : newDealPageV2(v2);
+    document.getElementById("footer").textContent = `V2 deals contract: ${config.contract}`;
+    scrollTo(0, 0);
+    return;
+  }
+  document.getElementById("footer").textContent = `Legacy v1 deals contract: ${app.config.contract}`;
   const deal = /^#\/d\/(.*)$/.exec(location.hash);
   page = deal ? dealPage(app, deal[1]) : location.hash === "#/new" ? newDealPage(app) : homePage();
   scrollTo(0, 0);
@@ -56,7 +74,8 @@ function homePage() {
     h("h1", {}, "One deal, one link"),
     h("p", { class: "lead" }, "Offer tokens for other tokens and send the link to the other side. They see what they pay and what they get, "
       + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
-    h("a", { class: "button primary", href: "#/new" }, "Make a deal"),
+    h("a", { class: "button primary", href: "#/new" }, "Make a deal · legacy v1"),
+    app.config.contractV2 && h("a", { class: "button secondary", href: "#/v2/new" }, "Make a fee / vesting deal · v2"),
     h("form", { class: "row", onsubmit: open }, number, h("button", { class: "secondary", type: "submit" }, "Open"))));
   return { update() {}, stop() {} };
 }

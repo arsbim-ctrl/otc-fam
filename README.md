@@ -1,124 +1,78 @@
 # otc.fam
 
-A link for one OTC token deal. The maker sends the link; the other side opens it, checks what they pay
-and what they receive, and fills it. No person and no company holds the tokens: a small contract swaps
-them between the two sides, or gives them back to the maker.
+One private link for one funded OTC token deal. A seller escrows an allocation, shares its link, and the buyer checks the terms before settling from a wallet. This repository is for local and testnet use. No contract is deployed by default; the contracts have not been independently audited.
 
-Coding agents build otc.fam in rounds on [Hotpod](https://hotpod.io): each round has a brief, checks that
-every entry must pass, and judges who rank the entries that pass. The winner is merged here. The plan is
-in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
-brief in [.launchpad/project.md](.launchpad/project.md).
+## Setup
 
-**Where it stands.** Round 1: the deal contract, the page that shows a deal from its link and fills it, and
-the deployment script. Nothing here has been reviewed for security, and nothing is deployed.
-
-## What is in the repository
-
-| Path | What it is |
-| --- | --- |
-| `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed. |
-| `contracts/OtcDeals.sol` | The deal contract: one contract for every deal, no owner, no fee. |
-| `web/` | The page, plain files and no dependency. `app.js` reads the config and routes to `deal-page.js` (`#/d/<id>`) or `new-deal-page.js` (`#/new`); `eth.js` reads the chain and sends through the wallet; `ui.js` and `units.js` build the page and word its amounts. `npm run build` copies it into `dist/`. |
-| `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
-| `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment. |
-| `test/` | The entry's own tests (`npm test`): what the round's checks leave out. |
-| `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
-| `.launchpad/checks/round-1/` | Round 1's checks. |
-
-## Install and run
-
-Node.js 22 or later.
+Node.js 22 or later, on an EVM supporting Cancun (EIP-1153 transient storage).
 
 ```sh
 npm ci
-npm run build                      # dist/ is the site: serve it with any static server
+npx playwright install chromium
+npm test
+node .launchpad/checks/round-1/run.mjs
+npm run build
 python3 -m http.server -d dist 8080
 ```
 
-Deploying the contract takes the network and the key from the environment, never from a file:
+`npm run build` copies the dependency-free static files from `web/` into `dist/`. The compiler, local EDR chain and browser tests use pinned development dependencies in `package-lock.json`. After installing dependencies and Chromium, tests and builds need no external service. The browser reads JSON-RPC directly and writes through an EIP-1193 wallet.
+
+Edit `web/config.json`, then rebuild:
+
+```json
+{
+  "chainId": 84532,
+  "contract": "0x0000000000000000000000000000000000000000",
+  "contractV2": "0x0000000000000000000000000000000000000000",
+  "rpcUrl": "https://sepolia.base.org"
+}
+```
+
+Use deployed addresses for your selected test network and a public RPC endpoint without credentials. `contractV2` is optional; the original `{ chainId, contract, rpcUrl }` configuration still supports legacy pages. Zero addresses are unconfigured placeholders. No deployment or network switching happens automatically.
+
+## Versions and links
+
+| Version | Create | Private deal | Contract |
+| --- | --- | --- | --- |
+| Legacy v1 | `/#/new` | `/#/d/<id>` | `OtcDeals`, unchanged, no fee |
+| v2 | `/#/v2/new` | `/#/v2/d/<id>` | `OtcDealsV2`, immediate or new vesting, explicit buyer |
+
+A link carries only its version and id. All economic terms come from the configured on-chain contract, without a wallet. There is no listing or order book. Links identify deals, not authorization secrets: only the designated wallet can settle a V2 deal. Anyone who knows a link can inspect it.
+
+Amounts are raw integers in the contracts and exact decimal strings in the page. Token symbols are untrusted; compare the complete token addresses. The seller approves exactly the allocation; the buyer approves exactly the payment including the buyer fee. The form requires at least one minute to expiry and permits up to 8760 hours. Expiry is computed from the latest block when funding is requested.
+
+## V2 fees and delivery
+
+For raw quote amount `Q`, buyer and seller fees each equal `floor(Q*50/10000)` (0.5%, rounded down independently). Buyer pays `Q+buyerFee`; seller receives `Q-sellerFee`; the immutable treasury receives both fees. The amounts conserve exactly: `buyerTotal = sellerNet + feePool`. For 123.456789 USDC (6 decimals), the buyer pays 124.074072, seller receives 122.839506 and treasury receives 1.234566. Fees are zero below 200 raw payment units.
+
+The constructor takes one nonzero `treasury` address. `IOtcDealsV2.sol` specifies `Terms`, `Deal`, `Grant`, events and reads. `createDeal(terms)` escrows the full allocation with immutable buyer and schedule. `fill(id)` settles once, atomically paying the seller and treasury and either delivering immediately or assigning the escrowed allocation to one new grant. `cancel(id)` returns a funded allocation to its seller, including after expiry. No fees apply to creation, cancellation, failed settlement, refunds or claims.
+
+For new vesting, `fixedStart=0` means settlement block time. A nonzero fixed start must still be in the future at creation and settlement. Duration must be positive and cliff shorter than duration. Start, cliff and end fit uint64 seconds. Immediate delivery requires all schedule fields to be zero.
+
+Vesting accrues from start. Before cliff, vested is zero. At cliff and until end, vested is `floor(A*(t-start)/(end-start))`; at or after end, vested is exactly A. A 30-day cliff with 90-day duration releases the accrued one-third at cliff, half at day 45 and all at day 90. Claims subtract amounts already claimed and send only to the immutable buyer beneficiary. Anyone may trigger a claim. The last claim absorbs rounding dust. Settled grants can still have locked tokens.
+
+The vault is the V2 contract itself (`custodian=address(this)`). No grant leaves an external factory partly funded. Failed transfers revert the entire transaction. V2 checks both sender and recipient balance deltas, accepting true-return and no-return ERC-20s and refusing inexact transfers. A transient lock guards create, settle, cancel and claim.
+
+## Deploy locally or to a testnet
+
+Set environment variables through your secret manager or a private shell environment; never put keys in the repository or command history. Legacy deployment uses `RPC_URL` and `DEPLOYER_KEY`:
 
 ```sh
-RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy
+npm run deploy
 ```
 
-It compiles `contracts/OtcDeals.sol` as the checks do, prints the contract's address (and nothing else) on
-stdout, and never prints `RPC_URL` or the key. Put the address in `web/config.json`, with the network's chain
-id and a public RPC URL.
-
-## Run the checks
+V2 deployment also requires `TREASURY`:
 
 ```sh
-npm ci
-npx playwright install chromium    # the browser the page tests drive
-npm run check
+node scripts/deploy-v2.mjs
 ```
 
-They compile `contracts/OtcDeals.sol`, deploy it on a chain that lives inside the check, trade the checks'
-own tokens through it, then build the page and use it in a browser. Nothing leaves the machine. Hotpod
-runs the same checks on every entry, in a container with no network.
+V2 prints only the deployed contract address on stdout. It never prints the environment values or raw provider errors. Place the result in `contractV2`. There is no production deployment workflow here.
 
-## Run the tests
+## Verification and limitations
 
-```sh
-npm ci
-npx playwright install chromium    # test/page.test.mjs drives the page in it, as the checks do
-npm test
-```
+`npm test` includes legacy tests, fee and vesting arithmetic, ABI encoding/decoding, actual balance deltas, huge allocations, rounding dust, invalid schedules, rollback, reentrancy and browser workflows. V2 browser tests run seller, fresh read-only buyer, settlement and claims at 390px and 1440px; they save screenshots in ignored `screens/`. `node .launchpad/checks/round-1/run.mjs` runs the frozen legacy checks directly. This is separate from the official pinned offline gate.
 
-`test/` covers what the round's checks leave out, on the same local chain and with the same stand-in wallet:
+Existing external positions (including Sablier), revocable rights, screenshots and URLs cannot be sold here. The form refuses those inputs before wallet approval. Grants are nontransferable. No broker share, admin rescue, upgrade, pause or beneficiary change exists.
 
-| File | What it shows |
-| --- | --- |
-| `contract.test.mjs` | A token that takes a fee is refused, sold or bought, and one that starts taking fees later never pays a deal out of another's tokens; a token that answers `false`, or an address with no contract, cannot be traded; deals of the same token each pay out exactly their own amount; no call back into `createDeal`, `fill` or `cancel` goes through while tokens move. |
-| `page.test.mjs` | A token with no decimals; an amount with more decimals than its token has; a wallet on another network; a press declined in the wallet; a transaction refused before it is sent, or failed on the chain; a token that wants its approval set to zero first (as USDT); the maker cancelling an open or an expired deal. |
-| `amounts.test.mjs`, `abi.test.mjs` | Amounts are never rounded; the page's hand-written selectors and error words match the compiled contract; a symbol is read as a string or as bytes32, without characters that turn the text around. |
-| `deploy.test.mjs` | `npm run deploy` against a local node, with a fresh key. |
-
-## The deal contract
-
-`OtcDeals` holds the maker's tokens from `createDeal` until the deal ends: `fill` swaps both sides in one
-transaction, and `cancel` gives the tokens back to the maker. An open link is therefore always backed, and
-every approval is for the exact amount of one deal. Where the brief left the choice:
-
-- **What it holds**: exactly what its open deals add up to. Tokens come in through one function and go out
-  through another, and both read the balances: what comes in must leave its sender and reach the contract
-  whole, and what goes out must leave the contract exactly. A token that takes a fee, from the amount or on
-  top of it, is refused on either side (`InexactTransfer`): sold, a deal left short would be paid out of
-  another deal's tokens; bought, the maker would get less than the deal says. A token that starts taking
-  fees once deals hold it cannot make the contract pay out more than a deal's amount either. That is also why
-  `fill` takes the taker's payment into the contract before passing it to the maker.
-- **Terms.** A deal's terms never change once `createDeal` has made it, and an id is never used twice: what a
-  link shows is what `fill` does.
-- **Tokens.** `transfer` and `transferFrom` may answer `true` or nothing at all (as USDT does); `false`, a
-  revert, or an address with no contract behind it fails the call (`TransferFailed`, `NotAToken`). Not
-  covered: tokens whose balances change without a transfer (rebasing), and tokens that can freeze an
-  address. They can leave a deal in that same token unpaid or stuck; they cannot touch any other token.
-- **Re-entry.** Each call writes the deal's new status before it moves a token, and a lock refuses any call
-  back into `createDeal`, `fill` or `cancel` while one of them runs. The lock is in transient storage
-  (EIP-1153), so the contract needs an EVM with Cancun, the version the checks compile for.
-- **Expiry.** A deal cannot be filled from its expiry on; its maker can still cancel it, and must, to take the
-  tokens back.
-- **Errors**, for whoever reads the chain: `ZeroAmount`, `SameToken`, `ExpiryNotInFuture`, `NotAToken(token)`,
-  `InexactTransfer(token)`, `NotOpen(id)`, `DealExpired(id)`, `NotYourDeal(id, taker)`, `NotMaker(id)`,
-  `TransferFailed(token)`, `Reentered()`.
-
-## The page
-
-- `#/d/<id>` reads the deal from `rpcUrl`, with or without a wallet. Its one button takes the taker through
-  each step and says what the step does: connect, switch network if needed, approve exactly the amount to
-  pay, fill. The maker who opens their own deal, open or expired, gets a button to cancel it and take the
-  tokens back instead.
-- Before the wallet is asked to sign, the page runs the transaction as a call: one that the chain would refuse
-  is not sent, and the contract's reason is shown in words.
-- A deal shows as expired once the latest block or the browser's clock has reached its expiry. A deal made at
-  `#/new` expires `expiry-hours` after the later of the two.
-- Amounts are typed with a dot for decimals (`1500.25`) and shown with every digit and commas between
-  thousands (`1,500.25`). An amount with more decimals than its token has is refused, never rounded.
-
-## Build it with your agent
-
-Anyone can enter otc.fam's rounds with their coding agent. Give it this prompt:
-
-```text
-I want you to contribute to otc.fam on Hotpod. Download https://hotpod.io/skill/SKILL.md with curl, read all of it, and follow it: install the launchpad CLI and the skill. Run launchpad where before you clone, build or judge anything: it says whether you work in a place of your own. If it exits 1, you are on my own account: do what "Where you run" in SKILL.md says. One round may be built here as a watched build: tell me the risk in one or two plain sentences and wait for my yes (this prompt is not that yes). Never judge or run launchpad setup here. If I say no, or for later rounds, offer a place of its own (https://hotpod.io/docs/set-and-forget#a-place-of-its-own); on Windows, https://hotpod.io/install.ps1 makes one, the Hotpod WSL distribution. Find this repository's project with launchpad projects. First use launchpad projects and launchpad round to read the public brief, then clone, build and run the checks without a key, following roles/build.md. Only when ready to seal, use the key in ~/.launchpad/<agent>/env (if there is none on this computer yet, run launchpad login --url https://hotpod.io --start: it opens my browser for me to authorize it with one click, or, when it cannot, prints a page and a code for you to show me, apart, for me to type the code on that page; then run launchpad login --wait, which saves the key there itself; never ask me for the key itself), load that env file and run launchpad whoami: it must name the agent I authorize. Then seal the chosen round before its build deadline and follow roles/build.md for its reveal instructions.
-```
+Rebasing, dishonest balance reporting, later token freezes or token upgrades can make a deal or grant unusable. No smart contract can prevent a token from changing its own behavior. Claims depend on on-chain seconds; the page polls latest blocks, so it may lag until the next block or refresh. A fixed start that passes before settlement requires cancellation and new terms. Accelerated transactions are followed by nonce across the latest 64 blocks; cancellations prompt a status refresh. Network receipts are subject to confirmation and reorganization; this UI does not implement a finality policy. Use local or testnet assets only.

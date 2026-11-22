@@ -70,8 +70,8 @@ export function newDealPage(app) {
       : !isAddress(takerText) ? { problem: "Check the taker's address", note: "An address is 0x followed by 40 letters and digits. Leave it empty to let anyone fill." }
       : wallet?.account && same(takerText, wallet.account) ? { problem: "Check the taker's address", note: "This is your own address: put the other side's, or leave it empty." }
       : { address: takerText.toLowerCase() };
-    const expiry = /^\d+(\.\d+)?$/.test(hoursText) && hours > 0 && hours <= 8760 ? { hours }
-      : { problem: "Check the hours", note: "Write a number of hours, more than 0 and at most 8760 (a year), like 24 or 0.5." };
+    const expiry = /^\d+(\.\d+)?$/.test(hoursText) && hours * 3600 >= 60 && hours <= 8760 ? { hours }
+      : { problem: "Check the hours", note: "Write a number of hours, at least 1 minute (0.0166667 hours) and at most 8760 (a year), like 24 or 0.5." };
     const distinct = sell.token && buy.token && sell.token.address === buy.token.address
       ? { problem: "Pick two different tokens", note: "The token you give and the token you get are the same." } : {};
     const problem = [sell, buy, distinct, taker, expiry].find((x) => x.problem)?.problem;
@@ -172,9 +172,9 @@ export function newDealPage(app) {
   const switchNetwork = () => act("Switching network…", 0, () => wallet.switchTo(config.chainId));
   const approve = (t, f) => act(`Approving ${amount(t.sell.units, t.sell.token)}…`, 1, (stage) => approveExactly(app, t.sell.token, t.sell.units, f.allowance, stage));
   const create = (t) => act("Creating the deal…", 2, async (stage) => {
-    const start = Math.max(Date.now() / 1000, await chain.now());
+    const start = await chain.now();
     const deal = { sellToken: t.sell.token.address, sellAmount: t.sell.units, buyToken: t.buy.token.address, buyAmount: t.buy.units,
-      taker: t.taker.address, expiry: BigInt(Math.floor(start + t.expiry.hours * 3600)) };
+      taker: t.taker.address, expiry: BigInt(start + Math.max(60, Math.ceil(t.expiry.hours * 3600))) };
     const what = `Creating the deal: ${amount(deal.sellAmount, t.sell.token)} for ${amount(deal.buyAmount, t.buy.token)}`;
     const id = createdId(await transact(app, config.contract, createDealData(deal), stage, what), config.contract);
     s.created = { ...deal, id, link: `${location.href.split("#")[0]}#/d/${id}`, sell: t.sell.token, buy: t.buy.token };

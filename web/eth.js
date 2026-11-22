@@ -119,9 +119,26 @@ export class Chain {
 
   /** The receipt of transaction `hash`, once it is in a block. */
   async receipt(hash) {
+    const sent = await this.rpc("eth_getTransactionByHash", [hash]).catch(() => null);
     for (let waited = 0, pause = 250; waited < 600_000; waited += pause, pause = Math.min(pause * 2, 3000)) {
       const receipt = await this.rpc("eth_getTransactionReceipt", [hash]);
       if (receipt) return receipt;
+      if (sent && BigInt(await this.rpc("eth_getTransactionCount", [sent.from, "latest"])) > BigInt(sent.nonce)) {
+        // A mined transaction consumed this nonce. Find its receipt even when the
+        // wallet accelerated it under another hash. A cancellation is not success.
+        const latest = BigInt(await this.rpc("eth_blockNumber", []));
+        for (let back = 0n; back < 64n && back <= latest; back++) {
+          const block = await this.rpc("eth_getBlockByNumber", [`0x${(latest - back).toString(16)}`, true]);
+          const replacement = block?.transactions?.find(tx => typeof tx === "object" && same(tx.from, sent.from) && BigInt(tx.nonce) === BigInt(sent.nonce));
+          if (!replacement) continue;
+          if (!same(replacement.to, sent.to) || !same(replacement.input ?? replacement.data, sent.input ?? sent.data)) {
+            throw new Error("Your wallet replaced or cancelled this transaction. Refresh the deal to check its on-chain status before trying again.");
+          }
+          const mined = await this.rpc("eth_getTransactionReceipt", [replacement.hash]);
+          if (mined) return mined;
+        }
+        throw new Error("This transaction was replaced. Refresh the deal to check its on-chain status and your wallet activity.");
+      }
       await sleep(pause);
     }
     throw new Error(`The transaction ${hash} is still not confirmed after 10 minutes. Check it in your wallet's activity.`);
@@ -220,6 +237,8 @@ function revertData(error) {
 export function explain(error) {
   if (error?.code === 4001) return "You declined in your wallet. Nothing was sent.";
   if (error?.code === 4902) return "Your wallet does not know this network yet. Add it in your wallet, then try again.";
+  const message = [error?.message, error?.error?.message, error?.info?.error?.message, error?.data?.message, error?.data?.originalError?.message].filter(Boolean).join(" ");
+  if (error?.code === "INSUFFICIENT_FUNDS" || /insufficient funds|funds for gas|not enough.*gas|sender doesn.t have enough funds|maximum? upfront cost/i.test(message)) return "This wallet has too little ETH to pay the network fee. Add some, then try again.";
   const data = revertData(error);
   if (data) {
     const reason = REASONS[data.slice(0, 10)];

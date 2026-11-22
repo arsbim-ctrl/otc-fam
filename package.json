@@ -12,7 +12,8 @@
     "build": "node scripts/build.mjs",
     "deploy": "node scripts/deploy.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node .launchpad/checks/round-1/run.mjs"
+    "check": "node .launchpad/checks/round-1/run.mjs",
+    "deploy:v2": "node scripts/deploy-v2.mjs"
   },
   "devDependencies": {
     "@nomicfoundation/edr": "0.25.1",
