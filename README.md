@@ -23,7 +23,7 @@ nothing is deployed: local chains and test networks only.
 | `contracts/IOtcDealsV2.sol`, `contracts/OtcDealsV2.sol` | v2, round 2: deals for one named buyer, with fees, delivered at once or as a vesting grant. The interface is the round's, unchanged. |
 | `contracts/GrantVault.sol` | Holds the tokens of one vesting grant. v2 makes one per grant. |
 | `contracts/TokenMoves.sol` | The three ways a token moves in v2, each checked against the balances. |
-| `web/` | The page, plain files and no dependency. `app.js` reads the config and routes; `deal-page.js` and `new-deal-page.js` are v1's pages, `v2-deal-page.js` and `v2-new-page.js` v2's; `v2.js` reads the v2 contract; `eth.js` reads the chain and sends through the wallet; `ui.js` and `units.js` build the page and word its amounts and times. `npm run build` copies it into `dist/`. |
+| `web/` | The page, plain files and no dependency. `app.js` reads the config and routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, which draws the grant with `v2-grant.js` and the receipts with `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses one at a time and remembers a transaction across a reload; `eth.js` reads the chain and sends through the wallet; `ui.js` and `units.js` build the page and word its amounts and times. `npm run build` copies it into `dist/`. |
 | `web/config.json` | The chain, both contracts' addresses and the JSON-RPC URL the page reads at load. |
 | `scripts/` | `build.mjs`, `deploy.mjs` (both contracts), `play.mjs` (round 2's scenes), `dev.mjs` and `dev-wallet.js` (a local stand to click through). |
 | `test/` | The entry's own tests (`npm test`): what the rounds' checks leave out. |
@@ -156,14 +156,14 @@ they cannot touch any other token.
 
 ## The pages
 
-`config.json` is `{ "chainId", "contract", "rpcUrl" }` as in round 1, with two optional values:
-`"contractV2"`, the v2 contract's address, and `"fromBlockV2"`, the block it was deployed in (where the
-page starts reading its events). Without `contractV2` the site serves v1 only.
+`config.json` is `{ "chainId", "contract", "rpcUrl" }` as in round 1, with three optional values:
+`"contractV2"`, the v2 contract's address; `"fromBlockV2"`, the block it was deployed in (where the page
+starts reading its events); and `"explorerUrl"`, an https block explorer for the receipts' links, when the network is not one the page knows. Without `contractV2` the site serves v1 only.
 
 | Link | What it is |
 | --- | --- |
-| `#/v2/new` | The seller's form: immediate or vesting delivery, the tokens, the buyer, how long the deal stays open, and for vesting the start (at settlement, or a date and time in UTC), the cliff and the length in days. Before anything is signed it shows the price, both fees, what the buyer pays, what the seller and the treasury receive, and the schedule. Its button connects, approves exactly the allocation, and funds; then the page gives the link. |
-| `#/v2/d/<id>` | One link for a deal's whole life. Funded: the terms, the money, that the allocation is held on the chain, and for the named buyer the button that connects, approves exactly the price and the fee, and settles. Settled with vesting: the grant, with its start, cliff and end in UTC, what is vested, claimed, claimable and locked, a timeline and the same in words, and the button that claims. Every transaction of the deal is listed with its hash. |
+| `#/v2/new` | The seller's form: immediate or vesting delivery, the tokens, the buyer, how long the deal stays open, and for vesting the start (at settlement, or a date and time in UTC), the cliff and the length in days. Before anything is signed it shows, next to the form, the buyer, what the buyer receives, until when the deal can be settled, the price, both fees, what the buyer pays, what the seller and the treasury receive, and the schedule. Its button connects, approves exactly the allocation, and funds; then the page gives the link. |
+| `#/v2/d/<id>` | One link for a deal's whole life. Funded: the terms, the money, that the allocation is held on the chain, and for the named buyer the button that connects, approves exactly the price and the fee, and settles. Settled with vesting: the grant, with its start, cliff and end in UTC, what is vested, claimed, claimable and locked, a timeline and the same in words, what its vault and its beneficiary's wallet hold, and the button that claims. Receipts: the network, the contract and the deal they are of, and every transaction of the deal with what moved (the exact payment and both fees), when, how deep in the chain it is, and its hash, a link to the block explorer where the network has one. |
 | `#/new`, `#/d/<id>` | v1's form and v1's deal page, as in round 1. |
 
 - Everything is read from `rpcUrl`, with or without a wallet. A vesting deal says on every screen that
@@ -189,9 +189,9 @@ The handles of the v2 pages (`data-testid`), next to round 1's, which are unchan
 
 | Page | Handles |
 | --- | --- |
-| `#/v2/d/<id>`, the deal | `deal-status` (`data-status`: `funded`, `settled`, `cancelled`, `expired`, `not-found`), `version`, `delivery` (`data-delivery`: `immediate`, `vesting`), `pay-amount` and `pay-symbol` (what the buyer pays, fee included), `receive-amount`, `receive-symbol`, `funding` (`data-funded`), `seller`, `buyer`, `price`, `buyer-fee`, `buyer-total`, `seller-fee`, `seller-net`, `treasury-fee`, `treasury`, `expires` (`data-expiry`), `schedule-start`, `schedule-cliff`, `schedule-end` (`data-seconds`), `token-warning`, `primary-action`, `cancel-action`, `connect-action`, `notice`, `waiting`, `stop-waiting` |
-| `#/v2/d/<id>`, the grant | `grant-status` (`data-status`: `not-started`, `cliff`, `vesting`, `vested`, `claimed`), `grant-allocation`, `grant-vested`, `grant-claimed`, `grant-claimable`, `grant-locked`, `grant-next`, `grant-start`, `grant-cliff`, `grant-end` (`data-time`), `beneficiary`, `vault`, `grant-backing` (`data-backed`), `as-of` (`data-block`), `last-receipt` (`data-tx`), `receipts` (one `li` per event, with `data-kind` and `data-tx`) |
-| `#/v2/new` | `delivery-immediate`, `delivery-vesting`, `delivery-existing`, `base-token`, `allocation`, `quote-token`, `quote`, `buyer`, `expiry-hours`, `start-settlement`, `start-fixed`, `start-utc`, `cliff-days`, `duration-days`, `existing-position`, `summary`, `summary-delivery`, `summary-schedule`, the money handles above, `primary-action`, `notice`, `deal-link` |
+| `#/v2/d/<id>`, the deal | `deal-status` (`data-status`: `funded`, `settled`, `cancelled`, `expired`, `not-found`), `version`, `delivery` (`data-delivery`: `immediate`, `vesting`), `pay-amount` and `pay-symbol` (what the buyer pays, fee included), `receive-amount`, `receive-symbol`, `funding` (`data-funded`), `seller`, `buyer`, `price`, `buyer-fee`, `buyer-total`, `seller-fee`, `seller-net`, `treasury-fee`, `treasury`, `expires` (`data-expiry`), `schedule-start`, `schedule-cliff`, `schedule-end` (`data-seconds`), `token-warning`, `primary-action`, `cancel-action`, `connect-action`, `notice`, `stale`, `waiting`, `stop-waiting` |
+| `#/v2/d/<id>`, the grant and the receipts | `grant-status` (`data-status`: `not-started`, `cliff`, `vesting`, `vested`, `claimed`), `grant-allocation`, `grant-vested`, `grant-claimed`, `grant-claimable`, `grant-locked`, `grant-next`, `grant-start`, `grant-cliff`, `grant-end` (`data-time`), `beneficiary`, `beneficiary-balance`, `vault`, `grant-backing` (`data-backed`), `as-of` (`data-block`), `receipt-network`, `receipt-contract`, `last-receipt` (`data-tx`), `receipts` (one `li` per event, with `data-kind` and `data-tx`) |
+| `#/v2/new` | `delivery-immediate`, `delivery-vesting`, `delivery-existing`, `base-token`, `allocation`, `quote-token`, `quote`, `buyer`, `expiry-hours`, `start-settlement`, `start-fixed`, `start-utc`, `cliff-days`, `duration-days`, `existing-position`, `summary`, `summary-delivery`, `summary-buyer`, `summary-allocation`, `summary-deadline` (`data-seconds`), `summary-schedule`, the money handles above, `primary-action`, `notice`, `stop-waiting`, `deal-link` |
 
 ## Round 2's acceptance evidence
 
@@ -216,7 +216,7 @@ prints the same and saves the screens. [evidence/round-2/](evidence/round-2/) ho
 | File | What it shows |
 | --- | --- |
 | `v2-contract.test.mjs` | The v2 contract: the rows above. |
-| `v2-page.test.mjs` | The v2 pages in Chromium: the seller's form to the link, a buyer with no wallet and then with one, the grant on days 0, 29, 30, 45 and 90 with two claims, a fixed start, the refusal of an existing position, another wallet, another network, a declined press, a failed and a replaced transaction, a reload, the keyboard. |
+| `v2-page.test.mjs` | The v2 pages in Chromium: the seller's form to the link, a buyer with no wallet and then with one, the grant on days 0, 29, 30, 45 and 90 with two claims, a fixed start, the refusal of an existing position, another wallet, another network, a declined press, a failed and a replaced transaction, a reload, a node that cannot be read, the explorer's links, the keyboard. |
 | `v2-abi.test.mjs` | The page's hand-written selectors, topics and error words against the compiled contract, and its fee and vesting arithmetic against the contract's. |
 | `contract.test.mjs`, `page.test.mjs`, `abi.test.mjs`, `amounts.test.mjs` | v1's contract and page, as in round 1, with round 1's fixes. |
 | `deploy.test.mjs`, `dev.test.mjs` | `npm run deploy`, `npm run deploy:v2` and `npm run dev`, end to end. |

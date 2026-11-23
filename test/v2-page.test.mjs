@@ -46,6 +46,9 @@ for (const [name, size] of [["a phone's", PHONE], ["a desktop's", DESKTOP]]) {
       for (const [id, text] of Object.entries({ price: "123.456789", "buyer-fee": "0.617283", "buyer-total": "124.074072", "seller-fee": "0.617283",
         "seller-net": "122.839506", "treasury-fee": "1.234566", treasury: w.treasury })) await says(page, id, text);
       assert.match(await seen(page, "summary-delivery"), /^Immediate: 1,000,000 FAM go to the buyer/);
+      await says(page, "summary-buyer", w.buyer);
+      await says(page, "summary-allocation", "1,000,000");
+      assert.match(await seen(page, "summary-deadline"), /^\w{3}, \d{1,2} \w{3} \d{4}, \d{2}:\d{2}:\d{2} UTC$/, "the deadline, in UTC");
       assert.ok(await fits(page), "the form fits the window's width");
       assert.equal(await pressUntil(page, async () => /#\/v2\/d\/\d+$/.test((await link(page)) ?? ""), "the deal's link"), 3, "connect, approve, fund");
       assert.equal(await link(page), `${site.url}/#/v2/d/1`);
@@ -63,7 +66,7 @@ for (const [name, size] of [["a phone's", PHONE], ["a desktop's", DESKTOP]]) {
       await says(page, "delivery", "immediate", "data-delivery");
       await says(page, "funding", "true", "data-funded");
       await says(page, "expires", String(deal.terms.expiry), "data-expiry");
-      assert.match(await seen(page, "funding"), /the deal contract holds the seller's 1,000,000 FAM for this deal/);
+      assert.match(await seen(page, "funding"), /the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 1,000,000 FAM now/);
       assert.equal(await offered(page), false, "nothing to press without a wallet");
       assert.ok(await fits(page), "the deal fits the window's width");
     });
@@ -74,11 +77,18 @@ for (const [name, size] of [["a phone's", PHONE], ["a desktop's", DESKTOP]]) {
       await pressUntil(page, async () => (await statusOf(w, 1)) === STATUS.Settled, "the deal settled", async () => buttons.push(await seen(page, "primary-action")));
       assert.deepEqual(buttons.slice(0, 3), ["Connect wallet", "Approve 124.074072 USDC", "Settle: pay 124.074072 USDC"]);
       await says(page, "deal-status", "settled", "data-status");
-      assert.match(await read(page), /Delivered: the 1,000,000 FAM are in the buyer's wallet\./);
+      assert.match(await read(page), /Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction\. That wallet holds 1,000,000 FAM now\./);
       const tx = await seen(page, "last-receipt", "data-tx");
       assert.match(tx, /^0x[0-9a-f]{64}$/, "the settlement's receipt is shown");
-      await until(async () => (await page.locator('[data-testid="receipts"] li[data-kind="settled"]').getAttribute("data-tx").catch(() => null)) === tx, "the settlement among the deal's receipts");
-      assert.match(await page.locator('[data-testid="receipts"] li[data-kind="settled"]').innerText(), /Settled: buyer fee 0\.617283 USDC, seller fee 0\.617283 USDC/);
+      const receipt = page.locator('[data-testid="receipts"] li[data-kind="settled"]');
+      await until(async () => (await receipt.getAttribute("data-tx").catch(() => null)) === tx, "the settlement among the deal's receipts");
+      const text = (await receipt.innerText()).replace(/\s+/g, " ");
+      assert.ok(text.startsWith(`Settled. The buyer, ${w.buyer.slice(0, 6)}…${w.buyer.slice(-4)}, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. `
+        + "The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer."), text);
+      assert.match(text, / UTC, block \d+: confirmed, 1 block deep /, "when, and how deep in the chain");
+      assert.ok(text.endsWith(tx), "the transaction's hash in full");
+      await says(page, "receipt-network", "Local test chain, chain 31337");
+      await says(page, "receipt-contract", w.deals.address.toLowerCase());
       assert.ok(await fits(page));
     });
     assert.deepEqual(await w.moved(before), { "buyer.USDC": -TOTAL, "seller.USDC": QUOTE - feeOn(QUOTE), "treasury.USDC": 2n * feeOn(QUOTE), "buyer.FAM": ALLOCATION, "deals.FAM": -ALLOCATION });
@@ -151,7 +161,8 @@ test("a vesting deal: the form shows the schedule; once settled its page is the 
     assert.deepEqual(await w.moved(before), { "buyer.FAM": ALLOCATION / 2n }, "the claim paid the buyer, and took no fee");
     assert.equal(await w.fam.read.balanceOf(custodian), ALLOCATION / 2n);
     assert.match(await seen(page, "last-receipt", "data-tx"), /^0x[0-9a-f]{64}$/, "the claim's receipt is shown");
-    await until(async () => (await page.locator('[data-testid="receipts"] li[data-kind="claimed"]').innerText().catch(() => "")).includes("Claimed 500,000 FAM"), "the claim among the receipts");
+    await until(async () => (await page.locator('[data-testid="receipts"] li[data-kind="claimed"]').innerText().catch(() => "")).includes("The grant's vault paid 500,000 FAM to the beneficiary"), "the claim among the receipts");
+    await says(page, "beneficiary-balance", "500,000");
     assert.match(await seen(page, "grant-next"), /^Everything vested so far is claimed\. 500,000 FAM are still locked/);
     assert.equal(await seen(page, "primary-action"), "Nothing to claim yet");
 
@@ -324,7 +335,8 @@ test("a page reloaded while its transaction is on its way takes it up again: a s
     await page.getByTestId("primary-action").click();
     await until(async () => (await statusOf(w, id + 1n)) === STATUS.Funded, "the funding mined");
     await page.reload();
-    await until(async () => (await read(page)).includes("This page was reloaded while the funding transaction 0x"), "the form waiting for its transaction again");
+    await until(async () => (await read(page)).includes("This page was reloaded while transaction 0x"), "the form waiting for its transaction again");
+    assert.equal(await page.getByTestId("stop-waiting").count(), 1, "the person can stop waiting, and have the form back");
     held.on = false;
     await until(async () => (await link(page)) === `${site.url}/#/v2/d/${id + 1n}`, "the funded deal's link, after all");
   });
@@ -357,6 +369,29 @@ test("while the chain cannot be read the page says that what it shows may be out
     assert.equal(await page.getByTestId("stale").count(), 0, "the warning goes once the chain is read again");
   });
 }));
+
+test("a receipt's transaction links to the network's block explorer where there is one, and a form on a chain whose time is ahead counts from the chain's", async () => {
+  const w = await world();
+  const id = await w.fund(await w.terms());
+  const site = await serve(w, { explorerUrl: "https://explorer.example/" });
+  try {
+    await browse(site, `#/v2/d/${id}`, {}, async (page) => {
+      const receipt = page.locator('[data-testid="receipts"] li[data-kind="funded"]');
+      await until(async () => (await receipt.locator("a").count()) === 1, "the funding receipt's link");
+      const hash = await receipt.getAttribute("data-tx");
+      assert.deepEqual([await receipt.locator("a").getAttribute("href"), await receipt.locator("a").getAttribute("rel"), await receipt.locator("a").innerText()],
+        [`https://explorer.example/tx/${hash}`, "noopener noreferrer", hash]);
+    });
+    await w.at((await w.chain.now()) + 100 * DAY); // a test chain moved a hundred days on
+    await browse(site, "#/v2/new", { wallet: walletFor(w, w.seller) }, async (page) => {
+      await enter(page, w);
+      const day = (await w.chain.now()) + DAY;
+      await until(async () => Math.abs(Number(await seen(page, "summary-deadline", "data-seconds")) - day) < 120, "a deadline one day after the chain's time, not the browser's");
+    });
+  } finally {
+    await site.close();
+  }
+});
 
 test("the whole settlement can be done from the keyboard: the button keeps the focus from one step to the next", () => onSite(async (site, w) => {
   const t = await w.vesting();

@@ -5,6 +5,7 @@
 // An existing vesting position is not something this contract can hold: choosing it is refused on the page, before
 // the wallet is ever asked for anything.
 import { approveExactly, explain, same, transact } from "./eth.js";
+import { flow } from "./flow.js";
 import { action, amount, card, copyButton, dot, fact, h, networkName, NO_WALLET, secondary, setNote, show, span, TOKEN_WARNING, utc } from "./ui.js";
 import { daysToSeconds, formatAmount, isAddress, openFor, parseAmount, parseUtc } from "./units.js";
 import { createDealData, fundedId, money } from "./v2.js";
@@ -15,9 +16,8 @@ const UNSUPPORTED = "otc.fam cannot sell an existing vesting position. A Sablier
 
 export function newDealPageV2(app) {
   const { config, chain, wallet, v2 } = app;
-  const s = { tokens: {}, funds: null, treasury: null, busy: null, notice: null, created: null };
-  const pendingKey = `otcfam:pending:${config.chainId}:${v2?.contract}:new`;
-  let live = true, fundsRead = 0, waits = 0;
+  const s = { tokens: {}, funds: null, treasury: null, ahead: 0, busy: null, notice: null, created: null };
+  let live = true, fundsRead = 0;
   if (!v2) {
     app.main.replaceChildren(card(h("h1", {}, "v2 deals are not set up here"),
       h("p", { class: "lead" }, "This site's config.json names no v2 deal contract (contractV2), so deals with fees and vesting cannot be made here."),
@@ -119,7 +119,7 @@ export function newDealPageV2(app) {
     if (checked(startMode) === "fixed") {
       try {
         out.fixedStart = parseUtc(field.start.value);
-        if (out.fixedStart <= Date.now() / 1000 + 60) wrong("start", "Check the vesting start", "The start must be in the future, by more than a minute.");
+        if (out.fixedStart <= now() + 60) wrong("start", "Check the vesting start", "The start must be in the future, by more than a minute.");
       } catch (e) {
         wrong("start", field.start.value.trim() ? "Check the vesting start" : "Enter the vesting start", e.message);
       }
@@ -178,39 +178,20 @@ export function newDealPageV2(app) {
     update();
   }
 
-  // A funding transaction that was sent and not yet seen in a block is remembered in this browser: a reload still ends with the link.
-  const remember = (hash, nonce) => {
-    try {
-      localStorage.setItem(pendingKey, JSON.stringify({ hash, nonce: nonce === null ? null : String(nonce), account: wallet.account }));
-    } catch {}
-  };
-  const forget = () => {
-    try {
-      localStorage.removeItem(pendingKey);
-    } catch {}
-  };
+  // The form's presses (flow.js). The funding transaction is remembered in this browser while it is on its way, so
+  // that a reload still ends with the link; after a press the wallet's tokens are read again.
+  const presses = flow({ app, s, key: `otcfam:pending:${config.chainId}:${v2.contract}:new`, render: update,
+    async settle() {
+      const sold = !s.created && wallet?.account && terms().base.token;
+      if (sold) await loadFunds(sold);
+    } });
 
-  /** Runs one press: `work(stage)` sends what it must, and the button comes back once the wallet's tokens are read again. */
-  async function act(label, step, work) {
-    const wait = ++waits;
-    s.notice = null;
-    s.busy = { label, step, hint: "" };
+  /** The time deadlines are counted from: the browser's clock, or the chain's when that is ahead of it (a test chain whose time was moved on). */
+  const now = () => Date.now() / 1000 + s.ahead;
+  const readClock = () => chain.now().then((time) => {
+    s.ahead = Math.max(0, time - Date.now() / 1000);
     update();
-    try {
-      await work((hint) => {
-        if (wait !== waits) return;
-        s.busy.hint = hint;
-        update();
-      });
-    } catch (e) {
-      if (wait === waits) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
-    }
-    if (wait !== waits) return; // the person stopped waiting for it
-    const sold = !s.created && wallet?.account && terms().base.token;
-    if (sold) await loadFunds(sold);
-    s.busy = null;
-    update();
-  }
+  }, () => {}); // unread, the browser's clock stands
 
   /** Reads deal `id` back from the chain and shows its link: what the buyer will see is what the chain holds. */
   async function showCreated(id) {
@@ -240,7 +221,7 @@ export function newDealPageV2(app) {
     }
     if (t.distinct.note) setNote(note.quote, t.distinct.note, true);
     setNote(note.buyer, t.buyer.note ?? "Only this address can settle the deal, and a vesting grant only ever pays this address.", Boolean(t.buyer.problem));
-    setNote(note.hours, t.expiry.note ?? `The buyer can settle until ${utc(Math.floor(Date.now() / 1000 + t.expiry.hours * 3600))}. After that you take the tokens back.`, Boolean(t.expiry.note));
+    setNote(note.hours, t.expiry.note ?? `The buyer can settle until ${utc(Math.floor(now() + t.expiry.hours * 3600))}. After that you take the tokens back.`, Boolean(t.expiry.note));
     const notes = t.schedule.notes;
     setNote(note.start, notes.start ?? (t.schedule.fixedStart ? `${utc(t.schedule.fixedStart)}. The buyer must settle before then.` : "Like 2026-12-01 00:00. The buyer must settle before then."), Boolean(notes.start));
     setNote(note.cliff, notes.cliff ?? (t.schedule.cliffSeconds ? `${span(t.schedule.cliffSeconds)} of chain time: nothing can be claimed before it.` : "No cliff: unlocking begins with the start."), Boolean(notes.cliff));
@@ -254,6 +235,7 @@ export function newDealPageV2(app) {
     if (t.mode === "existing") return h("div", {}, h("p", { class: "hint" }, "Nothing: this kind of delivery is not supported."));
     if (t.problem || t.pending) return h("div", {}, h("p", { class: "hint" }, "Fill in the form, and the exact amounts each side pays and receives appear here before anything is signed."));
     const q = t.quote.token, m = money(t.quote.units), sched = t.schedule, vesting = t.mode === "vesting";
+    const deadline = Math.floor(Math.min(now() + t.expiry.hours * 3600, sched.fixedStart || Infinity)); // a fixed start ends it sooner
     const sum = (label, testid, units) => fact(label, h("span", { testid }, formatAmount(units, q.decimals)), ` ${q.symbol}`);
     const atCliff = vesting && amount((t.base.units * sched.cliffSeconds) / sched.durationSeconds, t.base.token);
     return h("div", {},
@@ -261,6 +243,10 @@ export function newDealPageV2(app) {
         fact("Delivery", h("span", { testid: "summary-delivery" }, vesting
           ? `Vesting: ${amount(t.base.units, t.base.token)} go into a new grant for the buyer when they pay`
           : `Immediate: ${amount(t.base.units, t.base.token)} go to the buyer when they pay`)),
+        fact("Buyer, the only address that can settle", h("span", { class: "mono", testid: "summary-buyer" }, t.buyer.address)),
+        fact("Buyer receives", h("span", { testid: "summary-allocation" }, formatAmount(t.base.units, t.base.token.decimals)), ` ${t.base.token.symbol}`,
+          h("span", { class: "mono block" }, t.base.token.address)),
+        fact("Can be settled until", h("span", { testid: "summary-deadline", "data-seconds": String(deadline) }, utc(deadline))),
         sum("Price", "price", m.quote),
         sum("Buyer fee, 0.5% of the price", "buyer-fee", m.buyerFee),
         sum("Buyer pays in total", "buyer-total", m.buyerTotal),
@@ -309,43 +295,17 @@ export function newDealPageV2(app) {
       notice: s.notice });
   }
 
-  const connect = () => act("Connecting…", 0, () => wallet.connect());
-  const switchNetwork = () => act("Switching network…", 0, () => wallet.switchTo(config.chainId));
-  const approve = (t, f) => act(`Approving ${amount(t.base.units, t.base.token)}…`, 1, (stage) => approveExactly(app, t.base.token, t.base.units, f.allowance, stage, v2.contract));
-  const create = (t) => act("Funding the deal…", 2, async (stage) => {
+  const connect = () => presses.act("Connecting…", 0, () => wallet.connect());
+  const switchNetwork = () => presses.act("Switching network…", 0, () => wallet.switchTo(config.chainId));
+  const approve = (t, f) => presses.act(`Approving ${amount(t.base.units, t.base.token)}…`, 1, (stage) => approveExactly(app, t.base.token, t.base.units, f.allowance, stage, v2.contract));
+  const create = (t) => presses.act("Funding the deal…", 2, async (stage, sent) => {
     const start = Math.max(Date.now() / 1000, await chain.now());
     const deal = { baseToken: t.base.token.address, quoteToken: t.quote.token.address, buyer: t.buyer.address, allocation: t.base.units, quote: t.quote.units,
       expiry: BigInt(Math.floor(start + t.expiry.hours * 3600)), delivery: t.mode, ...t.schedule };
     const what = `Funding the deal: ${amount(deal.allocation, t.base.token)} for ${amount(deal.quote, t.quote.token)}`;
-    // The hash is remembered only while the transaction is on its way: however it ends here, it is forgotten.
-    const receipt = await transact(app, v2.contract, createDealData(deal), stage, what, remember).finally(forget);
-    await showCreated(fundedId(receipt, v2.contract));
+    await showCreated(fundedId(await transact(app, v2.contract, createDealData(deal), stage, what, sent), v2.contract));
   });
-
-  /** After a reload: takes up the funding transaction this browser sent before, and ends with the deal's link. */
-  function resume() {
-    let pending = null;
-    try {
-      pending = JSON.parse(localStorage.getItem(pendingKey));
-    } catch {}
-    if (!/^0x[0-9a-f]{64}$/i.test(pending?.hash)) return;
-    act("Funding the deal…", 2, async (stage) => {
-      const wait = waits;
-      s.busy.waiting = true;
-      stage(`This page was reloaded while the funding transaction ${pending.hash} was on its way. Waiting for the network to confirm it.`);
-      const receipt = await chain.confirmed(pending.hash, pending.account, /^\d+$/.test(pending.nonce ?? "") ? BigInt(pending.nonce) : null).finally(() => wait === waits && forget());
-      if (wait === waits) await showCreated(fundedId(receipt, v2.contract));
-    });
-  }
-
-  /** Gives the form back while a transaction sent before a reload is still awaited. */
-  function stopWaiting() {
-    waits++;
-    forget();
-    s.busy = null;
-    s.notice = { kind: "info", text: "Stopped waiting. If that transaction is confirmed later, the deal exists: its seller finds it by its number, and can cancel it." };
-    update();
-  }
+  const stopWaiting = () => presses.stopWaiting("Stopped waiting. If that transaction is confirmed later, the deal exists: its seller finds it by its number, and can cancel it.");
 
   function created() {
     const { deal: d, base, quote, link } = s.created, m = money(d.quote), vesting = d.delivery === "vesting";
@@ -374,7 +334,10 @@ export function newDealPageV2(app) {
     s.notice = { kind: "error", text: explain(e) };
     update();
   });
-  resume();
+  readClock();
+  addEventListener("focus", readClock);
+  // After a reload: the funding transaction this browser sent before is taken up again, and still ends with the link.
+  presses.resume((receipt) => showCreated(fundedId(receipt, v2.contract)));
   return {
     update: () => {
       if (!s.busy) s.funds = null; // the account or the network changed: read the wallet's tokens again
@@ -382,6 +345,8 @@ export function newDealPageV2(app) {
     },
     stop() {
       live = false;
+      presses.stop();
+      removeEventListener("focus", readClock);
       app.main.classList.remove("wide");
     },
   };

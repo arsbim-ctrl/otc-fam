@@ -1,0 +1,91 @@
+// One press at a time, for a page that sends transactions. While a press runs the page is busy; what went wrong is
+// said in a notice; and a transaction that was sent is remembered in this browser until the page has seen how it
+// ended, so that a reload does not lose it. Both v2 pages run their presses through here.
+import { explain } from "./eth.js";
+
+/**
+ * `s` is the page's state: the flow keeps `s.busy` ({ label, step, hint, waiting }, or null) and `s.notice`
+ * ({ kind, text }, or null) in it. `key` names the page's remembered transaction in this browser's storage.
+ * `render()` draws the page. `settle(result, label)` reads again whatever a press may have changed, with what the
+ * press returned; the buttons come back once it is done.
+ */
+export function flow({ app, s, key, render, settle }) {
+  let presses = 0; // which press the page is following: a press that is no longer the current one changes nothing
+  const forget = () => {
+    try {
+      localStorage.removeItem(key);
+    } catch {} // no storage: there was nothing to forget
+  };
+  const remember = (record) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(record));
+    } catch {} // no storage: the page still follows the transaction until it is closed
+  };
+  const recall = () => {
+    try {
+      const pending = JSON.parse(localStorage.getItem(key));
+      return /^0x[0-9a-f]{64}$/i.test(pending?.hash) ? pending : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Runs one press. `work(stage, sent)` does what the press is for: `stage(text)` tells the person where it stands,
+   * and `sent(hash, nonce)` is for transact(), to remember the transaction as soon as the wallet has sent it. However
+   * the work ends, the transaction is forgotten again, since the page has then seen its end.
+   */
+  async function act(label, step, work) {
+    const press = ++presses;
+    let result;
+    s.notice = null;
+    s.busy = { label, step, hint: "" };
+    render();
+    try {
+      result = await work((hint) => {
+        if (press !== presses) return;
+        s.busy.hint = hint;
+        render();
+      }, (hash, nonce) => remember({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: app.wallet.account }));
+    } catch (e) {
+      if (press === presses) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
+    }
+    if (press !== presses) return; // the person stopped waiting for it, or left the page
+    forget();
+    await settle(result, label);
+    s.busy = null;
+    render();
+  }
+
+  return {
+    act,
+    /**
+     * After a reload: takes up the transaction this browser sent before, and runs `confirmed(receipt)` once the
+     * network has confirmed it. While it waits, `s.busy.waiting` is set: the page shows what is awaited, and a way
+     * to stop waiting.
+     */
+    resume(confirmed) {
+      const pending = recall();
+      if (!pending) return;
+      act(pending.label, pending.step, async (stage) => {
+        const press = presses;
+        s.busy.waiting = true;
+        stage(`This page was reloaded while transaction ${pending.hash} was on its way. Waiting for the network to confirm it.`);
+        const receipt = await app.chain.confirmed(pending.hash, pending.account, /^\d+$/.test(pending.nonce ?? "") ? BigInt(pending.nonce) : null);
+        if (press === presses) await confirmed(receipt);
+        return receipt;
+      });
+    },
+    /** Gives the page back while a transaction sent before a reload is still awaited, and says `text`. */
+    async stopWaiting(text) {
+      presses++;
+      forget();
+      s.busy = null;
+      s.notice = { kind: "info", text };
+      await settle();
+      render();
+    },
+    /** The page is left: whatever is still on its way no longer changes it. */
+    stop: () => presses++,
+  };
+}

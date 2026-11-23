@@ -25,8 +25,8 @@ function dist() {
   return built;
 }
 
-/** Serves the built page for the world `w`: dist/ as files, /config.json naming w's contracts, and /rpc, read-only. Returns `{ url, close }`. */
-export async function serve(w) {
+/** Serves the built page for the world `w`: dist/ as files, /config.json naming w's contracts (and whatever `more` adds), and /rpc, read-only. Returns `{ url, close }`. */
+export async function serve(w, more = {}) {
   const root = dist();
   let url;
   const server = createServer(async (req, res) => {
@@ -40,7 +40,7 @@ export async function serve(w) {
       }
       if (req.method !== "GET") return send(405, "text/plain", "GET, or POST /rpc");
       if (path === "/config.json") {
-        return send(200, "application/json", JSON.stringify({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: 0, rpcUrl: "rpc" }));
+        return send(200, "application/json", JSON.stringify({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: 0, rpcUrl: "rpc", ...more }));
       }
       const file = join(root, path.endsWith("/") ? `${path}index.html` : path);
       const real = existsSync(file) ? realpathSync(file) : null;

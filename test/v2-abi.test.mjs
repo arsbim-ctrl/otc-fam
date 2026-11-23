@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { id, Interface } from "ethers";
 import { explain } from "../web/eth.js";
+import { explorerOf } from "../web/ui.js";
 import { createDealData, DealsV2, FEE_BPS, money, vestedAt } from "../web/v2.js";
 import { ALLOCATION, artifacts, DAY, errors, world } from "./lib/v2-world.mjs";
 
@@ -28,6 +29,16 @@ test("every error OtcDealsV2 can revert with from the page has words there, and 
   assert.equal(explain({ code: 3, data: contract.encodeErrorResult("NotBuyer", [7n, buyer]) }), `This deal is for ${buyer}: only that address can settle it.`);
   assert.match(explain({ code: -32000, data: { data: contract.encodeErrorResult("StartPassed", [7n]) } }), /fixed vesting start has passed/);
   assert.match(explain({ code: 3, data: contract.encodeErrorResult("NothingToClaim", [7n]) }), /nothing to claim yet/);
+});
+
+test("a transaction is looked up on the network's own explorer, or on the https address the site's config names, and nowhere else", () => {
+  assert.equal(explorerOf({ chainId: 84532 }), "https://sepolia.basescan.org");
+  assert.equal(explorerOf({ chainId: 8453 }), "https://basescan.org");
+  assert.equal(explorerOf({ chainId: 31337 }), null, "a local chain has none");
+  assert.equal(explorerOf({ chainId: 31337, explorerUrl: "https://explorer.example/" }), "https://explorer.example");
+  for (const explorerUrl of ["javascript:alert(1)", "http://explorer.example", "https://explorer.example/\"onclick=\"x", 42, null]) {
+    assert.equal(explorerOf({ chainId: 84532, explorerUrl }), "https://sepolia.basescan.org", `${explorerUrl} is not taken from a config`);
+  }
 });
 
 test("the page's fee and vesting arithmetic is the contract's, to the last unit", async () => {

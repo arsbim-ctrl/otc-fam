@@ -1,42 +1,44 @@
 // A v2 deal's page, #/v2/d/<id>: one link for the whole life of a deal. Before settlement it shows the buyer what
 // they pay (price and fee), what they receive and how (at once, or as a vesting grant), that the allocation is
-// really held on the chain, and the one button that settles. After a vesting settlement it is the grant's page:
-// the schedule in UTC, what is vested, claimed, claimable and locked, and the button that claims. Everything is
-// read from the chain with or without a wallet, and every transaction it knows of is listed with its hash.
+// really held on the chain, and the one button that settles. After a vesting settlement it is the grant's page too
+// (v2-grant.js), and every transaction it knows of is listed as a receipt (v2-receipts.js). This file reads the
+// chain, with or without a wallet, draws the deal's own card, and sends the transactions (through flow.js).
 import { approveExactly, explain, same, transact } from "./eth.js";
+import { flow } from "./flow.js";
 import { action, amount, card, copyButton, fact, fromNow, h, head, leg, networkName, NO_WALLET, notice, secondary, short, show, span, TOKEN_WARNING, utc } from "./ui.js";
 import { formatAmount } from "./units.js";
-import { cancelData, claimData, fillData, money, vestedAt } from "./v2.js";
-
-const GRANT_WORDS = { "not-started": "Not started", cliff: "Before the cliff", vesting: "Vesting", vested: "Fully vested", claimed: "Fully claimed" };
-const RECEIPT_WORDS = { funded: "Funded", settled: "Settled", granted: "Grant created", claimed: "Claimed", cancelled: "Cancelled" };
-/** `part` of `whole` as a percentage with two decimals, rounded down, between 0 and 100. */
-const percent = (part, whole) => (part <= 0n ? 0 : part >= whole ? 100 : Number((part * 10_000n) / whole) / 100);
+import { grantCard } from "./v2-grant.js";
+import { receiptsCard } from "./v2-receipts.js";
+import { cancelData, claimData, fillData, money } from "./v2.js";
 
 export function dealPageV2(app, idText) {
   const { config, chain, wallet, v2 } = app;
   const id = /^\d{1,78}$/.test(idText) && BigInt(idText) < 2n ** 256n ? BigInt(idText) : null;
   // history: undefined until the deal's events are read, null when the node would not give them, else the list.
-  const s = { deal: null, base: null, quote: null, block: null, escrow: 0n, treasury: null, grant: null, funds: null, history: undefined, historyOf: null,
-    failed: null, busy: null, notice: null, receipt: null };
-  const pendingKey = `otcfam:pending:${config.chainId}:${v2?.contract}:deal:${idText}`;
-  let live = true, reads = 0, waits = 0, timer;
+  const s = { deal: null, base: null, quote: null, block: null, escrow: 0n, buyerHolds: 0n, treasury: null, grant: null, funds: null, history: undefined,
+    historyOf: null, failed: null, busy: null, notice: null, receipt: null };
+  let live = true, reads = 0, timer;
   const poll = setInterval(() => s.busy || load(), 5000);
   const onFocus = () => s.busy || load();
   addEventListener("focus", onFocus);
   app.main.classList.add("wide");
+  const presses = flow({ app, s, key: `otcfam:pending:${config.chainId}:${v2?.contract}:deal:${idText}`, render,
+    async settle(receipt, label) {
+      if (receipt?.transactionHash) s.receipt = { what: label.replace(/…$/, ""), hash: receipt.transactionHash, block: Number(receipt.blockNumber), gas: BigInt(receipt.gasUsed) };
+      await load();
+    } });
 
-  /** Reads the deal, its tokens, its funding, its grant and what the connected wallet can pay, then shows them. */
+  /** Reads the deal, its tokens, its funding, its grant and what the wallets concerned hold, then shows them. */
   async function load() {
     if (!v2) return render();
     const read = ++reads;
     try {
       const deal = id === null ? { status: "none" } : await v2.deal(id);
-      const [{ treasury }, block, base, quote, escrow, grant, funds] = deal.status === "none" ? [{}]
+      const [{ treasury }, block, base, quote, escrow, buyerHolds, grant, funds] = deal.status === "none" ? [{}]
         : await Promise.all([v2.setup(), chain.block(), chain.token(deal.baseToken), chain.token(deal.quoteToken), chain.balanceOf(deal.baseToken, v2.contract),
-          deal.grantId ? v2.grant(deal.grantId) : null, fundsFor(deal)]);
+          chain.balanceOf(deal.baseToken, deal.buyer), deal.grantId ? v2.grant(deal.grantId) : null, fundsFor(deal)]);
       if (read !== reads) return; // a later read is on its way
-      Object.assign(s, { deal, treasury, block, base, quote, escrow, grant, funds, failed: null });
+      Object.assign(s, { deal, treasury, block, base, quote, escrow, buyerHolds, grant, funds, failed: null });
       readHistory();
     } catch (e) {
       if (read !== reads) return;
@@ -84,72 +86,9 @@ export function dealPageV2(app, idText) {
     if (left >= 0 && left < 86_400) timer = setTimeout(render, left * 1000 + 1250);
   }
 
-  // A transaction that was sent and not yet seen in a block is remembered in this browser, so that a reload does not lose it.
-  const remember = (hash, nonce, label, step) => {
-    try {
-      localStorage.setItem(pendingKey, JSON.stringify({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: wallet.account }));
-    } catch {} // no storage: the page still follows the transaction until it is closed
-  };
-  const forget = () => {
-    try {
-      localStorage.removeItem(pendingKey);
-    } catch {}
-  };
-  const recall = () => {
-    try {
-      const pending = JSON.parse(localStorage.getItem(pendingKey));
-      return /^0x[0-9a-f]{64}$/i.test(pending?.hash) ? pending : null;
-    } catch {
-      return null;
-    }
-  };
-
-  /** Runs one press: `work(stage, sent)` sends what it must, and the buttons come back once the chain has been read again. */
-  async function act(label, step, work) {
-    const wait = ++waits;
-    s.notice = null;
-    s.busy = { label, step, hint: "" };
-    render();
-    try {
-      const receipt = await work((hint) => {
-        if (wait !== waits) return;
-        s.busy.hint = hint;
-        render();
-      }, (hash, nonce) => remember(hash, nonce, label, step));
-      if (wait === waits && receipt?.transactionHash) s.receipt = { what: label.replace(/…$/, ""), hash: receipt.transactionHash, block: Number(receipt.blockNumber), gas: BigInt(receipt.gasUsed) };
-    } catch (e) {
-      if (wait === waits) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
-    }
-    if (wait !== waits) return; // the person stopped waiting for it
-    forget();
-    await load();
-    s.busy = null;
-    render();
-  }
-
-  /** After a reload: takes up the transaction this browser sent before, and says how it ended. */
-  function resume() {
-    const pending = v2 && recall();
-    if (!pending) return;
-    act(pending.label, pending.step, async (stage) => {
-      s.busy.waiting = true;
-      stage(`This page was reloaded while transaction ${pending.hash} was on its way. Waiting for the network to confirm it.`);
-      const receipt = await chain.confirmed(pending.hash, pending.account, /^\d+$/.test(pending.nonce ?? "") ? BigInt(pending.nonce) : null);
-      s.notice = { kind: "info", text: "The transaction sent before this page was reloaded is confirmed. What you see is the chain's state now." };
-      return receipt;
-    });
-  }
-
-  function stopWaiting() {
-    waits++;
-    forget();
-    s.busy = null;
-    s.notice = { kind: "info", text: "Stopped waiting. If that transaction is confirmed later, this page shows its result the next time it reads the chain." };
-    load();
-  }
   /** After a reload, while the transaction sent before it is awaited: what is awaited, and a way to stop waiting. */
   const waiting = () => s.busy?.waiting && h("div", { class: "action" }, h("p", { class: "notice info", testid: "waiting", role: "status" }, s.busy.hint),
-    secondary("stop-waiting", "Stop waiting for it", stopWaiting));
+    secondary("stop-waiting", "Stop waiting for it", () => presses.stopWaiting("Stopped waiting. If that transaction is confirmed later, this page shows its result the next time it reads the chain.")));
   const busyHint = () => !s.busy.waiting && s.busy.hint;
 
   function view() {
@@ -173,7 +112,7 @@ export function dealPageV2(app, idText) {
     return h("div", { class: "board" },
       // The last read failed: what is shown is what the chain said before, and the page says so.
       s.failed && h("p", { class: "notice warn", testid: "stale", role: "status" }, `The chain could not be read just now, so this page may be out of date. ${s.failed}`),
-      dealCard(), s.grant && grantCard(), receiptsCard());
+      dealCard(), s.grant && grantCard(app, s, { connect, switchNetwork, claim }), receiptsCard(app, s, idText));
   }
 
   function dealCard() {
@@ -213,12 +152,16 @@ export function dealPageV2(app, idText) {
       status === "funded" ? actions(d, m, role) : ended(d, status, role));
   }
 
-  /** The line that says whether the chain really holds the allocation for this deal. */
+  /**
+   * The line that says the allocation is really held. The contract only ever gives a deal the status "funded" in the
+   * transaction that took its whole allocation; the page adds what the contract holds of that token now, for this
+   * deal and any other, and warns if that is ever less than this deal's.
+   */
   function funding(d, give, vesting) {
     const ok = s.escrow >= d.allocation;
     return h("p", { class: ok ? "held" : "held bad", testid: "funding", "data-funded": String(ok) }, ok
-      ? `Funded on the chain: the deal contract holds the seller's ${give} for this deal (read at block ${s.block.number}). `
-        + (d.status === "funded" ? (vesting ? "Settling moves all of it into the buyer's grant." : "Settling sends all of it to the buyer.") : "")
+      ? `Funded on the chain: the deal contract took the seller's whole ${give} when this deal was made, and holds ${amount(s.escrow, s.base)} now `
+        + `(read at block ${s.block.number}). ${d.status !== "funded" ? "" : vesting ? "Settling moves this deal's allocation into the buyer's grant." : "Settling sends this deal's allocation to the buyer."}`
       : `The deal contract holds only ${amount(s.escrow, s.base)}, less than this deal's ${give}. Do not settle it: tell the seller.`);
   }
 
@@ -256,7 +199,7 @@ export function dealPageV2(app, idText) {
     if (status === "settled") {
       return h("div", { class: "action" },
         h("p", { class: "success" }, vesting ? `The grant is funded with all ${give}. Its schedule, and what can be claimed, are in the grant's card on this page.`
-          : `Delivered: the ${give} are in the buyer's wallet.`),
+          : `Delivered: all ${give} went to the buyer's wallet in the settlement transaction. That wallet holds ${amount(s.buyerHolds, s.base)} now.`),
         !vesting && s.notice && notice(s.notice));
     }
     if (status === "cancelled") return s.notice && h("div", { class: "action" }, notice(s.notice));
@@ -311,114 +254,25 @@ export function dealPageV2(app, idText) {
         + `${vesting ? `the ${give} move into a vault for your grant` : `the ${give} come to your wallet`}. All of it happens, or nothing moves.`, notice: s.notice });
   }
 
-  /** The grant of a settled vesting deal: where it stands on its schedule, in numbers and in words, and the claim button. */
-  function grantCard() {
-    const g = s.grant, t = s.base, time = s.block.time, me = wallet?.account, mine = Boolean(me && same(me, g.beneficiary));
-    const state = g.claimed === g.allocation ? "claimed" : time >= g.end ? "vested" : time < g.start ? "not-started" : time < g.cliff ? "cliff" : "vesting";
-    const locked = g.allocation - g.vested, backed = g.held >= g.allocation - g.claimed, cliff = g.cliff > g.start;
-    const number = (label, testid, units) => fact(label, h("span", { testid }, formatAmount(units, t.decimals)), ` ${t.symbol}`);
-    const date = (label, testid, seconds) => fact(label, h("span", { testid, "data-time": String(seconds) }, utc(seconds)),
-      Number(seconds) === time ? " (now)" : ` (${fromNow(Number(seconds) - time)})`);
-    const vestedShare = percent(g.vested, g.allocation), claimedShare = percent(g.claimed, g.allocation), cliffAt = percent(g.cliff - g.start, g.end - g.start);
-    const position = percent(BigInt(time) - g.start, g.end - g.start);
-    return h("section", { class: "card grant" },
-      h("div", { class: "card-head" }, h("h2", {}, `Grant #${g.id}`),
-        h("span", { class: `status grant-${state}`, testid: "grant-status", "data-status": state }, GRANT_WORDS[state])),
-      h("p", { class: "lead" }, `${amount(g.allocation, t)} for ${mine ? "you" : "the buyer"}, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.`),
-      h("div", { class: "timeline", role: "img", "aria-label": `Vesting timeline: ${vestedShare}% vested, ${claimedShare}% claimed, ${percent(locked, g.allocation)}% locked. ${GRANT_WORDS[state]}.` },
-        h("div", { class: "track" },
-          h("div", { class: "fill vested", style: `width:${vestedShare}%` }),
-          h("div", { class: "fill claimed", style: `width:${claimedShare}%` }),
-          cliff && h("i", { class: "mark cliff", style: `left:${cliffAt}%` }),
-          h("i", { class: "mark now", style: `left:${position}%` })),
-        h("div", { class: "ticks" }, h("span", {}, "Start"), cliff && h("span", { class: "tick-cliff", style: `left:${cliffAt}%` }, "Cliff"), h("span", {}, "End"))),
-      h("p", { class: "legend" }, h("i", { class: "key claimed" }), "claimed ", h("i", { class: "key vested" }), "vested, not claimed yet ", h("i", { class: "key locked" }), "locked"),
-      h("dl", { class: "facts numbers" },
-        number("Allocation", "grant-allocation", g.allocation),
-        number("Vested", "grant-vested", g.vested),
-        number("Claimed", "grant-claimed", g.claimed),
-        number("Claimable now", "grant-claimable", g.claimable),
-        number("Locked", "grant-locked", locked)),
-      h("p", { class: "hint", testid: "grant-next" }, next(g, t, state, time)),
-      h("dl", { class: "facts" },
-        date("Start", "grant-start", g.start),
-        cliff ? date("Cliff", "grant-cliff", g.cliff) : fact("Cliff", h("span", { testid: "grant-cliff", "data-time": String(g.cliff) }, "None: unlocking began with the start")),
-        date("End, fully vested", "grant-end", g.end),
-        fact("Beneficiary, the only address the grant pays", h("span", { class: "mono", testid: "beneficiary" }, g.beneficiary), mine && " (you)"),
-        fact("Vault", h("span", { class: "mono", testid: "vault" }, g.custodian),
-          h("span", { class: backed ? "block ok" : "block bad", testid: "grant-backing", "data-backed": String(backed) }, backed
-            ? `Fully backed: it holds ${amount(g.held, t)}, everything not claimed yet.`
-            : `It holds ${amount(g.held, t)}, less than the ${amount(g.allocation - g.claimed, t)} not claimed yet.`)),
-        fact("Read at", h("span", { testid: "as-of", "data-block": String(s.block.number) }, `block ${s.block.number}, ${utc(time)}`))),
-      claiming(g, t, state, mine));
-  }
-
-  /** In words: what can be claimed now, and when claiming becomes possible if it is not. */
-  function next(g, t, state, time) {
-    const until = (seconds) => `${utc(seconds)} (${fromNow(Number(seconds) - time)})`, locked = amount(g.allocation - g.vested, t);
-    if (state === "claimed") return "Everything has been claimed: this grant is complete.";
-    if (state === "vested") return `The grant is fully vested: the ${amount(g.claimable, t)} not claimed yet can be claimed at any time.`;
-    if (state === "not-started" || state === "cliff") {
-      const first = g.cliff > g.start ? `the cliff, ${until(g.cliff)}. Then ${amount(vestedAt(g, g.cliff), t)} unlock at once, what accrued since the start` : `the start, ${until(g.start)}`;
-      return `Nothing can be claimed yet. Claiming becomes possible at ${first}, and the rest unlocks second by second until ${utc(g.end)}.`;
-    }
-    if (g.claimable === 0n) return `Everything vested so far is claimed. ${locked} are still locked and unlock second by second until ${utc(g.end)}.`;
-    return `${amount(g.claimable, t)} can be claimed now. ${locked} are still locked and unlock second by second until ${utc(g.end)}.`;
-  }
-
-  /** The button that claims (connect, switch network, claim), for the beneficiary only. */
-  function claiming(g, t, state, mine) {
-    const me = wallet?.account, steps = ["Connect", "Claim"];
-    if (state === "claimed") return s.notice && h("div", { class: "action" }, notice(s.notice));
-    if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: busyHint() });
-    if (!wallet) return action({ steps, step: 0, button: { label: "Connect a wallet to claim" }, notice: { kind: "info", text: NO_WALLET } });
-    if (!me) return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: "Connect the beneficiary's wallet. Nothing is sent yet.", notice: s.notice });
-    if (!mine) {
-      return action({ notice: { kind: "warn", text: `Only the beneficiary, ${g.beneficiary}, can claim, and the tokens only ever go to that address. `
-        + `Your wallet is connected as ${short(me)}.` } });
-    }
-    if (wallet.chainId !== config.chainId) {
-      return action({ steps, step: 0, button: { label: `Switch to ${networkName(config.chainId)}`, run: switchNetwork },
-        hint: `Your wallet is on ${networkName(wallet.chainId)}, and this grant is on ${networkName(config.chainId)}.`, notice: s.notice });
-    }
-    if (g.claimable === 0n) return action({ steps, step: 1, button: { label: "Nothing to claim yet" }, notice: s.notice });
-    return action({ steps, step: 1, button: { label: `Claim ${amount(g.claimable, t)}`, run: claim },
-      hint: "The tokens go to your wallet, with no fee. The chain pays everything vested at the moment the transaction is confirmed, so it can be slightly more than shown.",
-      notice: s.notice });
-  }
-
-  /** The transactions of this deal: the one just confirmed here, and every event the contract emitted about it. */
-  function receiptsCard() {
-    const q = s.quote, t = s.base, r = s.receipt;
-    const words = (e) => (e.kind === "settled" ? `Settled: buyer fee ${amount(e.buyerFee, q)}, seller fee ${amount(e.sellerFee, q)}`
-      : e.kind === "claimed" ? `Claimed ${amount(e.amount, t)}` : RECEIPT_WORDS[e.kind]);
-    return card(
-      h("h2", {}, "Receipts"),
-      r && h("p", { class: "success", testid: "last-receipt", "data-tx": r.hash },
-        `${r.what}: confirmed in block ${r.block}, using ${r.gas.toLocaleString("en")} gas. Transaction `, h("span", { class: "mono" }, r.hash)),
-      s.history === undefined && h("p", { class: "hint" }, "Reading this deal's transactions…"),
-      s.history === null && h("p", { class: "hint" }, "This network's node did not give this deal's past transactions. Everything else on this page is still read from the chain."),
-      s.history && h("ol", { class: "receipts", testid: "receipts" }, s.history.map((e) => h("li", { "data-kind": e.kind, "data-tx": e.hash },
-        h("strong", {}, words(e)), h("span", { class: "when" }, `${utc(e.time)}, block ${e.block}`), h("span", { class: "mono" }, e.hash)))));
-  }
-
-  const connect = () => act("Connecting…", 0, () => wallet.connect());
-  const switchNetwork = () => act("Switching network…", 0, () => wallet.switchTo(config.chainId));
+  const connect = () => presses.act("Connecting…", 0, () => wallet.connect());
+  const switchNetwork = () => presses.act("Switching network…", 0, () => wallet.switchTo(config.chainId));
   const approve = () => {
     const total = money(s.deal.quote).buyerTotal;
-    return act(`Approving ${amount(total, s.quote)}…`, 1, (stage) => approveExactly(app, s.quote, total, s.funds.allowance, stage, v2.contract));
+    return presses.act(`Approving ${amount(total, s.quote)}…`, 1, (stage) => approveExactly(app, s.quote, total, s.funds.allowance, stage, v2.contract));
   };
-  const settle = () => act("Settling the deal…", 2, (stage, sent) =>
+  const settle = () => presses.act("Settling the deal…", 2, (stage, sent) =>
     transact(app, v2.contract, fillData(id), stage, `Paying ${amount(money(s.deal.quote).buyerTotal, s.quote)} for ${amount(s.deal.allocation, s.base)}`, sent));
-  const cancel = () => act("Cancelling…", null, (stage, sent) => transact(app, v2.contract, cancelData(id), stage, "Cancelling the deal", sent));
-  const claim = () => act("Claiming…", 1, (stage, sent) => transact(app, v2.contract, claimData(id), stage, `Claiming ${amount(s.grant.claimable, s.base)}`, sent));
+  const cancel = () => presses.act("Cancelling…", null, (stage, sent) => transact(app, v2.contract, cancelData(id), stage, "Cancelling the deal", sent));
+  const claim = () => presses.act("Claiming…", 1, (stage, sent) => transact(app, v2.contract, claimData(id), stage, `Claiming ${amount(s.grant.claimable, s.base)}`, sent));
 
-  load().then(resume);
+  load().then(() => v2 && presses.resume(() => {
+    s.notice = { kind: "info", text: "The transaction sent before this page was reloaded is confirmed. What you see is the chain's state now." };
+  }));
   return {
     update: () => s.busy || load(),
     stop() {
       live = false;
-      waits++;
+      presses.stop();
       clearInterval(poll);
       clearTimeout(timer);
       removeEventListener("focus", onFocus);

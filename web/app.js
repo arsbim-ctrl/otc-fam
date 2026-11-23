@@ -5,14 +5,14 @@
 import { dealPage } from "./deal-page.js";
 import { Chain, Wallet } from "./eth.js";
 import { newDealPage } from "./new-deal-page.js";
-import { card, h, networkName, short } from "./ui.js";
+import { card, explorerOf, h, networkName, short } from "./ui.js";
 import { isAddress } from "./units.js";
 import { dealPageV2 } from "./v2-deal-page.js";
 import { newDealPageV2 } from "./v2-new-page.js";
 import { DealsV2 } from "./v2.js";
 
 /** What every page works with: where it draws, the config, the chain it reads, the v2 contract if the site has one, and the wallet, if the browser has one. */
-const app = { main: document.getElementById("app"), config: null, chain: null, v2: null, wallet: null };
+const app = { main: document.getElementById("app"), config: null, chain: null, v2: null, wallet: null, explorer: null };
 let page;
 
 start();
@@ -30,6 +30,7 @@ async function start() {
   }
   const { chainId, contract, contractV2, fromBlockV2 } = app.config;
   app.chain = new Chain(new URL(app.config.rpcUrl, location.href).href, contract);
+  app.explorer = explorerOf(app.config); // where a receipt's transaction can be looked up, if the network has such a site
   // The v2 contract is optional: a site without one (or with the zero address) serves v1 deals only.
   if (isAddress(contractV2 ?? "") && !/^0x0{40}$/.test(contractV2)) app.v2 = new DealsV2(app.chain, contractV2, Number.isSafeInteger(fromBlockV2) ? fromBlockV2 : 0);
   if (window.ethereum) {

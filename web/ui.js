@@ -21,7 +21,22 @@ export const NO_WALLET = "There is no wallet in this browser. Open this link in 
   + "(MetaMask, Rabby, Coinbase Wallet…) or in a browser with a wallet extension.";
 export const TOKEN_WARNING = "Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.";
 
+// Where a transaction of each network can be looked up by anyone. A site's config.json can name another (explorerUrl).
+const EXPLORERS = {
+  1: "https://etherscan.io", 10: "https://optimistic.etherscan.io", 137: "https://polygonscan.com", 8453: "https://basescan.org",
+  42161: "https://arbiscan.io", 84532: "https://sepolia.basescan.org", 11155111: "https://sepolia.etherscan.io",
+};
+
 export const networkName = (chainId) => NETWORKS[chainId] ?? `chain ${chainId}`;
+/** The block explorer of the site's network, without a slash at its end, or null: a local chain has none. Only an https address is taken from the config. */
+export function explorerOf({ chainId, explorerUrl }) {
+  const url = typeof explorerUrl === "string" && /^https:\/\/[^\s"'<>]+$/.test(explorerUrl) ? explorerUrl : EXPLORERS[chainId];
+  return url ? url.replace(/\/+$/, "") : null;
+}
+/** A transaction's hash in full: a link to it on the `explorer`, in a new tab, when the network has one. */
+export const transaction = (hash, explorer) => (explorer
+  ? h("a", { class: "mono", href: `${explorer}/tx/${hash}`, target: "_blank", rel: "noopener noreferrer", title: "Look this transaction up on the block explorer" }, hash)
+  : h("span", { class: "mono" }, hash));
 export const amount = (units, token) => `${formatAmount(units, token.decimals)} ${token.symbol}`;
 export const short = (address) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 /** The furthest time a date can show: the last second of the year 9999. */
@@ -136,7 +151,8 @@ export function show(container, view) {
 export const card = (...children) => h("section", { class: "card" }, ...children);
 export const fact = (term, ...value) => h("div", {}, h("dt", {}, term), h("dd", {}, ...value));
 export const dot = (token) => h("i", { class: "dot", style: `--hue:${parseInt(token.address.slice(2, 8), 16) % 360}` });
-export const notice = ({ kind, text }) => h("p", { class: `notice ${kind}`, testid: "notice", role: "status" }, text);
+/** A message for the person. Something that went wrong is announced at once to a screen reader; the rest when it is idle. */
+export const notice = ({ kind, text }) => h("p", { class: `notice ${kind}`, testid: "notice", role: kind === "error" ? "alert" : "status" }, text);
 
 /** A deal's title, and its state in words and in data-status. `tag`, if given, is a small label next to the title (the contract's version). */
 export function head(title, status, tag) {
@@ -170,8 +186,8 @@ export const secondary = (testid, label, run) =>
 export function action({ steps, step, button, hint, notice: message, extra }) {
   return h("div", { class: "action" },
     steps && h("ol", { class: "steps" }, steps.map((name, i) => h("li", { class: i < step ? "done" : i === step ? "now" : "" }, name))),
-    button && h("button", { class: "primary", type: "button", testid: "primary-action", disabled: !button.run, onclick: button.run && ((e) => press(e, button.run)) },
-      button.label),
+    button && h("button", { class: `primary${button.label.length > 28 ? " long" : ""}`, type: "button", testid: "primary-action", disabled: !button.run,
+      onclick: button.run && ((e) => press(e, button.run)) }, button.label),
     hint && h("p", { class: "hint" }, hint),
     message && notice(message),
     extra);
