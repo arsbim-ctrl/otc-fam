@@ -73,7 +73,7 @@ export function newDealPageV2(app) {
   // Two cards: what the seller enters, and what the deal will do with the button that does it. Side by side on a wide screen.
   const form = h("div", { class: "board form" },
     card(
-      h("div", { class: "card-head" }, h("h1", {}, "Make a deal", h("span", { class: "version", testid: "version" }, "v2"))),
+      h("div", { class: "card-head" }, h("h1", {}, "Make a deal", " ", h("span", { class: "version", testid: "version" }, "v2"))),
       h("p", { class: "lead" }, "Sell tokens to one buyer. Your tokens are held by the deal contract until the buyer pays; each side pays a 0.5% fee at settlement, and nothing before."),
       delivery, existingBox, dealFields),
     card(h("h2", {}, "What this deal does"), summary, actionArea));
@@ -336,7 +336,7 @@ export function newDealPageV2(app) {
   function created() {
     const { deal: d, base, quote, link } = s.created, m = money(d.quote), vesting = d.delivery === "vesting";
     return card(
-      h("div", { class: "card-head" }, h("h1", {}, `Deal #${d.id} is funded`, h("span", { class: "version", testid: "version" }, "v2"))),
+      h("div", { class: "card-head" }, h("h1", {}, `Deal #${d.id} is funded`, " ", h("span", { class: "version", testid: "version" }, "v2"))),
       h("p", { class: "lead" }, "Send this one link to the buyer. It shows them the terms, both fees and that your tokens are held on the chain, and lets them settle from their wallet."),
       h("div", { class: "linkbox" }, h("a", { testid: "deal-link", href: link }, link)),
       h("div", { class: "row" }, copyButton(link), h("a", { class: "button secondary", href: link }, "Open the deal")),

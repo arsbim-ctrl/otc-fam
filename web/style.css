@@ -107,7 +107,7 @@ input.mono { font-size: 13px; }
 
 /* Round 2: the v2 pages. A version label, the two kinds of delivery, the money and the grant's timeline. */
 h2 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
-.version { margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700;
+.version { margin-left: 4px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700;
   letter-spacing: 0.02em; vertical-align: 3px; }
 .status.funded { background: var(--ok-bg); color: var(--ok); }
 .status.settled { background: var(--info-bg); color: var(--info); }
@@ -187,4 +187,9 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
 @media (min-width: 1000px) {
   .board.form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .board.form > .card:last-child { position: sticky; top: 16px; }
+}
+
+/* On a wide page the header and the footer line up with the cards. */
+@media (min-width: 1000px) {
+  body:has(main.wide) .top, body:has(main.wide) footer { max-width: 1000px; }
 }

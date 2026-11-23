@@ -140,7 +140,7 @@ export const notice = ({ kind, text }) => h("p", { class: `notice ${kind}`, test
 
 /** A deal's title, and its state in words and in data-status. `tag`, if given, is a small label next to the title (the contract's version). */
 export function head(title, status, tag) {
-  return h("div", { class: "card-head" }, h("h1", {}, title, tag && h("span", { class: "version", testid: "version" }, tag)),
+  return h("div", { class: "card-head" }, h("h1", {}, title, tag && [" ", h("span", { class: "version", testid: "version" }, tag)]),
     h("span", { class: `status ${status}`, testid: "deal-status", "data-status": status }, STATUS_WORDS[status]));
 }
 
