@@ -9,9 +9,9 @@ const DAY = 86_400n;
 const units = (count, unit) => `${count} ${unit}${count === 1n ? "" : "s"}`;
 
 function scheduleLength(seconds) {
-  const days = seconds / DAY, hours = seconds % DAY / 3_600n, remainder = seconds % 3_600n;
+  const days = seconds / DAY, hours = seconds % DAY / 3_600n, minutes = seconds % 3_600n / 60n, remainder = seconds % 60n;
   if (seconds === 0n) return "0 days";
-  return [[days, "day"], [hours, "hour"], [remainder, "second"]]
+  return [[days, "day"], [hours, "hour"], [minutes, "minute"], [remainder, "second"]]
     .filter(([count]) => count > 0n).map(([count, unit]) => units(count, unit)).join(", ");
 }
 
@@ -25,7 +25,7 @@ function relativeTime(delta) {
 export function dealPageV2(app, idText) {
   const { config, chain, wallet } = app;
   const id = /^\d{1,78}$/.test(idText) && BigInt(idText) < 2n ** 256n ? BigInt(idText) : null;
-  let live = true, busy = false, reading = 0, d, base, quote, grant, now, balance, allowance, treasury, beneficiaryBalance, notice, receipt, readFailed = false;
+  let live = true, busy = false, reading = 0, d, base, quote, grant, now, balance, allowance, treasury, beneficiaryBalance, notice, receipt, history = null, historyKey = null, readFailed = false;
   const content = h("div"), grantArea = h("div"), actions = h("div"), receipts = h("div");
   const shell = card(h("h1", {}, `Deal #${idText.slice(0, 78)} · v2`), content, grantArea, tokenWarning(), actions, receipts);
   shell.classList.add("v2-card");
@@ -45,6 +45,13 @@ export function dealPageV2(app, idText) {
         wallet?.account ? chain.allowance(deal.quoteToken, wallet.account) : null,
         deal.grantId ? chain.balanceOf(deal.baseToken, deal.buyer) : null]);
       if (!live || seq !== reading) return;
+      // Receipts come from contract events; reread them only when the deal or its claims change.
+      const key = `${deal.status}:${snapshot.grant?.claimed ?? ""}`;
+      if (key !== historyKey && deal.status !== "funded") {
+        const found = await chain.history(deal).catch(() => null);
+        if (!live || seq !== reading) return;
+        if (found) { history = found; historyKey = key; }
+      }
       if (readFailed) notice = null;
       readFailed = false;
       d = deal; [base, quote, now, grant, treasury, balance, allowance, beneficiaryBalance] = values;
@@ -74,6 +81,7 @@ export function dealPageV2(app, idText) {
       : "Start at settlement block.";
     updateArea(content, h("div", {},
       h("p", { class: `status ${status}`, testid: "deal-status", "data-status": status }, statusLabel),
+      h("p", { class: "hint", testid: "your-role" }, role(status)),
       h("h2", { testid: "delivery-mode", class: `delivery ${d.delivery ? "new-vesting" : "immediate"}` }, mode),
       leg("Buyer total including fee", fees(d.quote).buyerTotal, quote, "pay"),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
@@ -86,6 +94,30 @@ export function dealPageV2(app, idText) {
         d.delivery && fact("Committed schedule", `${startLabel} Cliff after ${scheduleLength(d.cliffSeconds)}. Duration ${scheduleLength(d.durationSeconds)}. Accrual starts at start.`))));
     if (grant) renderGrant();
     renderActions();
+    renderReceipts();
+  }
+  // Who the connected wallet is relative to this deal. Actions stay as before; this only says why.
+  function role(status) {
+    const me = wallet?.account;
+    if (!me) return "Viewing without a wallet connected. Anyone with this link can read the deal.";
+    const seller = same(me, d.seller), buyer = same(me, d.buyer);
+    if (seller && buyer) return "You are the seller and the designated buyer / beneficiary.";
+    if (seller) return {
+      funded: "You are the seller. You can cancel and refund the allocation; only the designated buyer can settle.",
+      expired: "You are the seller. This deal expired: cancel to refund the allocation.",
+      settled: "You are the seller. Settlement paid you directly.",
+      cancelled: "You are the seller. The allocation was returned to you.",
+    }[status];
+    if (buyer) return `You are the designated buyer / beneficiary.${status === "funded" ? " Only you can settle this deal." : d.delivery && status === "settled" ? " Every claim pays this wallet." : ""}`;
+    if (grant) return `You can trigger a claim, but tokens pay only the recorded beneficiary ${grant.beneficiary}.`;
+    return "You are neither the seller nor the designated buyer. You can read this deal but not settle or cancel it.";
+  }
+  function renderReceipts() {
+    const list = [...history ?? []];
+    // Keep this session's receipt visible if the event read failed or lags.
+    if (receipt && !list.some(r => r.receipt?.transactionHash === receipt.transactionHash)) list.push({ receipt });
+    updateArea(receipts, h("div", {}, list.length > 0 && h("h2", {}, "On-chain receipts"),
+      list.map(r => receiptView(r.receipt, r.kind === "Claim" ? `Claim of ${amount(r.claimed, base)} to the beneficiary` : r.kind))));
   }
   function renderGrant() {
     const v = vesting(grant, now);
@@ -158,7 +190,7 @@ export function dealPageV2(app, idText) {
     busy = true; notice = null; renderActions();
     try {
       const result = await work(text => { notice = { kind: "info", text }; renderActions(); });
-      if (result?.transactionHash) { receipt = result; if (live) receipts.replaceChildren(receiptView(receipt)); }
+      if (result?.transactionHash) { receipt = result; historyKey = null; }
       notice = null;
     } catch (e) { notice = { kind: "error", text: explain(e) }; }
     await load(); busy = false; if (live) renderActions();

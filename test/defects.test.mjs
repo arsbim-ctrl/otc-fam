@@ -6,7 +6,11 @@ import { serve, withPage, wallet, until, pressUntil, seen } from '../.launchpad/
 
 test('gas errors become a plain sentence without swallowing unrelated RPC messages', () => {
   for (const error of [{code:-32000,message:'insufficient funds for gas * price + value'}, {code:'INSUFFICIENT_FUNDS'}, {info:{error:{message:'insufficient funds for gas'}}}]) assert.equal(explain(error),'This wallet has too little ETH to pay the network fee. Add some, then try again.');
-  assert.equal(explain({code:-32000,message:'The network cannot be reached.'}),'The network cannot be reached.');
+  assert.equal(explain({code:-32000,message:'The network cannot be reached.'}),'The network cannot be reached. Check your connection and try again.');
+  assert.equal(explain({code:-32000,message:'execution reverted: custom node detail'}),'execution reverted: custom node detail');
+  assert.equal(explain(new TypeError('Failed to fetch')),'The network cannot be reached. Check your connection and try again.');
+  assert.equal(explain({code:'TIMEOUT',message:'request timeout'}),'The network took too long to answer. Refresh to check the on-chain status, then try again.');
+  assert.equal(explain({code:'ACTION_REJECTED'}),'You declined in your wallet. Nothing was sent.');
 });
 
 test('legacy polling updates relative expiry in place and keeps the keyboard action node focused', async () => {

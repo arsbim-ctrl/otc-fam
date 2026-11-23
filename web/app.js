@@ -66,13 +66,18 @@ function route() {
 }
 
 function homePage() {
-  const number = h("input", { id: "deal-number", placeholder: "ID or V2 link", "aria-label": "Deal number or V2 link", autocomplete: "off" });
+  const number = h("input", { id: "deal-number", placeholder: "Deal ID or link", "aria-label": "Deal number or link", autocomplete: "off",
+    oninput: () => number.setCustomValidity("") });
   const open = (e) => {
     e.preventDefault();
     const value = number.value.trim();
-    const link = /^(?:https?:\/\/[^#\s]+)?(#\/v2\/d\/\d+)$/.exec(value);
+    const link = /^(?:https?:\/\/[^#\s]+)?(#\/(?:v2\/)?d\/\d+)$/.exec(value);
     if (link) location.hash = link[1];
     else if (/^\d+$/.test(value)) location.hash = `#/d/${value}`;
+    else {
+      number.setCustomValidity("Enter a deal number, or paste a link ending in #/d/<id> or #/v2/d/<id>.");
+      number.reportValidity();
+    }
   };
   document.title = "otc.fam: one deal, one link";
   app.main.replaceChildren(card(

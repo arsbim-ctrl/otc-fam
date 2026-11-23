@@ -1,7 +1,7 @@
 import { amount, fact, h } from "./ui.js";
 import { fees } from "./vesting.js";
 export const utc = seconds => Number(seconds) > 253402300799 ? `Unix ${seconds} seconds UTC (after year 9999)` : new Date(Number(seconds) * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC');
-export const tokenWarning = () => h("p", { class: "notice warn" }, "Verify both token contract addresses. Symbols can be copied. Fee-taking, rebasing or frozen tokens may fail or become stuck. Use local or testnet assets only.");
+export const tokenWarning = () => h("p", { class: "notice warn" }, "Verify both token contract addresses listed on this page. Symbols can be copied. Fee-taking, rebasing or frozen tokens may fail or become stuck. Use local or testnet assets only.");
 export function economics(quote, token) {
   const f = fees(quote);
   return h("dl", { class: "facts", testid: "fees" },
@@ -13,6 +13,6 @@ export function economics(quote, token) {
 export function updateArea(area, next) {
   if (!area.firstElementChild?.isEqualNode(next)) area.replaceChildren(next);
 }
-export function receiptView(receipt) {
-  return h("p", { class: "success", testid: "transaction-receipt" }, `Confirmed transaction ${receipt.transactionHash} · block ${BigInt(receipt.blockNumber)}. Receipt status: success.`);
+export function receiptView(receipt, label) {
+  return h("p", { class: "success", testid: "transaction-receipt" }, label ? `${label}. ` : "", `Confirmed transaction ${receipt.transactionHash} · block ${BigInt(receipt.blockNumber)}. Receipt status: success.`);
 }

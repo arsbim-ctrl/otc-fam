@@ -14,7 +14,7 @@ The site serves one private funded deal per link. Static JavaScript reads contra
 | `eth-v2.js` | V2 tuple encoding, deal/grant decoding, event id and V2 errors |
 | `vesting.js` | Pure BigInt fee, vesting and schedule calculations |
 | `v2-new-deal-page.js` | Persistent form, token lookup, explicit delivery, exact economic preview, funding and private link |
-| `v2-deal-page.js` | Read-only terms, settlement, grant timeline, permissionless beneficiary claims and receipts |
+| `v2-deal-page.js` | Read-only terms, settlement, grant timeline, permissionless beneficiary claims, role line, and receipts read back from `DealSettled`, `DealCancelled` and `GrantClaimed` events |
 | `v2-ui.js` | UTC strings, fee facts, token warning and stable action updates |
 | `units.js`, `ui.js` | Exact amount parsing/formatting and text-only DOM construction |
 
@@ -45,6 +45,6 @@ Before cliff, vested = 0. At/after cliff and before end, vested = floor(A×(t−
 
 Solc 0.8.38, optimization with 200 runs, Cancun EVM. The browser has no private keys or backend. Deployment scripts read secrets from the environment only. Tests use a process-local EDR chain, local ERC-20 fixtures and Chromium. Browser screenshots are generated under ignored `screens/`.
 
-Read polling pins V2 deal terms, grant accounting and on-chain time to one block, including during concurrent claims. Token metadata is untrusted and inserted as text. Exact decimals retain every raw unit. Existing positions, revocable rights, screenshots and URLs are refused before wallet approval. External adapters and broker shares are absent; the single treasury payout is the fee path for later extension.
+Read polling pins V2 deal terms, grant accounting and on-chain time to one block, including during concurrent claims. Token metadata is untrusted and inserted as text. Exact decimals retain every raw unit. Existing positions, revocable rights, screenshots and URLs are refused before wallet approval. External adapters and broker shares are absent; the single treasury payout is the only fee path.
 
-Tokens that rebase, freeze accounts, lie about balances or change implementation remain unsupported risks. No rescue, upgrade or finality mechanism is provided. This is a local/testnet implementation, without an independent audit or production approval. A future broker-deal extension will need separately specified signed terms and receipts; it is not part of this API.
+Tokens that rebase, freeze accounts, lie about balances or change implementation remain unsupported risks. No rescue, upgrade or finality mechanism is provided. This is a local/testnet implementation, without an independent audit or production approval.

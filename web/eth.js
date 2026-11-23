@@ -235,7 +235,7 @@ function revertData(error) {
 
 /** What went wrong, for the person: a refusal in their wallet, the deal contract's reason, or the error's own words. */
 export function explain(error) {
-  if (error?.code === 4001) return "You declined in your wallet. Nothing was sent.";
+  if (error?.code === 4001 || error?.code === "ACTION_REJECTED") return "You declined in your wallet. Nothing was sent.";
   if (error?.code === 4902) return "Your wallet does not know this network yet. Add it in your wallet, then try again.";
   const message = [error?.message, error?.error?.message, error?.info?.error?.message, error?.data?.message, error?.data?.originalError?.message].filter(Boolean).join(" ");
   if (error?.code === "INSUFFICIENT_FUNDS" || /insufficient funds|funds for gas|not enough.*gas|sender doesn.t have enough funds|maximum? upfront cost/i.test(message)) return "This wallet has too little ETH to pay the network fee. Add some, then try again.";
@@ -246,5 +246,11 @@ export function explain(error) {
     if (data.startsWith("0x08c379a0")) return `The transaction would fail: ${decodeText(`0x${data.slice(10)}`)}.`; // Error(string)
     return "The transaction would fail on the chain, so it was not sent.";
   }
+  if (error?.code === 4100) return "Your wallet has not allowed this site to use the account. Connect it, then try again.";
+  if (error?.code === -32002 || /already pending/i.test(message)) return "Your wallet already has a request open. Finish or close it in your wallet, then try again.";
+  if (error?.code === "NETWORK_ERROR" || /network cannot be reached|failed to fetch|networkerror|econnrefused|could not detect network/i.test(message)) return "The network cannot be reached. Check your connection and try again.";
+  if (error?.code === "TIMEOUT" || /timed? ?out|etimedout/i.test(message)) return "The network took too long to answer. Refresh to check the on-chain status, then try again.";
+  if (/nonce too low|replacement (transaction )?underpriced/i.test(message)) return "Your wallet's transaction count is out of date. Wait for its pending transactions, then try again.";
+  if (error?.code === 429 || error?.code === -32005 || /rate limit|too many requests/i.test(message)) return "The network is limiting requests. Wait a moment, then try again.";
   return String(error?.message ?? error).split("\n")[0];
 }

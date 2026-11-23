@@ -42,19 +42,24 @@ export function dealPage(app, idText) {
     if (!live) return;
     const next = view();
     const current = app.main.firstElementChild;
-    // Relative expiry is the only changing text during ordinary polling. Update
-    // it before comparing so an unchanged action keeps its original DOM node.
-    const expiry = current?.querySelector('[data-testid="expires"]');
-    const nextExpiry = next.querySelector('[data-testid="expires"]');
-    if (expiry && nextExpiry) {
-      expiry.textContent = nextExpiry.textContent;
-      if (nextExpiry.hasAttribute("class")) expiry.className = nextExpiry.className;
-      else expiry.removeAttribute("class");
-    }
+    // Ordinary polling changes only text (relative times, balances) and classes. Copy them into the current
+    // view first so an unchanged action keeps its original DOM node and keyboard focus.
+    if (current) patchText(current, next);
     if (!current?.isEqualNode(next)) app.main.replaceChildren(next);
     clearTimeout(expiryTimer);
     const left = s.deal?.status === "open" ? Number(s.deal.expiry) - now() : 0;
     if (left > 0 && left < 86_400) expiryTimer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time
+  }
+
+  /** Copies text and classes from `to` into `from` where their shapes match. Buttons are left whole: a changed
+   * label also means a changed action, so it must replace the node with its new handler. */
+  function patchText(from, to) {
+    if (from.nodeName !== to.nodeName || from.childNodes.length !== to.childNodes.length) return;
+    if (from.nodeType === Node.TEXT_NODE) from.nodeValue = to.nodeValue;
+    if (from.nodeType !== Node.ELEMENT_NODE || from.nodeName === "BUTTON") return;
+    if (to.hasAttribute("class")) from.className = to.className;
+    else from.removeAttribute("class");
+    from.childNodes.forEach((child, i) => patchText(child, to.childNodes[i]));
   }
 
   /** Runs one press: `work(stage)` sends what it must, and the buttons come back once the chain has been read again. */
