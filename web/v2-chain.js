@@ -1,4 +1,4 @@
-import { address, Chain, encode, same, uint, words } from "./eth.js";
+import { AppError, address, Chain, encode, same, uint, words } from "./eth.js";
 
 export const SELECTORS = {
   createDeal: "0x54695758", fill: "0x3fda5389", cancel: "0x40e58ee5", claim: "0x379607f5",
@@ -57,7 +57,7 @@ export class VestingChain extends Chain {
 
   async verifyNetwork() {
     if (Number(await this.rpc("eth_chainId", [])) !== this.chainId) {
-      throw new Error("The website’s read-only RPC points to the wrong network.");
+      throw new AppError("The website’s read-only RPC points to the wrong network.");
     }
   }
 
@@ -70,7 +70,7 @@ export class VestingChain extends Chain {
   async read(name, length, args, block) {
     const decoded = words(await this.call(this.contract, encode(SELECTORS[name], ...args), undefined, block));
     if (decoded.length !== length) {
-      throw new Error("The configured OTC V2 contract did not return the expected data.");
+      throw new AppError("The configured OTC V2 contract did not return the expected data.");
     }
     return decoded;
   }

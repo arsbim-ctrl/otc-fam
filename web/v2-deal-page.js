@@ -1,9 +1,9 @@
 import { explain, same } from "./eth.js";
-import { card, copyButton, h, leg, networkName } from "./ui.js";
+import { card, copyButton, h, leg, liveStatus, networkName } from "./ui.js";
 import { dealAction, fees, NEW_VESTING, receiptEvents } from "./v2-chain.js";
 import { sendV2 } from "./v2-transactions.js";
 import {
-  addressText, dealLink, economics, facts, money, panel, replaceChanged, replacementForm, scheduledTerms, submitApproval,
+  addressText, dealLink, economics, facts, money, panel, readNotice, refreshReads, replaceChanged, replacementForm, scheduledTerms, submitApproval,
   tokenWarning, transactionFlow, transactionStatus, txHash, utc, walletAction, wireButton,
 } from "./v2-ui.js";
 
@@ -28,7 +28,7 @@ function nextUnlock(grant) {
 export function v2DealPage(app, id) {
   const { config, chain, wallet } = app;
   const state = { snapshot: null, error: null, activity: [], activityKey: null, historyError: false, run: null };
-  let live = true, sequence = 0;
+  let live = true;
 
   const badge = h("span", { class: "status v2-status", testid: "deal-status", "data-status": "loading" }, "Reading chain");
   const lead = h("p", { class: "lead", testid: "deal-summary" });
@@ -36,7 +36,7 @@ export function v2DealPage(app, id) {
     document.getElementById("v2-grant")?.focus();
     document.getElementById("v2-grant")?.scrollIntoView({ block: "start" });
   } }, "View vesting schedule and claims");
-  const readError = h("div");
+  const readError = readNotice(() => reads.refresh());
   const dealBody = h("div", { class: "v2-grid", hidden: true });
   const swap = h("div", { class: "v2-panel" });
   const terms = h("div", { class: "v2-panel" });
@@ -44,24 +44,26 @@ export function v2DealPage(app, id) {
   const receipts = h("div");
   const feedback = h("div");
   const hint = h("p", { class: "hint" });
+  const transactionError = liveStatus();
   const button = h("button", { class: "primary", type: "button", testid: "primary-action", onclick: () => state.run?.(), hidden: true });
   const share = h("div", { class: "v2-share", hidden: true },
     h("p", { class: "hint" }, "Anyone with this link can read the terms. Only the designated buyer can settle."),
     copyButton(dealLink(config, id)));
-  const controls = h("div", { class: "v2-actions" }, button, hint, feedback);
+  const controls = h("div", { class: "v2-actions" }, button, hint, feedback, transactionError.element);
   const actionSlot = h("div");
   const grantActions = h("div");
   const shell = card(h("div", { class: "v2-heading" },
     h("span", { class: "v2-kicker" }, "OTC V2"),
     h("div", { class: "card-head" }, h("h1", {}, `Private deal #${id}`), badge),
     lead, jump),
-    readError, dealBody, grant, grantActions, receipts);
+    readError.element, dealBody, grant, grantActions, receipts);
   shell.classList.add("v2-card");
   dealBody.append(h("div", { class: "v2-deal-left" }, swap, actionSlot, share), terms);
   const flow = transactionFlow(app, `otc-v2:${config.chainId}:${chain.contract}:deal:${id}`, render, (_job, receipt) => {
     mergeHistory(receiptEvents(receipt, chain.contract));
   });
 
+  const reads = refreshReads(load, () => live && !flow.busy);
   const replacement = replacementForm(flow, refresh);
   controls.append(replacement);
 
@@ -137,9 +139,7 @@ export function v2DealPage(app, id) {
     badge.dataset.status = status;
     badge.textContent = styles[status][1];
     dealBody.hidden = !deal || status === "none";
-    replaceChanged(readError, state.error ? h("div", { class: "notice error v2-error", role: "status" },
-      h("p", {}, state.error), h("button", { class: "v2-link-button", type: "button", onclick: refresh }, "Retry read"))
-      : h("span", { hidden: true }));
+    readError.update(state.error);
 
     if (!deal || status === "none") {
       lead.textContent = status === "none" ? "This deal ID does not exist on the configured V2 contract."
@@ -185,6 +185,7 @@ export function v2DealPage(app, id) {
     button.className = next.refund ? "secondary" : "primary";
     wireButton(button, state, flow.busy || (flow.job ? "Waiting for receipt…" : next.label || ""), next.run);
     replaceChanged(feedback, transactionStatus(config, flow));
+    transactionError.update(flow.feedback?.kind === "error" ? flow.feedback.text : null);
     replacement.hidden = !flow.job;
 
     const activity = state.activity.map((event) => h("li", {},
@@ -215,13 +216,17 @@ export function v2DealPage(app, id) {
     return section;
   }
 
-  async function readSnapshot() {
-    const block = await chain.block();
-    await flow.check(block);
-    const deal = await chain.terms(id, block.number);
-    if (deal.status === "none") return { block, deal };
+  async function readSnapshot(current) {
     const account = wallet?.account;
-    const readingFunds = deal.status === "funded" && same(account, deal.buyer) && wallet.chainId === config.chainId;
+    const onNetwork = wallet?.chainId === config.chainId;
+    const block = await chain.block();
+    if (!current()) return;
+    await flow.check(block);
+    if (!current()) return;
+    const deal = await chain.terms(id, block.number);
+    if (!current()) return;
+    if (deal.status === "none") return { block, deal };
+    const readingFunds = deal.status === "funded" && same(account, deal.buyer) && onNetwork;
     const [base, quote, treasury, escrow, grant, funds] = await Promise.all([
       chain.token(deal.baseToken), chain.token(deal.quoteToken), chain.beneficiaryTreasury(block.number),
       deal.status === "funded" ? chain.balanceOf(deal.baseToken, chain.contract, block.number) : null,
@@ -233,42 +238,48 @@ export function v2DealPage(app, id) {
     return { block, deal, base, quote, treasury, backed: escrow !== null && escrow >= deal.allocation, grant, funds };
   }
 
-  async function refresh() {
-    if (!live || flow.busy) return;
-    const read = ++sequence;
+  async function load(current) {
     try {
-      const snapshot = await readSnapshot();
-      if (!live || read !== sequence) return;
+      const snapshot = await readSnapshot(current);
+      if (!current()) return;
       state.snapshot = snapshot;
       state.error = null;
       render();
+
       const historyKey = `${snapshot.deal.status}:${snapshot.grant?.claimed ?? ""}`;
       if (snapshot.deal.status !== "none" && state.activityKey !== historyKey) {
         await chain.history(id, snapshot.deal.grantId, snapshot.block.number).then((history) => {
-          if (!live || read !== sequence) return;
+          if (!current()) return;
           mergeHistory(history);
           state.activityKey = historyKey;
           state.historyError = false;
-        }, () => { if (live && read === sequence) state.historyError = true; });
+        }, () => { if (current()) state.historyError = true; });
       }
     } catch (error) {
-      if (read === sequence) state.error = explain(error);
+      if (current()) state.error = explain(error, "read");
     }
-    if (read === sequence) render();
+    if (current()) render();
+  }
+
+  function refresh() {
+    reads.invalidate();
+    if (state.snapshot) state.snapshot.funds = null;
+    render();
+    return reads.refresh();
   }
 
   app.main.replaceChildren(shell);
   document.title = `Private deal #${id} · ${networkName(config.chainId)} · otc.fam`;
-  const poll = setInterval(refresh, 4000);
-  addEventListener("focus", refresh);
+  const poll = setInterval(reads.refresh, 4000);
+  addEventListener("focus", reads.refresh);
   render();
-  refresh();
+  reads.refresh();
   return {
     update: refresh,
     stop() {
       live = false;
       clearInterval(poll);
-      removeEventListener("focus", refresh);
+      removeEventListener("focus", reads.refresh);
     },
   };
 }

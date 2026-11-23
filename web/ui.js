@@ -50,7 +50,19 @@ export function h(tag, props, ...children) {
 export const card = (...children) => h("section", { class: "card" }, ...children);
 export const fact = (term, ...value) => h("div", {}, h("dt", {}, term), h("dd", {}, ...value));
 export const dot = (token) => h("i", { class: "dot", style: `--hue:${parseInt(token.address.slice(2, 8), 16) % 360}` });
-export const notice = ({ kind, text }) => h("p", { class: `notice ${kind}`, testid: "notice", role: "status" }, text);
+export const notice = ({ kind, text }) => h("p", { class: `notice ${kind}`, testid: "notice", role: kind !== "error" ? "status" : null }, text);
+
+/** Keep the live region mounted and only announce new text. */
+export function liveStatus(className = "sr-only") {
+  const element = h("p", { class: className, role: "status", "aria-live": "polite", "aria-atomic": "true" });
+  return {
+    element,
+    update(message) {
+      const text = message ?? "";
+      if (element.textContent !== text) element.textContent = text;
+    },
+  };
+}
 
 /** A deal's title, and its state in words and in data-status. */
 export function head(title, status) {

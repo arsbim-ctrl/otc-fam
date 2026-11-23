@@ -1,13 +1,15 @@
 // A deal's page, #/d/<id>: what the taker pays and receives, from whom, until when, and the one button that moves the
 // deal forward (connect, switch network, approve, fill). It reads the deal with or without a wallet and follows it.
 import { approveExactly, cancelData, explain, fillData, same, transact, ZERO_ADDRESS } from "./eth.js";
-import { action, amount, card, copyButton, fact, fromNow, h, head, leg, networkName, NO_WALLET, notice, secondary, short, when } from "./ui.js";
+import { action, amount, card, copyButton, fact, fromNow, h, head, leg, liveStatus, networkName, NO_WALLET, notice, secondary, short, when } from "./ui.js";
 
 export function dealPage(app, idText) {
   const { config, chain, wallet } = app;
   const id = /^\d{1,78}$/.test(idText) && BigInt(idText) < 2n ** 256n ? BigInt(idText) : null;
   const s = { deal: null, sell: null, buy: null, chainTime: 0, funds: null, failed: null, busy: null, notice: null, done: null };
   let live = true, reads = 0, expiryTimer;
+  const errors = liveStatus();
+  app.main.replaceChildren(errors.element);
   const poll = setInterval(() => s.busy || load(), 5000);
   const onFocus = () => s.busy || load();
   addEventListener("focus", onFocus);
@@ -23,7 +25,7 @@ export function dealPage(app, idText) {
       Object.assign(s, { deal, chainTime, sell, buy, funds, failed: null });
     } catch (e) {
       if (read !== reads) return;
-      s.failed = explain(e);
+      s.failed = explain(e, "read");
     }
     render();
   }
@@ -41,7 +43,7 @@ export function dealPage(app, idText) {
   function render() {
     if (!live) return;
     const next = view();
-    const current = app.main.firstElementChild;
+    const current = errors.element.previousElementSibling;
     if (current?.querySelector('[data-testid="deal-status"]')?.dataset.status === next.querySelector('[data-testid="deal-status"]')?.dataset.status) {
       const expiry = current?.querySelector('[data-testid="expires"]');
       const updatedExpiry = next.querySelector('[data-testid="expires"]');
@@ -52,9 +54,11 @@ export function dealPage(app, idText) {
     }
     if (!current?.isEqualNode(next)) {
       const focus = current?.contains(document.activeElement) && document.activeElement.dataset.testid;
-      app.main.replaceChildren(next);
+      if (current) current.replaceWith(next);
+      else app.main.prepend(next);
       if (focus) next.querySelector(`[data-testid="${focus}"]:enabled`)?.focus({ preventScroll: true });
     }
+    errors.update(next.querySelector(".notice.error")?.textContent);
     clearTimeout(expiryTimer);
     const left = s.deal?.status === "open" ? Number(s.deal.expiry) - now() : 0;
     if (left > 0 && left < 86_400) expiryTimer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time
@@ -81,8 +85,7 @@ export function dealPage(app, idText) {
   function view() {
     if (!s.deal) {
       if (!s.failed) return card(h("p", { class: "loading" }, `Loading deal #${idText.slice(0, 80)}…`));
-      return card(h("h1", {}, `Deal #${idText.slice(0, 80)}`), notice({ kind: "error", text: `This deal could not be read. ${s.failed}` }),
-        h("button", { class: "secondary", type: "button", onclick: () => load() }, "Try again"));
+      return card(h("h1", {}, `Deal #${idText.slice(0, 80)}`), readFailure());
     }
     if (s.deal.status === "none") {
       return card(head(id === null ? "Not a deal link" : `Deal #${idText}`, "not-found"),
@@ -115,7 +118,11 @@ export function dealPage(app, idText) {
         standing && h("div", {}, h("dt", {}, status === "open" ? "Expires" : "Expired"),
           h("dd", { testid: "expires", "data-expiry": String(d.expiry), class: status === "open" && Number(d.expiry) - now() < 900 ? "soon" : null },
             when(Number(d.expiry), now())))),
-      status === "open" ? actions(d) : ended(status, mine));
+      s.failed && !s.busy ? readFailure() : status === "open" ? actions(d) : ended(status, mine));
+  }
+
+  function readFailure() {
+    return action({ notice: { kind: "error", text: s.failed }, extra: secondary("retry-read", "Try again", load) });
   }
 
   function lead(status, mine, taking) {
@@ -171,7 +178,7 @@ export function dealPage(app, idText) {
         notice: s.notice });
     }
     if (same(me, d.maker)) {
-      return action({ notice: { kind: "info", text: `This is your own deal: you cannot fill it. Until someone does, you can cancel it and take back your ${get}.` },
+      return action({ notice: s.notice ?? { kind: "info", text: `This is your own deal: you cannot fill it. Until someone does, you can cancel it and take back your ${get}.` },
         extra: wallet.chainId === config.chainId ? secondary("cancel-action", `Cancel the deal and take back ${get}`, cancel)
           : secondary("cancel-action", `Switch to ${networkName(config.chainId)}`, switchNetwork) });
     }

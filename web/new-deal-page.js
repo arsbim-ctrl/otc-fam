@@ -1,7 +1,7 @@
 // #/new: the form that makes a deal (what you give, what you get, who may fill it, for how long), its one button
 // (connect, switch network, approve, create), then the link to send to the other side.
 import { approveExactly, createDealData, createdId, explain, same, transact, ZERO_ADDRESS } from "./eth.js";
-import { action, amount, card, copyButton, DATE, dot, fact, h, networkName, NO_WALLET, setNote, when } from "./ui.js";
+import { action, amount, card, copyButton, DATE, dot, fact, h, liveStatus, networkName, NO_WALLET, setNote, when } from "./ui.js";
 import { isAddress, parseAmount } from "./units.js";
 
 export function newDealPage(app) {
@@ -22,6 +22,7 @@ export function newDealPage(app) {
   const note = { sell: h("p", { class: "note" }), buy: h("p", { class: "note" }), taker: h("p", { class: "note" }), hours: h("p", { class: "note" }) };
   const summary = h("div", { class: "summary" });
   const actionArea = h("div");
+  const errors = liveStatus();
   const legOf = (label, amountInput, tokenPill, tokenInput, tokenNote) => h("div", { class: "leg" },
     h("label", { class: "leg-label", for: amountInput.id }, label),
     h("div", { class: "leg-row" }, amountInput, tokenPill),
@@ -93,7 +94,7 @@ export function newDealPage(app) {
       const [balance, allowance] = await Promise.all([chain.balanceOf(token.address, wallet.account), chain.allowance(token.address, wallet.account)]);
       if (read === fundsRead) s.funds = { key, balance, allowance };
     } catch (e) {
-      if (read === fundsRead) [s.funds, s.notice] = [null, { kind: "error", text: explain(e) }];
+      if (read === fundsRead) s.funds = { key, error: explain(e, "read") };
     }
     update();
   }
@@ -124,7 +125,7 @@ export function newDealPage(app) {
     for (const [key, x] of [["sell", t.sell], ["buy", t.buy]]) {
       pill[key].replaceChildren(...(x.token ? [dot(x.token), x.token.symbol] : ["Token"]));
       pill[key].classList.toggle("empty", !x.token);
-      const funds = key === "sell" && x.token && wallet?.account && s.funds?.key === `${wallet.account}:${x.token.address}` && s.funds;
+      const funds = key === "sell" && x.token && wallet?.account && s.funds?.key === `${wallet.account}:${x.token.address}` && !s.funds.error && s.funds;
       const about = x.token && `${x.token.symbol}, ${x.token.decimals} decimals${funds ? ` · you hold ${amount(funds.balance, x.token)}` : ""}`;
       setNote(note[key], x.note ?? (x.pending ? "Looking up the token…" : about || ""), Boolean(x.note));
     }
@@ -136,7 +137,9 @@ export function newDealPage(app) {
       h("p", {}, `You give ${give} and get ${amount(t.buy.units, t.buy.token)}.`),
       h("p", {}, `${anyone ? "Anyone with the link" : "Only the address you named"} can fill it, for ${t.expiry.hours} hour${t.expiry.hours === 1 ? "" : "s"}. `
         + `Until then your ${give} stay locked in the deal contract, and you can cancel to take them back.`)]));
-    actionArea.replaceChildren(actions(t));
+    const next = actions(t);
+    actionArea.replaceChildren(next);
+    errors.update(next.querySelector(".notice.error")?.textContent);
   }
 
   /** The one button (connect, switch network, approve, create), or what the form still needs, and what the press does. */
@@ -156,6 +159,8 @@ export function newDealPage(app) {
     if (t.problem) return action({ steps, step: 1, button: { label: t.problem }, notice: s.notice });
     const f = fundsOf(t.sell.token), give = amount(t.sell.units, t.sell.token);
     if (!f) return action({ steps, step: 1, button: { label: `Checking your ${t.sell.token.symbol}…` } });
+    if (f.error) return action({ steps, step: 1, button: { label: "Retry read", run: () => loadFunds(t.sell.token) },
+      notice: { kind: "error", text: f.error } });
     if (f.balance < t.sell.units) {
       return action({ steps, step: 1, button: { label: `Not enough ${t.sell.token.symbol}` },
         notice: { kind: "warn", text: `You give ${give}, and this wallet holds ${amount(f.balance, t.sell.token)}.` } });
@@ -196,7 +201,7 @@ export function newDealPage(app) {
         + "To take them back before someone fills the deal, open it with this wallet and cancel it."));
   }
 
-  app.main.replaceChildren(form);
+  app.main.replaceChildren(form, errors.element);
   update();
   return {
     update: () => {

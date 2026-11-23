@@ -1,5 +1,5 @@
-import { approveData, explain } from "./eth.js";
-import { amount, h, networkName, NO_WALLET } from "./ui.js";
+import { AppError, approveData, explain } from "./eth.js";
+import { amount, h, liveStatus, networkName, NO_WALLET } from "./ui.js";
 import { checkTransaction, identifyReplacement, sendV2, tabStorage, transactionMessage } from "./v2-transactions.js";
 import { fees, NEW_VESTING } from "./v2-chain.js";
 
@@ -70,6 +70,49 @@ export function wireButton(button, state, label, run) {
   state.run = run;
 }
 
+/** Polls share one read. A change to its inputs discards that read and queues the latest one. */
+export function refreshReads(load, canRead) {
+  let revision = 0;
+  let inFlight;
+
+  async function read() {
+    try {
+      let requested;
+      do {
+        requested = revision;
+        const snapshot = requested;
+        await load(() => snapshot === revision && canRead());
+      } while (requested !== revision && canRead());
+    } finally {
+      inFlight = null;
+    }
+  }
+
+  return {
+    refresh() {
+      if (canRead() && !inFlight) inFlight = read();
+      return inFlight;
+    },
+    invalidate() {
+      revision++;
+    },
+  };
+}
+
+export function readNotice(retry) {
+  const message = liveStatus("v2-read-message");
+  const button = h("button", { class: "v2-link-button", type: "button", hidden: true, onclick: retry }, "Retry read");
+  const element = h("div", {}, message.element, button);
+  return {
+    element,
+    update(text) {
+      message.update(text);
+      element.className = text ? "notice error v2-error" : "";
+      button.hidden = !text;
+    },
+  };
+}
+
 export function walletAction({ wallet, config }, flow, refresh) {
   if (!wallet) return { hint: NO_WALLET };
   if (!wallet.account) return { label: "Connect wallet", run: () => flow.run("Connecting wallet…", () => wallet.connect(), refresh) };
@@ -89,7 +132,7 @@ export async function submitApproval(app, from, token, units, allowance) {
   let data = approveData(chain.contract, units);
   let kind = "approve";
   const validApproval = (answer) => {
-    if (answer !== "0x" && BigInt(answer) !== 1n) throw new Error("The token refused the approval.");
+    if (answer !== "0x" && BigInt(answer) !== 1n) throw new AppError("The token refused the approval.");
   };
   try {
     validApproval(await chain.call(token.address, data, from));
@@ -181,7 +224,8 @@ export function txHash(config, hash) {
 
 export function transactionStatus(config, flow) {
   const feedback = flow.feedback;
-  return h("div", { class: "v2-feedback", role: "status", "aria-live": "polite" },
+  const announceProgress = feedback?.kind !== "error";
+  return h("div", { class: "v2-feedback", role: announceProgress ? "status" : null },
     flow.busy && h("p", { class: "hint" }, flow.busy),
     flow.job && h("div", { class: "notice info" },
       h("p", {}, flow.job.uncertain

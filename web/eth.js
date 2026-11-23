@@ -3,6 +3,15 @@
 // argument it sends is one 32-byte word, and every answer it reads is words, or a string for symbol().
 import { formatAmount } from "./units.js";
 
+export class AppError extends Error {}
+
+class ProviderError extends Error {
+  constructor(source, cause) {
+    super("Provider request failed.", { cause });
+    this.source = source;
+  }
+}
+
 export const ZERO_ADDRESS = `0x${"0".repeat(40)}`;
 
 // keccak256 of each signature, first 4 bytes (test/page.test.mjs checks them against the compiled contract).
@@ -37,7 +46,7 @@ export const createDealData = ({ sellToken, sellAmount, buyToken, buyAmount, tak
 /** The id of the deal a createDeal transaction made, from its DealCreated event. */
 export function createdId(receipt, contract) {
   const log = receipt.logs.find((l) => same(l.address, contract) && l.topics[0] === DEAL_CREATED);
-  if (!log) throw new Error("The deal was sent, but its receipt names no new deal.");
+  if (!log) throw new AppError("The deal was sent, but its receipt names no new deal. Check your wallet activity.");
   return BigInt(log.topics[1]);
 }
 
@@ -63,27 +72,28 @@ export class Chain {
     this.tokens = new Map();
   }
 
-  async rpc(method, params) {
-    let response;
+  async rpc(method, params, source = "read") {
+    let payload;
     try {
-      response = await fetch(this.rpcUrl, { method: "POST", signal: AbortSignal.timeout(15_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
-    } catch {
-      throw new Error("The network cannot be reached. Check your connection and try again.");
+      const response = await fetch(this.rpcUrl, { method: "POST", signal: AbortSignal.timeout(15_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      if (response.ok) payload = await response.json();
+    } catch (error) {
+      throw new ProviderError(source, error);
     }
-    if (!response.ok) throw new Error(`The network answered with an error (HTTP ${response.status}). Try again in a moment.`);
-    const { result, error } = await response.json();
-    if (error) throw Object.assign(new Error(error.message), { code: error.code, data: error.data });
-    return result;
+    if (payload?.error || !payload || !Object.hasOwn(payload, "result")) {
+      throw new ProviderError(source, payload?.error);
+    }
+    return payload.result;
   }
 
-  /** eth_call: what `to` answers to `data`, sent by `from`; throws the contract's reason if it would revert. */
+  /** Simulates a transaction when `from` is supplied. Otherwise reads contract state. */
   call(to, data, from, block = "latest") {
-    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, block]);
+    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, block], from ? "preflight" : "read");
   }
 
   async deal(id) {
     const w = words(await this.call(this.contract, encode(SELECTOR.getDeal, id)));
-    if (w.length !== 8) throw new Error(`There is no deal contract at ${this.contract} on this network: the site's config.json may be wrong.`);
+    if (w.length !== 8) throw new AppError("The deal contract did not respond as expected. Verify that this site uses the deal’s network.");
     return {
       id, maker: address(w[0]), taker: address(w[1]), sellToken: address(w[2]), sellAmount: uint(w[3]),
       buyToken: address(w[4]), buyAmount: uint(w[5]), expiry: uint(w[6]), status: STATUS[Number(uint(w[7]))],
@@ -95,7 +105,7 @@ export class Chain {
     const key = token.toLowerCase();
     if (!this.tokens.has(key)) {
       const info = Promise.all([this.call(key, SELECTOR.decimals), this.call(key, SELECTOR.symbol).catch(() => null)]).then(([decimals, symbol]) => {
-        if (!/^0x0{62}[0-9a-f]{2}$/i.test(decimals)) throw new Error("no decimals");
+        if (!/^0x0{62}[0-9a-f]{2}$/i.test(decimals)) throw new AppError("A token did not return its decimals. Verify the token contracts on this network.");
         return { address: key, decimals: Number(decimals), symbol: symbol ? decodeText(symbol) : "" };
       });
       info.catch(() => this.tokens.delete(key)); // a failed look-up is tried again next time
@@ -120,11 +130,11 @@ export class Chain {
   /** The receipt of transaction `hash`, once it is in a block. */
   async receipt(hash) {
     for (let waited = 0, pause = 250; waited < 600_000; waited += pause, pause = Math.min(pause * 2, 3000)) {
-      const receipt = await this.rpc("eth_getTransactionReceipt", [hash]);
+      const receipt = await this.rpc("eth_getTransactionReceipt", [hash], "receipt");
       if (receipt) return receipt;
       await sleep(pause);
     }
-    throw new Error(`The transaction ${hash} is still not confirmed after 10 minutes. Check it in your wallet's activity.`);
+    throw new AppError("The transaction is still unconfirmed. Check your wallet activity before trying again.");
   }
 }
 
@@ -143,34 +153,42 @@ export class Wallet {
       onChange();
     });
     this.ready = Promise.all([
-      provider.request({ method: "eth_accounts" }).then((accounts) => (this.account = accounts[0]?.toLowerCase() ?? null)),
+      this.request({ method: "eth_accounts" }).then((accounts) => (this.account = accounts[0]?.toLowerCase() ?? null)),
       this.readChain(),
     ]).catch(() => {});
   }
 
+  async request(request) {
+    try {
+      return await this.provider.request(request);
+    } catch (error) {
+      throw new ProviderError("wallet", error);
+    }
+  }
+
   async readChain() {
-    this.chainId = Number(await this.provider.request({ method: "eth_chainId" }));
+    this.chainId = Number(await this.request({ method: "eth_chainId" }));
   }
 
   async connect() {
-    const accounts = await this.provider.request({ method: "eth_requestAccounts" });
+    const accounts = await this.request({ method: "eth_requestAccounts" });
     this.account = accounts[0]?.toLowerCase() ?? null;
     await this.readChain();
   }
 
   async switchTo(chainId) {
-    await this.provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${chainId.toString(16)}` }] });
+    await this.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${chainId.toString(16)}` }] });
     await this.readChain();
   }
 
   /** Sends `{ to, data }` from the connected account on chain `chainId`, and returns the transaction's hash. */
   async send(tx, chainId, from = this.account) {
-    const [accounts] = await Promise.all([this.provider.request({ method: "eth_accounts" }), this.readChain()]);
-    if (this.chainId !== chainId) throw new Error("Your wallet changed network. Switch it back, then try again.");
+    const [accounts] = await Promise.all([this.request({ method: "eth_accounts" }), this.readChain()]);
+    if (this.chainId !== chainId) throw new AppError("Your wallet changed network. Switch it back, then try again.");
     if (!from || !same(from, accounts[0]) || !same(from, this.account)) {
-      throw new Error("Your wallet account changed. Check the connected address and try again.");
+      throw new AppError("Your wallet account changed. Check the connected address and try again.");
     }
-    return this.provider.request({ method: "eth_sendTransaction", params: [{ from, ...tx }] });
+    return this.request({ method: "eth_sendTransaction", params: [{ from, ...tx }] });
   }
 }
 
@@ -185,7 +203,7 @@ export async function transact({ chain, wallet, config }, to, data, stage, what)
   const hash = await wallet.send({ to, data }, config.chainId, from);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
   const receipt = await chain.receipt(hash);
-  if (receipt.status !== "0x1") throw new Error("The transaction failed on the chain, and nothing moved. Try again.");
+  if (receipt.status !== "0x1") throw new AppError("The transaction failed on the chain, and nothing moved. Try again.");
   return receipt;
 }
 
@@ -199,49 +217,56 @@ export async function approveExactly(app, token, units, allowance, stage) {
   await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`);
 }
 
-// Why the deal contract refused a call, in words: its errors by selector, with their arguments' words.
+// Known contract error selectors map to app-authored messages.
 const REASONS = {
-  "0x1f2a2005": () => "Both amounts must be more than zero.", // ZeroAmount()
-  "0x201b580a": () => "The token you give and the token you get must be different.", // SameToken()
-  "0xed8adeb1": () => "The deal must end in the future.", // ExpiryNotInFuture()
-  "0xf0ae59ab": ([token]) => `${address(token)} is not a token contract on this network.`, // NotAToken(address)
-  "0x48a4274a": ([token]) => `The token ${address(token)} does not move exactly the amount asked (it keeps a fee, or charges one on top), so deals in it cannot go through.`, // InexactTransfer(address)
-  "0x341b372a": () => "This deal is no longer open: it was filled or cancelled.", // NotOpen(uint256)
-  "0x4877925c": () => "This deal has expired: it can no longer be filled.", // DealExpired(uint256)
-  "0x64c4c47b": ([, taker]) => `This deal is reserved for ${address(taker)}: only that address can fill it.`, // NotYourDeal(uint256,address)
-  "0x9f220883": () => "Only the maker of this deal can cancel it.", // NotMaker(uint256)
-  "0x39f1c8d9": ([token]) => `The token ${address(token)} refused the transfer: check the balance and the approval.`, // TransferFailed(address)
-  "0xb1df0e06": () => "Enter a designated buyer address different from the seller or escrow.",
-  "0xdba16ce8": () => "The vesting schedule is out of range. The duration must be greater than the cliff.",
-  "0x85e05e45": () => "The fixed UTC start must still be in the future at settlement.",
-  "0xd5ef09ba": () => "The deal has already been settled or cancelled.",
-  "0x472e017e": () => "Only the designated buyer can settle this deal.",
-  "0x5ec82351": () => "Only the seller can reclaim this allocation.",
-  "0xe4614c8a": () => "The quote plus the buyer fee exceeds the maximum raw token amount.",
-  "0x969bf728": () => "No additional tokens are currently claimable.",
-  "0xb5dfd9e5": () => "A token tried to call the deal contract back during its transfer: refused.", // Reentered()
+  "0x1f2a2005": "Both amounts must be more than zero.", // ZeroAmount()
+  "0x201b580a": "The token you give and the token you get must be different.", // SameToken()
+  "0xed8adeb1": "The deal must end in the future.", // ExpiryNotInFuture()
+  "0xf0ae59ab": "Verify both token contract addresses on this network.", // NotAToken(address)
+  "0x48a4274a": "A token does not move exactly the amount asked. Check whether either token charges a transfer fee.", // InexactTransfer(address)
+  "0x341b372a": "This deal is no longer open: it was filled or cancelled.", // NotOpen(uint256)
+  "0x4877925c": "This deal has expired: it can no longer be filled.", // DealExpired(uint256)
+  "0x64c4c47b": "Only the reserved wallet can fill this deal. Check the address shown in the deal terms.", // NotYourDeal(uint256,address)
+  "0x9f220883": "Only the maker of this deal can cancel it.", // NotMaker(uint256)
+  "0x39f1c8d9": "A token refused the transfer. Check the balance and approval.", // TransferFailed(address)
+  "0xb1df0e06": "Enter a designated buyer address different from the seller or escrow.",
+  "0xdba16ce8": "The vesting schedule is out of range. The duration must be greater than the cliff.",
+  "0x85e05e45": "The fixed UTC start must still be in the future at settlement.",
+  "0xd5ef09ba": "The deal has already been settled or cancelled.",
+  "0x472e017e": "Only the designated buyer can settle this deal.",
+  "0x5ec82351": "Only the seller can reclaim this allocation.",
+  "0xe4614c8a": "The quote plus the buyer fee exceeds the maximum raw token amount.",
+  "0x969bf728": "No additional tokens are currently claimable.",
+  "0xb5dfd9e5": "A token tried to call the deal contract back during its transfer: refused.", // Reentered()
 };
 
-/** Revert data in an error, wherever the node (geth: data; Hardhat: data.data) or the wallet put it. */
-function revertData(error) {
-  const places = [error?.data, error?.data?.data, error?.data?.originalError?.data, error?.error?.data, error?.info?.error?.data];
-  return places.find((value) => typeof value === "string" && /^0x[0-9a-f]{8}/i.test(value)) ?? null;
-}
+/** Translate provider failures without displaying provider-supplied text or revert arguments. */
+export function explain(error, fallback = "action") {
+  if (error instanceof AppError) return error.message;
+  const source = error instanceof ProviderError ? error.source : fallback;
+  if (source === "read") return "Could not read the network. Check your connection and try again.";
+  if (source === "receipt") return "Could not confirm the transaction. Check your wallet activity before trying again.";
+  const cause = error instanceof ProviderError ? error.cause : error;
+  const details = [cause, cause?.data?.originalError, cause?.error, cause?.info?.error];
+  const codes = details.flatMap((entry) => entry?.code === undefined ? [] : [String(entry.code)]);
 
-/** What went wrong, for the person: a refusal in their wallet, the deal contract's reason, or the error's own words. */
-export function explain(error) {
-  if (error?.code === 4001) return "You declined in your wallet. Nothing was sent.";
-  if (error?.code === 4902) return "Your wallet does not know this network yet. Add it in your wallet, then try again.";
-  const message = String(error?.message ?? error).split("\n")[0];
-  if (/insufficient funds|insufficient balance for (?:gas|transfer)|doesn.t have enough funds|gas required exceeds allowance/i.test(message)) {
+  if (codes.includes("4001") || codes.includes("ACTION_REJECTED")) return "You declined in your wallet. Nothing was sent.";
+  if (codes.includes("4902")) return "Your wallet does not know this network yet. Add it in your wallet, then try again.";
+  if (codes.includes("4900") || codes.includes("4901")) return "Reconnect your wallet to the deal’s network and try again.";
+  if (codes.includes("4100")) return "Allow this site to use the correct account in your wallet, then try again.";
+  if (source === "wallet" && codes.includes("-32002")) return "Open your wallet and complete the pending request before trying again.";
+
+  const revert = details.flatMap((entry) => [entry?.data, entry?.data?.data])
+    .find((value) => typeof value === "string" && /^0x[0-9a-f]{8}/i.test(value));
+  const known = REASONS[revert?.slice(0, 10).toLowerCase()];
+  if (known) return known;
+  const outOfGasFunds = details.some((entry) => typeof entry?.message === "string"
+    && /insufficient funds|insufficient balance for (?:gas|transfer)|doesn.t have enough funds|gas required exceeds allowance/i.test(entry.message));
+  if (codes.includes("INSUFFICIENT_FUNDS") || outOfGasFunds) {
     return "This wallet needs more of the network’s gas token. Add gas funds and try again.";
   }
-  const data = revertData(error);
-  if (data) {
-    const reason = REASONS[data.slice(0, 10)];
-    if (reason) return reason(words(`0x${data.slice(10)}`));
-    if (data.startsWith("0x08c379a0")) return `The transaction would fail: ${decodeText(`0x${data.slice(10)}`)}.`; // Error(string)
-    return "The transaction would fail on the chain, so it was not sent.";
-  }
-  return message;
+  if (revert || codes.includes("3")) return "The transaction would fail on the chain. Review the deal and try again.";
+  if (source === "wallet") return "Your wallet could not complete the request. Check its network and activity before trying again.";
+  if (source === "preflight") return "The network could not check this transaction. Refresh the deal and try again.";
+  return "Something went wrong. Check the current deal and try again.";
 }

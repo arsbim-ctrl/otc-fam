@@ -1,4 +1,4 @@
-import { same } from "./eth.js";
+import { AppError, same } from "./eth.js";
 import { quantity } from "./v2-chain.js";
 
 const ZERO_VALUE = "0x0";
@@ -74,16 +74,16 @@ export async function checkTransaction(chain, job, block) {
 
 export async function identifyReplacement(chain, job, hash) {
   if (!/^0x[0-9a-f]{64}$/i.test(hash) || same(hash, job.hash)) {
-    throw new Error("Enter the new transaction hash from your wallet.");
+    throw new AppError("Enter the new transaction hash from your wallet.");
   }
   await chain.verifyNetwork();
   const tx = await chain.rpc("eth_getTransactionByHash", [hash]);
-  if (!tx || !same(tx.from, job.from)) throw new Error("The new transaction was not found for this wallet on the configured network.");
+  if (!tx || !same(tx.from, job.from)) throw new AppError("The new transaction was not found for this wallet on the configured network.");
   const sameAction = matches(job, tx);
   const sameNonce = job.nonce !== undefined && BigInt(job.nonce) === BigInt(tx.nonce);
   const oldBlock = tx.blockNumber !== null && tx.blockNumber !== undefined && BigInt(tx.blockNumber) < BigInt(job.firstBlock);
   if (oldBlock || (job.nonce === undefined ? !sameAction : !sameNonce)) {
-    throw new Error("The new transaction does not match this submission.");
+    throw new AppError("The new transaction does not match this submission.");
   }
   return { hash: tx.hash, matches: sameAction };
 }
