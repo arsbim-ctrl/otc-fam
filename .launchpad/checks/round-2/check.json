@@ -1,0 +1,14 @@
+{
+  "name": "round 2: exact fees and funded vesting",
+  "run": "node .launchpad/checks/round-2/run.mjs",
+  "timeoutSeconds": 300,
+  "tests": [
+    "R2-01: immediate delivery and exact raw-unit fees",
+    "R2-02: settlement funds the committed grant and conserves payment",
+    "R2-03: failed delivery rolls back and the funded deal can be retried",
+    "R2-04: future start, cliff and end follow block time",
+    "R2-05: small and large allocations settle exact cumulative claims",
+    "R2-06: claims pay the fixed beneficiary and a deal settles once",
+    "R2-07: funded terms, buyer, expiry and cancellation govern settlement"
+  ]
+}
