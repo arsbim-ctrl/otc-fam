@@ -93,7 +93,7 @@ export function newDealPage(app) {
       const [balance, allowance] = await Promise.all([chain.balanceOf(token.address, wallet.account), chain.allowance(token.address, wallet.account)]);
       if (read === fundsRead) s.funds = { key, balance, allowance };
     } catch (e) {
-      if (read === fundsRead) [s.funds, s.notice] = [null, { kind: "error", text: explain(e) }];
+      if (read === fundsRead) s.funds = { key, error: explain(e) };
     }
     update();
   }
@@ -125,7 +125,7 @@ export function newDealPage(app) {
       pill[key].replaceChildren(...(x.token ? [dot(x.token), x.token.symbol] : ["Token"]));
       pill[key].classList.toggle("empty", !x.token);
       const funds = key === "sell" && x.token && wallet?.account && s.funds?.key === `${wallet.account}:${x.token.address}` && s.funds;
-      const about = x.token && `${x.token.symbol}, ${x.token.decimals} decimals${funds ? ` · you hold ${amount(funds.balance, x.token)}` : ""}`;
+      const about = x.token && `${x.token.symbol}, ${x.token.decimals} decimals${funds && !funds.error ? ` · you hold ${amount(funds.balance, x.token)}` : ""}`;
       setNote(note[key], x.note ?? (x.pending ? "Looking up the token…" : about || ""), Boolean(x.note));
     }
     if (t.distinct.note) setNote(note.buy, t.distinct.note, true);
@@ -156,6 +156,8 @@ export function newDealPage(app) {
     if (t.problem) return action({ steps, step: 1, button: { label: t.problem }, notice: s.notice });
     const f = fundsOf(t.sell.token), give = amount(t.sell.units, t.sell.token);
     if (!f) return action({ steps, step: 1, button: { label: `Checking your ${t.sell.token.symbol}…` } });
+    if (f.error) return action({ steps, step: 1, button: { label: "Retry balance and approval", run: () => loadFunds(t.sell.token) },
+      notice: { kind: "error", text: f.error } });
     if (f.balance < t.sell.units) {
       return action({ steps, step: 1, button: { label: `Not enough ${t.sell.token.symbol}` },
         notice: { kind: "warn", text: `You give ${give}, and this wallet holds ${amount(f.balance, t.sell.token)}.` } });

@@ -78,6 +78,8 @@ export function dealPage(app, idText) {
           : `There is no deal #${idText} on ${networkName(config.chainId)}. Check that you have the whole link, or ask the person who sent it.`),
         h("a", { class: "button secondary", href: "#/new" }, "Make a deal of your own"));
     }
+    if (s.failed) return card(h("h1", {}, "Deal data could not be refreshed"), notice({ kind: "error", text: s.failed }),
+      secondary("retry-action", "Try again", load));
     const d = s.deal, me = wallet?.account;
     const status = d.status === "open" && now() >= Number(d.expiry) ? "expired" : d.status;
     const mine = Boolean(me && same(me, d.maker));
@@ -137,6 +139,8 @@ export function dealPage(app, idText) {
         wallet && !wallet.account && secondary("connect-action", s.busy?.label ?? "Made this deal? Connect to take your tokens back", !s.busy && connect),
         s.notice && notice(s.notice));
     }
+    if (wallet.chainId !== config.chainId) return action({ extra: secondary("switch-action", "Switch to " + networkName(config.chainId),
+      !s.busy && switchNetwork), notice: s.notice });
     return h("div", { class: "action" },
       secondary("cancel-action", s.busy?.label ?? `Cancel it and take back your ${get}`, !s.busy && cancel),
       s.busy?.hint && h("p", { class: "hint" }, s.busy.hint),
@@ -157,6 +161,8 @@ export function dealPage(app, idText) {
         notice: s.notice });
     }
     if (same(me, d.maker)) {
+      if (wallet.chainId !== config.chainId) return action({ extra: secondary("switch-action", "Switch to " + networkName(config.chainId), switchNetwork), notice: s.notice });
+      if (s.notice) return action({ notice: s.notice, extra: secondary("cancel-action", "Retry cancellation", cancel) });
       return action({ notice: { kind: "info", text: `This is your own deal: you cannot fill it. Until someone does, you can cancel it and take back your ${get}.` },
         extra: secondary("cancel-action", `Cancel the deal and take back ${get}`, cancel) });
     }

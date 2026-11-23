@@ -21,14 +21,14 @@ const DEAL_CREATED = "0x1c07d8ea6e5c6ec1eccadc84e71fb9989193eb338ddddea20f144594
 const STATUS = ["none", "open", "filled", "cancelled"];
 
 const word = (value) => BigInt(value).toString(16).padStart(64, "0");
-const encode = (selector, ...args) => selector + args.map(word).join("");
-const words = (hex) => (hex ?? "0x").slice(2).match(/.{64}/g) ?? [];
-const uint = (w) => BigInt(`0x${w}`);
-const address = (w) => `0x${w.slice(24)}`;
+export const encode = (selector, ...args) => selector + args.map(word).join("");
+export const words = (hex) => (hex ?? "0x").slice(2).match(/.{64}/g) ?? [];
+export const uint = (w) => BigInt(`0x${w}`);
+export const address = (w) => `0x${w.slice(24)}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
-const approveData = (spender, amount) => encode(SELECTOR.approve, spender, amount);
+export const approveData = (spender, amount) => encode(SELECTOR.approve, spender, amount);
 export const fillData = (id) => encode(SELECTOR.fill, id);
 export const cancelData = (id) => encode(SELECTOR.cancel, id);
 export const createDealData = ({ sellToken, sellAmount, buyToken, buyAmount, taker, expiry }) =>
@@ -164,10 +164,12 @@ export class Wallet {
   }
 
   /** Sends `{ to, data }` from the connected account on chain `chainId`, and returns the transaction's hash. */
-  async send(tx, chainId) {
+  async send(tx, chainId, account = this.account) {
     await this.readChain();
     if (this.chainId !== chainId) throw new Error("Your wallet changed network. Switch it back, then try again.");
-    return this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.account, ...tx }] });
+    const accounts = await this.provider.request({ method: "eth_accounts" });
+    if (!account || !same(accounts[0], account)) throw new Error("Your wallet account changed. Review the deal with the current account.");
+    return this.provider.request({ method: "eth_sendTransaction", params: [{ ...tx, from: account }] });
   }
 }
 
@@ -175,10 +177,12 @@ export class Wallet {
  * Sends `data` to `to` from the app's wallet, once a call has shown that the chain would take it, and waits until it
  * is mined. `stage(text)` tells the person where it stands. A transaction the chain would refuse is never sent.
  */
-export async function transact({ chain, wallet, config }, to, data, stage, what) {
-  await chain.call(to, data, wallet.account);
+export async function transact({ chain, wallet, config }, to, data, stage, what, account = wallet.account) {
+  const simulation = await chain.call(to, data, account);
+  if (data.startsWith(SELECTOR.approve) && simulation !== "0x" && !/^0x0{63}1$/i.test(simulation))
+    throw new Error("The token refused this approval.");
   stage(`${what}. Confirm it in your wallet.`);
-  const hash = await wallet.send({ to, data }, config.chainId);
+  const hash = await wallet.send({ to, data }, config.chainId, account);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
   const receipt = await chain.receipt(hash);
   if (receipt.status !== "0x1") throw new Error("The transaction failed on the chain, and nothing moved. Try again.");
@@ -187,16 +191,24 @@ export async function transact({ chain, wallet, config }, to, data, stage, what)
 
 /** Approves the deal contract for exactly `units` of `token`, the amount of one deal and never more. */
 export async function approveExactly(app, token, units, allowance, stage) {
+  const account = app.wallet.account;
   const data = approveData(app.config.contract, units);
   // Some tokens (USDT among them) refuse to change an approval that is not zero: it is set to zero first.
   if (allowance > 0n && (await app.chain.call(token.address, data, app.wallet.account).then(() => false, () => true))) {
-    await transact(app, token.address, approveData(app.config.contract, 0n), stage, `Setting your ${token.symbol} approval to zero first`);
+    await transact(app, token.address, approveData(app.config.contract, 0n), stage, `Setting your ${token.symbol} approval to zero first`, account);
   }
-  await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`);
+  await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`, account);
 }
 
 // Why the deal contract refused a call, in words: its errors by selector, with their arguments' words.
 const REASONS = {
+  "0x5afd89b3": () => "Existing NFT positions cannot be used for this deal.",
+  "0x0256965f": () => "Check the deal amounts, tokens, buyer and expiry.",
+  "0xdba16ce8": () => "The vesting schedule is invalid. Check the start, cliff and duration.",
+  "0xd5ef09ba": () => "This deal is no longer funded. Refresh to see its current state.",
+  "0xf908e418": () => "Switch to the wallet named for this action.",
+  "0x203d82d8": () => "This deal has expired. The seller can reclaim the allocation.",
+  "0x969bf728": () => "Nothing is available to claim at the current block.",
   "0x1f2a2005": () => "Both amounts must be more than zero.", // ZeroAmount()
   "0x201b580a": () => "The token you give and the token you get must be different.", // SameToken()
   "0xed8adeb1": () => "The deal must end in the future.", // ExpiryNotInFuture()

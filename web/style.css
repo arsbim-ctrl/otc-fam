@@ -104,3 +104,7 @@ input.mono { font-size: 13px; }
 .linkbox a { color: var(--accent); font-weight: 600; }
 .row { display: flex; gap: 8px; margin-top: 12px; }
 .row > * { flex: 1; }
+
+.field select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--ink); font: inherit; }
+.card > .button + .button, .card > .secondary, .field + .notice { margin-top: 10px; }
+.card .status[data-status="funded"], .card .status[data-status="vesting"] { color: var(--ok); background: var(--ok-bg); }

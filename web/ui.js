@@ -94,7 +94,7 @@ export function copyButton(text) {
   return h("button", { class: "secondary", type: "button", onclick: async (e) => {
     const button = e.currentTarget;
     const copied = navigator.clipboard ? await navigator.clipboard.writeText(text).then(() => true, () => false) : false;
-    button.textContent = copied ? "Link copied" : "Copying failed: copy the link from the address bar";
+    button.textContent = copied ? "Link copied" : "Select the link and copy it manually";
     setTimeout(() => (button.textContent = "Copy link"), 2500);
   } }, "Copy link");
 }

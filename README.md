@@ -9,8 +9,29 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** Round 1: the deal contract, the page that shows a deal from its link and fills it, and
-the deployment script. Nothing here has been reviewed for security, and nothing is deployed.
+## Funded deals and vesting (Round 2)
+
+Open `#/v2/new` to create a funded deal for one buyer. Review the allocation, quote, fees, treasury and expiry. Choose immediate delivery or a new vesting grant, starting at settlement or at a fixed timestamp. The cliff and total duration accept whole days or seconds. Funding requires an exact allocation-token approval. Once funding confirms, send the resulting `#/v2/d/<id>` link to the buyer.
+
+The buyer can read the link before connecting. At settlement the buyer pays the quote plus their fee, the seller receives the quote less their fee and the immutable treasury receives both fees. Each fee is `floor(quote / 200)` in the payment token’s smallest units. For a 6-decimal quote of 200.009999, the buyer pays 201.010048, the seller receives 199.009950 and the treasury receives 2.000098. An existing mismatched allowance requires a separate reset to zero before approving the displayed amount.
+
+Before settlement, only the seller can cancel and recover the full allocation, including after expiry. Settlement delivers tokens immediately or assigns the escrowed allocation to the buyer’s grant. The deal links to `#/v2/g/<id>`, which reads the beneficiary, custody, dates, vested, claimed and claimable amounts from the chain. Only the beneficiary may claim. Before the cliff, vested is zero. At the cliff, accrual since the start becomes available. The last claim pays the exact remainder. A fixed start keeps its timestamp even if settlement occurs later. There is no grant factory, administrator or sweep function.
+
+Use liquid, exact-transfer ERC-20 tokens. Existing locked positions and NFTs are unsupported. An ERC-20 can change behavior or freeze transfers after funding. The escrow checks both parties’ balance changes on every transfer. Symbols and addresses shown on the page are supplied by the token and deployment respectively.
+
+### Run locally
+
+Use Node.js 22 or newer. From the repository root:
+
+```sh
+npm ci
+npm run check:v2
+npm run build
+npx playwright install chromium
+node --test test/vesting-page.test.mjs
+```
+
+The browser test supplies fresh seller, buyer and beneficiary contexts, fixture tokens, a wallet and an in-process EVM. For a configured deployment, set `RPC_URL`, `DEPLOYER_KEY` and the treasury recipient `TREASURY` in the deployment environment and run `npm run deploy:v2`. Set the resulting address as `web/config.json`’s `contractV2` and configure its `chainId` and public `rpcUrl`. Rebuild and serve `dist/`. The legacy address remains in `contract` for `#/new` and `#/d/<id>`. Both addresses ship as unconfigured placeholders.
 
 ## What is in the repository
 
