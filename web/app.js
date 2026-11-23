@@ -41,10 +41,12 @@ async function start() {
   route();
 }
 
+const v2Configured = () => isAddress(app.config.contractV2) && !/^0x0{40}$/i.test(app.config.contractV2);
+
 function route() {
   page?.stop();
   if (location.hash.startsWith("#/v2/")) {
-    if (!isAddress(app.config.contractV2) || /^0x0{40}$/i.test(app.config.contractV2)) {
+    if (!v2Configured()) {
       app.main.replaceChildren(card(h("h1", {}, "V2 is not configured"), h("p", {}, "Set contractV2 in config.json to the deployed V2 address.")));
       page = null;
       return;
@@ -64,10 +66,13 @@ function route() {
 }
 
 function homePage() {
-  const number = h("input", { id: "deal-number", inputmode: "numeric", placeholder: "Deal number", autocomplete: "off" });
+  const number = h("input", { id: "deal-number", placeholder: "Deal number or V2 link", "aria-label": "Deal number or V2 link", autocomplete: "off" });
   const open = (e) => {
     e.preventDefault();
-    if (/^\d+$/.test(number.value.trim())) location.hash = `#/d/${number.value.trim()}`;
+    const value = number.value.trim();
+    const link = /^(?:https?:\/\/[^#\s]+)?(#\/v2\/d\/\d+)$/.exec(value);
+    if (link) location.hash = link[1];
+    else if (/^\d+$/.test(value)) location.hash = `#/d/${value}`;
   };
   document.title = "otc.fam: one deal, one link";
   app.main.replaceChildren(card(
@@ -75,7 +80,7 @@ function homePage() {
     h("p", { class: "lead" }, "Offer tokens for other tokens and send the link to the other side. They see what they pay and what they get, "
       + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
     h("a", { class: "button primary", href: "#/new" }, "Make a deal · legacy v1"),
-    app.config.contractV2 && h("a", { class: "button secondary", href: "#/v2/new" }, "Make a fee / vesting deal · v2"),
+    v2Configured() && h("a", { class: "button secondary", href: "#/v2/new" }, "Make a fee / vesting deal · v2"),
     h("form", { class: "row", onsubmit: open }, number, h("button", { class: "secondary", type: "submit" }, "Open"))));
   return { update() {}, stop() {} };
 }

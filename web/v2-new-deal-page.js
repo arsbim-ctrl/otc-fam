@@ -6,6 +6,8 @@ import { isAddress, parseAmount } from "./units.js";
 import { expirySeconds, fees, schedule } from "./vesting.js";
 import { economics, receiptView, tokenWarning, utc, updateArea } from "./v2-ui.js";
 
+const SECONDS_PER_DAY = 86_400n;
+
 export function newDealPageV2(app) {
   const { chain, wallet, config } = app;
   let live = true, busy = false, notice, terms, sell, buy, funds, created, read = 0;
@@ -27,8 +29,10 @@ export function newDealPageV2(app) {
     h("div", { class: "leg" }, input("buy-token", "Payment token address"), input("buy-amount", "Payment before fees", "", "0", { inputmode: "decimal" })),
     input("taker", "Designated buyer address"), input("expiry-hours", "Expires in hours (minimum 1 minute)", "24"),
     scheduleArea, summary, tokenWarning(), actions);
+  const schedulePreview = h("p", { class: "note", testid: "schedule-preview" });
   scheduleArea.append(input("fixed-start", "Fixed start UTC (empty: settlement block)", "", "2026-12-01T12:00:00Z"),
-    input("cliff-seconds", "Cliff in seconds", "2592000"), input("duration-seconds", "Duration in seconds", "7776000"));
+    input("cliff-seconds", "Cliff in days", "30", "", { inputmode: "numeric" }),
+    input("duration-seconds", "Duration in days", "90", "", { inputmode: "numeric" }), schedulePreview);
   form.classList.add("v2-card");
   app.main.replaceChildren(form);
   const text = key => field[key].value.trim();
@@ -38,10 +42,27 @@ export function newDealPageV2(app) {
     const seq = ++read;
     scheduleArea.hidden = delivery.value !== "1";
     terms = null;
+    schedulePreview.textContent = "";
     renderActions();
     let problem;
     try {
       if (delivery.value === "external" || text("existing-position")) throw new Error("Existing external vesting positions, revocable rights, screenshots and URLs are unsupported. Use a new token allocation. No wallet approval was requested.");
+      const mode = Number(delivery.value);
+      let fixedStart = 0n, cliffSeconds = 0n, durationSeconds = 0n;
+      if (mode) {
+        if (text("fixed-start")) {
+          if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(text("fixed-start")) || (!Number.isFinite(Date.parse(text("fixed-start"))) || new Date(Date.parse(text("fixed-start"))).toISOString().replace(".000Z", "Z") !== text("fixed-start"))) throw new Error(`Fixed start “${text("fixed-start")}”: use UTC YYYY-MM-DDTHH:mm:ssZ.`);
+          fixedStart = BigInt(Date.parse(text("fixed-start")) / 1000);
+        }
+        if (!["cliff-seconds", "duration-seconds"].every(k => /^\d+$/.test(text(k)))) throw new Error("Cliff and duration: enter whole days.");
+        cliffSeconds = BigInt(text("cliff-seconds")) * SECONDS_PER_DAY;
+        durationSeconds = BigInt(text("duration-seconds")) * SECONDS_PER_DAY;
+        const dates = schedule({ delivery: mode, fixedStart, cliffSeconds, durationSeconds }, 0n);
+        const timing = fixedStart
+          ? `Start ${utc(dates.start)}. Cliff ${utc(dates.cliff)}. End ${utc(dates.end)}.`
+          : "Start is set by the settlement block.";
+        schedulePreview.textContent = `${cliffSeconds / SECONDS_PER_DAY}-day cliff, ${durationSeconds / SECONDS_PER_DAY}-day duration. ${timing} Accrual begins at start. The cliff releases the accrued portion.`;
+      }
       const baseToken = text("sell-token"), quoteToken = text("buy-token"), buyer = text("taker");
       if (!isAddress(baseToken) || !isAddress(quoteToken)) throw new Error("Token addresses: enter both token contract addresses (0x and 40 hex digits).");
       if (same(baseToken, quoteToken)) throw new Error("Payment token: choose a different token from the allocation.");
@@ -50,23 +71,12 @@ export function newDealPageV2(app) {
       const allocation = parseAmount(text("sell-amount"), a.decimals, a.symbol), quote = parseAmount(text("buy-amount"), q.decimals, q.symbol);
       if (fees(quote).buyerTotal >= 1n << 256n) throw new Error("Payment before fees: lower the amount so the buyer total fits the token integer limit.");
       const seconds = expirySeconds(text("expiry-hours"));
-      const mode = Number(delivery.value);
-      let fixedStart = 0n, cliffSeconds = 0n, durationSeconds = 0n;
-      if (mode) {
-        if (text("fixed-start")) {
-          if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(text("fixed-start")) || (!Number.isFinite(Date.parse(text("fixed-start"))) || new Date(Date.parse(text("fixed-start"))).toISOString().replace(".000Z", "Z") !== text("fixed-start"))) throw new Error(`Fixed start “${text("fixed-start")}”: use UTC YYYY-MM-DDTHH:mm:ssZ.`);
-          fixedStart = BigInt(Date.parse(text("fixed-start")) / 1000);
-        }
-        if (!["cliff-seconds", "duration-seconds"].every(k => /^\d+$/.test(text(k)))) throw new Error("Cliff and duration: enter whole seconds.");
-        cliffSeconds = BigInt(text("cliff-seconds")); durationSeconds = BigInt(text("duration-seconds"));
-      }
       const t = { baseToken, quoteToken, buyer, allocation, quote, expiry: BigInt(now + seconds), delivery: mode, fixedStart, cliffSeconds, durationSeconds };
-      const dates = schedule(t, now);
+      schedule(t, now);
       const f = wallet?.account ? await Promise.all([chain.balanceOf(baseToken, wallet.account), chain.allowance(baseToken, wallet.account)]) : null;
       if (!live || seq !== read) return;
       [terms, sell, buy, funds] = [t, a, q, f];
-      summary.replaceChildren(h("p", {}, `${mode ? "New vesting allocation" : "Immediate delivery"}: ${amount(allocation, a)} to ${buyer}.`), economics(quote, q),
-        mode && h("p", {}, `${fixedStart ? `Start ${utc(dates.start)}; cliff ${utc(dates.cliff)}; end ${utc(dates.end)}` : `Start at settlement block; cliff ${cliffSeconds} seconds after start; end ${durationSeconds} seconds after start`}. Accrual begins at start; cliff releases the accrued portion.`));
+      summary.replaceChildren(h("p", {}, `${mode ? "New vesting allocation" : "Immediate delivery"}: ${amount(allocation, a)} to ${buyer}.`), economics(quote, q));
     } catch (e) { problem = explain(e); }
     if (!live || seq !== read) return;
     if (problem) summary.replaceChildren(h("p", { class: "notice warn", testid: "validation", role: "status" }, problem));

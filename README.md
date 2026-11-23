@@ -75,4 +75,6 @@ V2 prints only the deployed contract address on stdout. It never prints the envi
 
 Existing external positions (including Sablier), revocable rights, screenshots and URLs cannot be sold here. The form refuses those inputs before wallet approval. Grants are nontransferable. No broker share, admin rescue, upgrade, pause or beneficiary change exists.
 
+If a treasury fee is due and the treasury refuses or is blocked from receiving the payment token, settlement reverts on every attempt while that restriction is in place. If the restriction is permanent, the seller must cancel to recover the escrowed allocation.
+
 Rebasing, dishonest balance reporting, later token freezes or token upgrades can make a deal or grant unusable. No smart contract can prevent a token from changing its own behavior. Claims depend on on-chain seconds; the page polls latest blocks, so it may lag until the next block or refresh. A fixed start that passes before settlement requires cancellation and new terms. Accelerated transactions are followed by nonce across the latest 64 blocks; cancellations prompt a status refresh. Network receipts are subject to confirmation and reorganization; this UI does not implement a finality policy. Use local or testnet assets only.

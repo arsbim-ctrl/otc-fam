@@ -45,8 +45,15 @@ export function dealPageV2(app, idText) {
     if (!live || !d) return;
     const status = d.status === "funded" && BigInt(now) >= d.expiry ? "expired" : d.status;
     const mode = d.delivery ? "New vesting · funded grant" : "Immediate · tokens at settlement";
+    const statusLabel = {
+      funded: "Funded — allocation escrowed",
+      expired: "Expired — seller can refund",
+      cancelled: "Cancelled — allocation returned",
+      settled: !d.delivery ? "Settled — tokens delivered"
+        : grant?.claimed === d.allocation ? "Settled — fully claimed" : "Settled — vesting continues",
+    }[status];
     updateArea(content, h("div", {},
-      h("p", { class: `status ${status}`, testid: "deal-status", "data-status": status }, status === "settled" && d.delivery ? grant?.claimed === d.allocation ? "Settled · fully claimed" : "Settled · vesting continues" : status),
+      h("p", { class: `status ${status}`, testid: "deal-status", "data-status": status }, statusLabel),
       h("h2", { testid: "delivery-mode", class: `delivery ${d.delivery ? "new-vesting" : "immediate"}` }, mode),
       leg("Buyer total including fee", fees(d.quote).buyerTotal, quote, "pay"),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
@@ -62,6 +69,9 @@ export function dealPageV2(app, idText) {
   }
   function renderGrant() {
     const v = vesting(grant, now);
+    const time = BigInt(now), { start, cliff, end } = grant;
+    const position = timestamp => Number((timestamp - start) * 10_000n / (end - start)) / 100;
+    const cliffPosition = position(cliff);
     let timing;
     if (BigInt(now) < grant.cliff) timing = `Claiming becomes possible at ${utc(grant.cliff)} (subject to raw-unit rounding).`;
     else if (v.claimable === 0n && v.claimed < grant.allocation) {
@@ -73,13 +83,20 @@ export function dealPageV2(app, idText) {
     if (!grantArea.firstElementChild) {
       grantArea.append(h("section", { class: "vesting", "aria-label": "Vesting schedule" }, h("h2", {}, `Grant #${grant.id}`),
         h("dl", { class: "facts" }, fact("Start UTC", utc(grant.start)), fact("Cliff UTC", utc(grant.cliff)), fact("End UTC", utc(grant.end)), fact("Beneficiary", grant.beneficiary),
-          ...["vested", "claimed", "claimable", "locked", "beneficiary-balance"].map(k => fact(k === "beneficiary-balance" ? "Beneficiary wallet balance" : k, h("span", { testid: k })))),
-        h("progress", { max: "100", value: "0", "aria-label": "Allocation vested", testid: "vesting-timeline" }),
+          ...["vested", "claimed", "claimable", "locked", "beneficiary-balance"].map(k => fact(k === "beneficiary-balance" ? "Beneficiary wallet balance" : k[0].toUpperCase() + k.slice(1), h("span", { testid: k })))),
+        h("div", { class: "vesting-timeline" },
+          h("progress", { max: "100", value: "0", "aria-label": "Time elapsed in vesting schedule", testid: "vesting-timeline" }),
+          h("span", { class: `vesting-cliff${cliffPosition > 50 ? " near-end" : ""}`, style: `left: ${cliffPosition}%`, "aria-hidden": "true" }, "Cliff")),
+        h("p", { class: "hint", testid: "chain-now" }),
         h("p", { testid: "claim-timing", class: "hint" })));
     }
     for (const k of ["vested", "claimed", "claimable", "locked"]) grantArea.querySelector(`[data-testid="${k}"]`).textContent = amount(v[k], base);
     grantArea.querySelector('[data-testid="beneficiary-balance"]').textContent = amount(beneficiaryBalance, base);
-    grantArea.querySelector('progress').value = Number(v.vested * 10000n / grant.allocation) / 100;
+    const timeline = grantArea.querySelector("progress");
+    timeline.value = time <= start ? 0 : time >= end ? 100 : position(time);
+    const nowText = `Chain now: ${utc(time)}`;
+    timeline.setAttribute("aria-valuetext", `${nowText}. Cliff: ${utc(cliff)}.`);
+    grantArea.querySelector('[data-testid="chain-now"]').textContent = nowText;
     grantArea.querySelector('[data-testid="claim-timing"]').textContent = timing;
   }
   function renderActions() {
