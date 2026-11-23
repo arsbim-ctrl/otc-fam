@@ -35,6 +35,7 @@ contract OtcDeals is IOtcDeals {
     /// The id of the last deal created; the first deal is 1.
     uint256 private lastId;
     mapping(uint256 => Deal) private deals;
+    mapping(address token => uint256) private reserved;
     /// Set while createDeal, fill or cancel runs: a call back into any of them fails.
     bool private transient locked;
 
@@ -79,8 +80,8 @@ contract OtcDeals is IOtcDeals {
         emit DealFilled(id, msg.sender);
 
         _pull(deal.buyToken, msg.sender, deal.buyAmount);
-        _push(deal.buyToken, deal.maker, deal.buyAmount);
-        _push(deal.sellToken, msg.sender, deal.sellAmount);
+        _push(deal.buyToken, deal.maker, deal.buyAmount, true);
+        _push(deal.sellToken, msg.sender, deal.sellAmount, true);
     }
 
     /// @notice Withdraws deal `id`, open or expired, and gives its `sellAmount` back to the maker, its only caller.
@@ -92,7 +93,7 @@ contract OtcDeals is IOtcDeals {
         deal.status = Status.Cancelled;
         emit DealCancelled(id);
 
-        _push(deal.sellToken, deal.maker, deal.sellAmount);
+        _push(deal.sellToken, deal.maker, deal.sellAmount, false);
     }
 
     /// @notice Deal `id` as it stands; for an id no deal has, a deal of zeros with status None.
@@ -106,6 +107,8 @@ contract OtcDeals is IOtcDeals {
     /// maker less than the deal says.
     function _pull(address token, address from, uint256 amount) private {
         uint256 held = _balanceOf(token, address(this));
+        if (held < reserved[token]) revert InexactTransfer(token);
+        reserved[token] += amount;
         uint256 had = _balanceOf(token, from);
         _callToken(token, abi.encodeCall(IERC20Minimal.transferFrom, (from, address(this), amount)));
         if (_balanceOf(token, address(this)) != held + amount || _balanceOf(token, from) + amount != had) revert InexactTransfer(token);
@@ -113,9 +116,15 @@ contract OtcDeals is IOtcDeals {
 
     /// Gives `amount` of `token` from this contract to `to`, the only way a token goes out. This contract's balance
     /// must fall by exactly `amount`, so that no deal is ever paid out of another deal's tokens.
-    function _push(address token, address to, uint256 amount) private {
+    function _push(address token, address to, uint256 amount, bool settling) private {
         uint256 held = _balanceOf(token, address(this));
+        if (held < reserved[token]) revert InexactTransfer(token);
+        reserved[token] -= amount;
+        // Both legs of a swap must reach their recipient whole. Cancellation
+        // keeps the existing withdrawal path if the token now taxes its recipient.
+        uint256 receivedBefore = settling ? _balanceOf(token, to) : 0;
         _callToken(token, abi.encodeCall(IERC20Minimal.transfer, (to, amount)));
+        if (settling && _balanceOf(token, to) != receivedBefore + amount) revert InexactTransfer(token);
         if (_balanceOf(token, address(this)) + amount != held) revert InexactTransfer(token);
     }
 

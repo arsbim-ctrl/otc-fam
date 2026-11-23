@@ -154,6 +154,7 @@ export function newDealPage(app) {
     }
     if (t.pending) return action({ steps, step: 1, button: { label: "Looking up the tokens…" } });
     if (t.problem) return action({ steps, step: 1, button: { label: t.problem }, notice: s.notice });
+    const account = wallet.account;
     const f = fundsOf(t.sell.token), give = amount(t.sell.units, t.sell.token);
     if (!f) return action({ steps, step: 1, button: { label: `Checking your ${t.sell.token.symbol}…` } });
     if (f.error) return action({ steps, step: 1, button: { label: "Retry balance and approval", run: () => loadFunds(t.sell.token) },
@@ -163,22 +164,22 @@ export function newDealPage(app) {
         notice: { kind: "warn", text: `You give ${give}, and this wallet holds ${amount(f.balance, t.sell.token)}.` } });
     }
     if (f.allowance < t.sell.units) {
-      return action({ steps, step: 1, button: { label: `Approve ${give}`, run: () => approve(t, f) },
+      return action({ steps, step: 1, button: { label: `Approve ${give}`, run: () => approve(t, account) },
         hint: `This lets the deal contract take exactly ${give} from your wallet when you create the deal. Nothing moves yet.`, notice: s.notice });
     }
-    return action({ steps, step: 2, button: { label: "Create the deal", run: () => create(t) },
+    return action({ steps, step: 2, button: { label: "Create the deal", run: () => create(t, account) },
       hint: `Your ${give} move into the deal contract. They go to the other side when the deal is filled, or back to you if you cancel it.`, notice: s.notice });
   }
 
   const connect = () => act("Connecting…", 0, () => wallet.connect());
   const switchNetwork = () => act("Switching network…", 0, () => wallet.switchTo(config.chainId));
-  const approve = (t, f) => act(`Approving ${amount(t.sell.units, t.sell.token)}…`, 1, (stage) => approveExactly(app, t.sell.token, t.sell.units, f.allowance, stage));
-  const create = (t) => act("Creating the deal…", 2, async (stage) => {
+  const approve = (t, account) => act(`Approving ${amount(t.sell.units, t.sell.token)}…`, 1, (stage) => approveExactly(app, t.sell.token, t.sell.units, account, stage));
+  const create = (t, account) => act("Creating the deal…", 2, async (stage) => {
     const start = Math.max(Date.now() / 1000, await chain.now());
     const deal = { sellToken: t.sell.token.address, sellAmount: t.sell.units, buyToken: t.buy.token.address, buyAmount: t.buy.units,
       taker: t.taker.address, expiry: BigInt(Math.floor(start + t.expiry.hours * 3600)) };
     const what = `Creating the deal: ${amount(deal.sellAmount, t.sell.token)} for ${amount(deal.buyAmount, t.buy.token)}`;
-    const id = createdId(await transact(app, config.contract, createDealData(deal), stage, what), config.contract);
+    const id = createdId(await transact(app, config.contract, createDealData(deal), stage, what, account), config.contract);
     s.created = { ...deal, id, link: `${location.href.split("#")[0]}#/d/${id}`, sell: t.sell.token, buy: t.buy.token };
   });
 

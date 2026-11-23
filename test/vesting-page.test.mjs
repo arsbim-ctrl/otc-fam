@@ -16,7 +16,7 @@ test("a seller funds, a buyer settles and a returning beneficiary claims from fr
   const payment = await deploy(chain, issuer, EdgeToken, ["USD", 6, 4]);
   await base.as(issuer).mint(seller, 300n);
   await payment.as(issuer).mint(buyer, 201_009_999n);
-  await payment.as(buyer).approve(deals.address, (1n << 256n) - 1n);
+  await payment.as(buyer).approve(deals.address, 1n);
   const site = await serve({ chain, deals });
   const config = { contractV2: deals.address, contract: "0x" + "0".repeat(40), chainId: CHAIN_ID, rpcUrl: "/rpc" };
   const fresh = (hash, account, check, wrongNetwork = false) => {
@@ -47,7 +47,18 @@ test("a seller funds, a buyer settles and a returning beneficiary claims from fr
       await press(p, "Review terms and fees");
       assert.equal(await p.getByTestId("pay-amount").textContent(), "201.010048");
       await press(p, "Approve 300 BASE");
+      // Lose the receipt lookup after broadcast. Recover after leaving the
+      // page and reloading with a fresh JS heap, without another signature.
+      await p.route("**/rpc", route => route.request().postDataJSON().method === "eth_getTransactionReceipt"
+        ? route.abort() : route.continue());
       await press(p, "Fund deal with 300 BASE");
+      const recovery = await p.getByTestId("recovery-link").getAttribute("href");
+      assert.match(recovery, /#\/v2\/tx\/0x[0-9a-f]{64}$/i);
+      await p.goto(site.url + "/?funded#/v2/new");
+      await p.reload();
+      await p.unroute("**/rpc");
+      await p.getByRole("link", { name: /^Funding transaction/ }).click();
+      assert.equal(p.url(), recovery);
       dealLink = new URL(await p.getByTestId("deal-link").getAttribute("href")).hash;
     });
     await fresh(dealLink, null, async p => {

@@ -7,7 +7,7 @@ export function dealPage(app, idText) {
   const { config, chain, wallet } = app;
   const id = /^\d{1,78}$/.test(idText) && BigInt(idText) < 2n ** 256n ? BigInt(idText) : null;
   const s = { deal: null, sell: null, buy: null, chainTime: 0, funds: null, failed: null, busy: null, notice: null, done: null };
-  let live = true, reads = 0, expiryTimer;
+  let live = true, reads = 0, expiryTimer, renderedAccount;
   const poll = setInterval(() => s.busy || load(), 5000);
   const onFocus = () => s.busy || load();
   addEventListener("focus", onFocus);
@@ -41,7 +41,9 @@ export function dealPage(app, idText) {
   function render() {
     if (!live) return;
     const next = view();
-    if (!app.main.firstElementChild?.isEqualNode(next)) app.main.replaceChildren(next); // unchanged: leave it, and any text selected in it
+    // An identical button may now belong to a different signer.
+    if (renderedAccount !== wallet?.account || !app.main.firstElementChild?.isEqualNode(next)) app.main.replaceChildren(next);
+    renderedAccount = wallet?.account;
     clearTimeout(expiryTimer);
     const left = s.deal?.status === "open" ? Number(s.deal.expiry) - now() : 0;
     if (left > 0 && left < 86_400) expiryTimer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time
@@ -181,22 +183,22 @@ export function dealPage(app, idText) {
         notice: { kind: "warn", text: `To fill this deal you pay ${pay}, and this wallet holds ${amount(f.balance, buy)}.` } });
     }
     if (f.allowance < d.buyAmount) {
-      return action({ steps, step: 1, button: { label: `Approve ${pay}`, run: approve },
+      return action({ steps, step: 1, button: { label: `Approve ${pay}`, run: () => approve(me) },
         hint: `This lets the deal contract take exactly ${pay} from your wallet, and only when you fill. Nothing moves yet.`, notice: s.notice });
     }
-    return action({ steps, step: 2, button: { label: `Fill: pay ${pay}`, run: fill },
+    return action({ steps, step: 2, button: { label: `Fill: pay ${pay}`, run: () => fill(me) },
       hint: `One transaction: your ${pay} go to the maker and their ${get} come to you. Both happen, or nothing moves.`, notice: s.notice });
   }
 
   const connect = () => act("Connecting…", 0, () => wallet.connect());
   const switchNetwork = () => act("Switching network…", 0, () => wallet.switchTo(config.chainId));
-  const approve = () => act(`Approving ${amount(s.deal.buyAmount, s.buy)}…`, 1, (stage) => approveExactly(app, s.buy, s.deal.buyAmount, s.funds.allowance, stage));
-  const fill = () => act("Filling the deal…", 2, async (stage) => {
+  const approve = (account) => act(`Approving ${amount(s.deal.buyAmount, s.buy)}…`, 1, (stage) => approveExactly(app, s.buy, s.deal.buyAmount, account, stage));
+  const fill = (account) => act("Filling the deal…", 2, async (stage) => {
     const what = `Paying ${amount(s.deal.buyAmount, s.buy)} for ${amount(s.deal.sellAmount, s.sell)}`;
-    const receipt = await transact(app, config.contract, fillData(id), stage, what);
+    const receipt = await transact(app, config.contract, fillData(id), stage, what, account);
     s.done = { filled: true, hash: receipt.transactionHash };
   });
-  const cancel = () => act("Cancelling…", null, (stage) => transact(app, config.contract, cancelData(id), stage, "Cancelling the deal"));
+  const cancel = () => act("Cancelling…", null, (stage) => transact(app, config.contract, cancelData(id), stage, "Cancelling the deal", s.deal.maker));
 
   load();
   return {

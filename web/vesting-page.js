@@ -1,6 +1,7 @@
-import { cancelData, explain, fillData, same, transact } from "./eth.js";
+import { fundingHistory, fundingReceipt, rememberFunding } from "./funding-receipt.js";
+import { broadcast, cancelData, explain, fillData, same, transact } from "./eth.js";
 import { action, amount, card, copyButton, fact, h, leg, networkName, NO_WALLET, when } from "./ui.js";
-import { claimData, createData, feeFor, fundedId, readTerms, spendingStep } from "./vesting.js";
+import { claimData, createData, feeFor, readTerms, spendingStep } from "./vesting.js";
 
 const linkTo = (type, id) => location.href.split("#")[0] + "#/v2/" + type + "/" + id;
 const link = (text, href, testid) => h("a", { class: "button secondary", href, testid }, text);
@@ -72,7 +73,7 @@ export function vestingPage(app, kind, rawId) {
   const { main, wallet, config, chain } = app;
   const form = kind === "new" && sellerForm();
   const id = /^[1-9]\d{0,77}$/.test(rawId) && BigInt(rawId) < (1n << 256n) ? BigInt(rawId) : null;
-  let review, seller, created, treasury, message, busy, active = true, generation = 0;
+  let review, seller, submitted, treasury, message, busy, active = true, generation = 0;
   const net = networkName(config.chainId);
   document.title = (form ? "Create a funded deal" : kind === "g" ? "Vesting grant" : "Funded deal") + " · otc.fam";
   const button = (label, run, hint) => action({ button: { label, run }, hint, notice: message && { kind: "error", text: message } });
@@ -116,31 +117,58 @@ export function vestingPage(app, kind, rawId) {
         "Only this amount can be spent.") + " Spender: " + config.contract);
   }
 
+  function historyLinks() {
+    return fundingHistory(config, wallet?.account).map(hash => link("Funding transaction " + hash, linkTo("tx", hash)));
+  }
+
   async function sellerView(now) {
-    if (created) {
-      const url = linkTo("d", created);
-      return card(title("Deal #" + created, "Funded"), h("p", { class: "lead" }, "Your allocation is in escrow. Send this link to the named buyer."),
-        h("div", { class: "linkbox" }, h("a", { href: url, testid: "deal-link" }, url)), copyButton(url), link("Open funded deal", url));
-    }
     if (!review || !same(seller, wallet?.account)) {
       review = null;
       const controls = form.fields.delivery.value === "position" ? button("Choose a supported delivery", null) : walletAction() || change("Review terms and fees", async () => {
         seller = wallet.account;
         review = await readTerms(form.values(), chain, seller);
       });
-      form.controls.replaceChildren(controls);
+      form.controls.replaceChildren(controls, ...historyLinks());
       return form.element;
     }
     const t = review;
     const expired = t.expiry <= now || (t.fixedStart !== 0n && t.fixedStart <= now);
     const controls = walletAction() || (expired ? button("Review dates again", null, "A reviewed date has passed. Edit terms to update it.") :
       await spend(t.base, t.allocation, seller, "Fund deal with " + amount(t.allocation, t.base), async stage => {
-        created = fundedId(await transact(app, config.contract, createData(t), stage, "Funding the allocation", seller), config.contract);
+        submitted = await broadcast(app, config.contract, createData(t), stage, "Funding the allocation", seller);
+        rememberFunding(config, seller, submitted);
+        if (active) {
+          main.replaceChildren(recoveryCard(submitted, "Pending"));
+          location.hash = "#/v2/tx/" + submitted;
+        }
       }));
     return card(h("h1", {}, "Review funded offer"), h("p", { class: "lead" }, "Funding moves the full allocation into escrow. You can cancel until the buyer settles."),
       ...summary({ ...t, seller }, now, treasury), controls, h("button", { class: "secondary", type: "button", onclick: () => {
         if (!busy) { review = null; message = null; refresh(); }
       } }, "Edit terms"));
+  }
+
+  async function receiptView(hash) {
+    let receipt, error;
+    try {
+      if (!treasury) treasury = await chain.deployment(config.chainId);
+      receipt = await fundingReceipt(chain, hash);
+    } catch (e) { error = explain(e); }
+    if (receipt?.state === "Funded") {
+      const dealUrl = linkTo("d", receipt.id);
+      return card(title("Deal #" + receipt.id, "Funded"), h("p", { class: "lead" }, "Funding confirmed. Send the deal link to the named buyer."),
+        h("div", { class: "linkbox" }, h("a", { href: dealUrl, testid: "deal-link" }, dealUrl)), copyButton(dealUrl));
+    }
+    return recoveryCard(hash, receipt?.state ?? "Checking", error);
+  }
+
+  function recoveryCard(hash, state, error) {
+    const url = linkTo("tx", hash);
+    return card(title("Funding transaction", state),
+      h("p", { class: "lead" }, error || (state === "Failed" ? "Funding reverted. You can create another offer." :
+        "Waiting for confirmation. Save this link to recover the deal number.")),
+      h("div", { class: "linkbox" }, h("a", { href: url, testid: "recovery-link" }, url)),
+      copyButton(url), state === "Failed" && link("Create a deal", "#/v2/new"));
   }
 
   async function dealView(block, now) {
@@ -199,17 +227,22 @@ export function vestingPage(app, kind, rawId) {
     const version = ++generation;
     let element;
     try {
-      if (!treasury) treasury = await chain.deployment(config.chainId);
-      const block = await chain.rpc("eth_getBlockByNumber", ["latest", false]);
-      const now = Number(block.timestamp);
-      element = form ? await sellerView(now) : !id ? missing() : kind === "g" ? await grantView(block.number, now) : await dealView(block.number, now);
+      if (kind === "tx" || submitted) {
+        element = await receiptView(submitted || rawId);
+      } else {
+        if (!treasury) treasury = await chain.deployment(config.chainId);
+        const block = await chain.rpc("eth_getBlockByNumber", ["latest", false]);
+        const now = Number(block.timestamp);
+        element = form ? await sellerView(now) : !id ? missing() : kind === "g" ? await grantView(block.number, now) : await dealView(block.number, now);
+      }
     } catch (error) {
       element = card(h("h1", {}, "Could not read this page"), h("p", { class: "notice error" }, explain(error)),
-        h("button", { class: "secondary", onclick: refresh }, "Try again"));
+        h("button", { class: "secondary", onclick: refresh }, "Try again"), ...(form ? historyLinks() : []));
     }
     if (active && version === generation && main.firstElementChild !== element) main.replaceChildren(element);
   }
-  main.replaceChildren(card(h("p", { class: "loading" }, "Reading the funded deal contract…")));
+  main.replaceChildren(kind === "tx" ? recoveryCard(rawId, "Pending") :
+    card(h("p", { class: "loading" }, "Reading the funded deal contract…")));
   if (form) form.fields.delivery.addEventListener("change", refresh);
   refresh();
   const timer = setInterval(() => { if (!form || review) refresh(); }, 5000);

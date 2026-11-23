@@ -10,7 +10,7 @@ import { ROOT } from "../.launchpad/checks/round-1/lib/entry.mjs";
 import { ANYONE, artifacts, STATUS, world } from "../.launchpad/checks/round-1/world.mjs";
 
 const { EdgeToken } = compile(ROOT, "test/tokens/EdgeToken.sol");
-const KIND = { Plain: 0, Fee: 1, FeeOnTop: 2, False: 3, Reset: 4 };
+const KIND = { Plain: 0, Fee: 1, FeeOnTop: 2, False: 3, Reset: 4, OutgoingFee: 5 };
 const contractErrors = new Interface(artifacts().entry.abi);
 
 /** A world with an EdgeToken of `kind`, of which the maker, the taker and the third person hold a million. */
@@ -65,6 +65,41 @@ test("a token that starts taking fees once deals hold it never pays one deal out
   assert.equal(await token.read.balanceOf(w.deals.address), 1000n);
   await w.deals.as(w.other).cancel(2);
   assert.equal(await token.read.balanceOf(w.deals.address), 0n);
+});
+
+test("legacy fill requires a fully backed pool and exact delivery to the taker", async () => {
+  const { w, token } = await worldWith("Plain", "EDGE");
+  await token.as(w.maker).approve(w.deals.address, 2000n);
+  const terms = await w.terms({ sellToken: token.address, sellAmount: 1000n });
+  await w.create(w.maker, terms);
+  await w.create(w.maker, terms);
+  await w.approve(w.taker, w.bravo, terms.buyAmount);
+  const buyerBefore = await token.read.balanceOf(w.taker);
+  const sellerBefore = await w.bravo.read.balanceOf(w.maker);
+  await token.as(w.deployer).setKind(KIND.Fee);
+  assert.equal(await revertsWith(w.deals.as(w.taker).fill(1)), "InexactTransfer");
+  assert.equal(await token.read.balanceOf(w.taker), buyerBefore);
+  assert.equal(await w.bravo.read.balanceOf(w.maker), sellerBefore);
+  assert.equal((await w.deals.read.getDeal(1)).status, STATUS.Open);
+  await token.as(w.deployer).setKind(KIND.Plain);
+  await token.as(w.deployer).burn(w.deals.address, 1n);
+  assert.equal(await revertsWith(w.deals.as(w.taker).fill(1)), "InexactTransfer");
+  assert.equal(await revertsWith(w.deals.as(w.maker).cancel(2)), "InexactTransfer");
+  await token.as(w.deployer).mint(w.deals.address, 1n);
+  await w.deals.as(w.taker).fill(1);
+  assert.equal(await token.read.balanceOf(w.taker), buyerBefore + 1000n);
+  await w.deals.as(w.maker).cancel(2);
+});
+
+test("legacy fill rolls back when a payment token taxes only the outgoing leg to the maker", async () => {
+  const { w, token } = await worldWith("OutgoingFee", "PAY");
+  const id = await w.offer({ buyToken: token.address, buyAmount: 1000n });
+  await token.as(w.taker).approve(w.deals.address, 1000n);
+  const makerBefore = await token.read.balanceOf(w.maker);
+  assert.equal(await revertsWith(w.deals.as(w.taker).fill(id)), "InexactTransfer");
+  assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Open);
+  assert.equal(await token.read.balanceOf(w.maker), makerBefore);
+  assert.equal(await token.read.allowance(w.taker, w.deals.address), 1000n);
 });
 
 test("a token that answers false moves nothing: it cannot be sold, and a fill paid with it fails and changes no balance", async () => {

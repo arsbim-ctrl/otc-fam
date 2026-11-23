@@ -134,11 +134,14 @@ export class Wallet {
     this.provider = provider;
     this.account = null;
     this.chainId = null;
+    this.revision = 0;
     provider.on?.("accountsChanged", (accounts) => {
+      this.revision++;
       this.account = accounts[0]?.toLowerCase() ?? null;
       onChange();
     });
     provider.on?.("chainChanged", (chainId) => {
+      this.revision++;
       this.chainId = Number(chainId);
       onChange();
     });
@@ -164,40 +167,80 @@ export class Wallet {
   }
 
   /** Sends `{ to, data }` from the connected account on chain `chainId`, and returns the transaction's hash. */
-  async send(tx, chainId, account = this.account) {
-    await this.readChain();
-    if (this.chainId !== chainId) throw new Error("Your wallet changed network. Switch it back, then try again.");
-    const accounts = await this.provider.request({ method: "eth_accounts" });
-    if (!account || !same(accounts[0], account)) throw new Error("Your wallet account changed. Review the deal with the current account.");
-    return this.provider.request({ method: "eth_sendTransaction", params: [{ ...tx, from: account }] });
+  async send(tx, chainId, account = this.account, revision = this.revision) {
+    const [accounts, network] = await Promise.all([
+      this.provider.request({ method: "eth_accounts" }),
+      this.provider.request({ method: "eth_chainId" }),
+    ]);
+    if (Number(network) !== chainId || this.chainId !== chainId) throw new Error("Your wallet changed network. Switch it back, then try again.");
+    if (!account || !same(accounts[0], account) || !same(this.account, account) || revision !== this.revision)
+      throw new Error("Your wallet changed. Review the deal with the current account.");
+    // The signer must also enforce the network if it changes while its prompt is open.
+    return this.provider.request({ method: "eth_sendTransaction", params: [{ ...tx, from: account, chainId: "0x" + chainId.toString(16) }] });
   }
 }
 
-/**
- * Sends `data` to `to` from the app's wallet, once a call has shown that the chain would take it, and waits until it
- * is mined. `stage(text)` tells the person where it stands. A transaction the chain would refuse is never sent.
- */
-export async function transact({ chain, wallet, config }, to, data, stage, what, account = wallet.account) {
+/** Simulate with the reviewed signer, then return its broadcast hash immediately. */
+export async function broadcast({ chain, wallet, config }, to, data, stage, what, account = wallet.account) {
+  const revision = wallet.revision;
   const simulation = await chain.call(to, data, account);
-  if (data.startsWith(SELECTOR.approve) && simulation !== "0x" && !/^0x0{63}1$/i.test(simulation))
+  if (data.startsWith(SELECTOR.approve) && !approvalAccepted(simulation))
     throw new Error("The token refused this approval.");
   stage(`${what}. Confirm it in your wallet.`);
-  const hash = await wallet.send({ to, data }, config.chainId, account);
+  return wallet.send({ to, data }, config.chainId, account, revision);
+}
+
+export async function transact(app, to, data, stage, what, account = app.wallet.account) {
+  const hash = await broadcast(app, to, data, stage, what, account);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
-  const receipt = await chain.receipt(hash);
+  const receipt = await app.chain.receipt(hash);
   if (receipt.status !== "0x1") throw new Error("The transaction failed on the chain, and nothing moved. Try again.");
   return receipt;
 }
 
-/** Approves the deal contract for exactly `units` of `token`, the amount of one deal and never more. */
-export async function approveExactly(app, token, units, allowance, stage) {
-  const account = app.wallet.account;
-  const data = approveData(app.config.contract, units);
-  // Some tokens (USDT among them) refuse to change an approval that is not zero: it is set to zero first.
-  if (allowance > 0n && (await app.chain.call(token.address, data, app.wallet.account).then(() => false, () => true))) {
-    await transact(app, token.address, approveData(app.config.contract, 0n), stage, `Setting your ${token.symbol} approval to zero first`, account);
+const localApprovals = new Map();
+const approvalAccepted = result => result === "0x" || /^0x0{63}1$/i.test(result);
+
+/** Return the next approval value, or null when another deal's shared allowance suffices. */
+export async function approvalValue(app, token, required, account, allowance) {
+  if (allowance >= required) return null;
+  if (allowance > 0n) {
+    try {
+      const answer = await app.chain.call(token.address, approveData(app.config.contract, required), account);
+      if (!approvalAccepted(answer)) return 0n;
+    } catch (error) {
+      if (!revertData(error) && error.code !== 3 && !/revert/i.test(error.message)) throw error;
+      return 0n;
+    }
   }
-  await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`, account);
+  return required;
+}
+
+/** Re-read the shared allowance under the same origin-wide lock in every tab.
+ * Legacy callers permit both steps. V2 runs only the step the user reviewed. */
+export async function approveExactly(app, token, units, account, stage, reviewedValue) {
+  const { chain, config } = app;
+  const current = () => chain.allowance(token.address, account);
+  const apply = async () => {
+    let value = await approvalValue(app, token, units, account, await current());
+    if (value === null || (reviewedValue !== undefined && reviewedValue !== value)) return;
+    if (value === 0n) {
+      await transact(app, token.address, approveData(config.contract, 0n), stage, `Setting your ${token.symbol} approval to zero first`, account);
+      if (reviewedValue !== undefined) return;
+      value = await approvalValue(app, token, units, account, await current());
+      if (value !== units) return;
+    }
+    await transact(app, token.address, approveData(config.contract, units), stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`, account);
+  };
+  const key = ["otc-allowance", config.chainId, config.contract, account, token.address].join(":").toLowerCase();
+  if (globalThis.navigator?.locks) return navigator.locks.request(key, apply);
+  // In contexts without Web Locks, serialize within this page and still read
+  // the on-chain allowance before acting on a button from any other context.
+  const previous = localApprovals.get(key) ?? Promise.resolve();
+  const pending = previous.then(apply, apply);
+  localApprovals.set(key, pending);
+  try { await pending; }
+  finally { if (localApprovals.get(key) === pending) localApprovals.delete(key); }
 }
 
 // Why the deal contract refused a call, in words: its errors by selector, with their arguments' words.

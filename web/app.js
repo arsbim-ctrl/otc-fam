@@ -42,7 +42,7 @@ async function start() {
 function route() {
   page?.stop();
   const deal = /^#\/d\/(.*)$/.exec(location.hash);
-  const v2 = /^#\/v2\/(new|d|g)(?:\/([^/]*))?$/.exec(location.hash);
+  const v2 = /^#\/v2\/(new|d|g|tx)(?:\/([^/]*))?$/.exec(location.hash);
   const footer = document.getElementById("footer");
   if (v2) {
     const contract = app.config.contractV2;

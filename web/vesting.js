@@ -1,5 +1,5 @@
 // V2 uses static ABI tuples. Amounts stay in raw units through review, approval and submission.
-import { Chain, address, approveData, encode, same, transact, uint, words, ZERO_ADDRESS } from "./eth.js";
+import { Chain, address, approveExactly, approvalValue, encode, same, uint, words, ZERO_ADDRESS } from "./eth.js";
 import { isAddress, parseAmount } from "./units.js";
 
 export const feeFor = quote => quote / 200n;
@@ -101,17 +101,13 @@ export async function readTerms(form, chain, seller) {
   return { baseToken, quoteToken, buyer, allocation, quote, expiry, delivery, fixedStart, cliffSeconds, durationSeconds, base, payment };
 }
 
-// A nonzero mismatched allowance always gets its own explicit reset. This also
-// removes a prior unlimited approval and works for tokens requiring zero first.
 export async function spendingStep(app, token, required, account) {
   if (required === MAX) return { kind: "unlimited" };
-  const { chain, config } = app;
+  const { chain } = app;
   const [balance, allowance] = await Promise.all([chain.balanceOf(token.address, account), chain.allowance(token.address, account)]);
   if (balance < required) return { kind: "short", balance };
-  if (allowance === required) return { kind: "ready" };
-  const value = allowance === 0n ? required : 0n;
-  return { kind: value === 0n ? "reset" : "approve", value, allowance, run: async stage => {
-    await transact(app, token.address, approveData(config.contract, value), stage, value === 0n ? "Resetting the previous allowance" : "Approving the exact amount", account);
-    if (await chain.allowance(token.address, account) !== value) throw new Error("The token did not set the requested allowance. Review the token before continuing.");
-  } };
+  const value = await approvalValue(app, token, required, account, allowance);
+  if (value === null) return { kind: "ready" };
+  return { kind: value === 0n ? "reset" : "approve", allowance,
+    run: stage => approveExactly(app, token, required, account, stage, value) };
 }

@@ -4,8 +4,17 @@ pragma solidity ^0.8.28;
 import {IOtcDealsV2} from "./IOtcDealsV2.sol";
 import {IERC20Minimal} from "./OtcDeals.sol";
 
-/// Funded allocations and settled grants share a custodian. Each allocation can
-/// leave only through cancellation, immediate settlement, or beneficiary claims.
+/// Passive, shared grant custody. V2 alone accounts for grants and authorizes claims.
+contract GrantCustody {
+    address private immutable deals = msg.sender;
+
+    function pay(address token, address beneficiary, uint256 amount) external returns (bool, bytes memory) {
+        require(msg.sender == deals);
+        return token.call(abi.encodeCall(IERC20Minimal.transfer, (beneficiary, amount)));
+    }
+}
+
+/// Funded deals are held here until cancelled, delivered, or transferred into grant custody.
 contract OtcDealsV2 is IOtcDealsV2 {
     struct Deal {
         address seller;
@@ -15,6 +24,9 @@ contract OtcDealsV2 is IOtcDealsV2 {
     }
 
     address public immutable treasury;
+    GrantCustody private immutable vault;
+    // Sum of liabilities for each token held by escrow or grant custody.
+    mapping(address holder => mapping(address token => uint256)) private reserved;
     uint256 private nextId;
     mapping(uint256 => Deal) private deals;
     mapping(uint256 => Grant) private grants;
@@ -32,7 +44,8 @@ contract OtcDealsV2 is IOtcDealsV2 {
     error InexactTransfer(address token);
 
     constructor(address recipient) {
-        if (recipient == address(0) || recipient == address(this)) revert InvalidTerms();
+        vault = new GrantCustody();
+        if (recipient == address(vault) || recipient == address(0) || recipient == address(this)) revert InvalidTerms();
         treasury = recipient;
     }
 
@@ -44,7 +57,7 @@ contract OtcDealsV2 is IOtcDealsV2 {
     }
 
     function createDeal(Terms calldata t) external guarded returns (uint256 id) {
-        if (t.buyer == address(0) || t.buyer == address(this) || t.buyer == msg.sender ||
+        if (t.buyer == address(0) || t.buyer == address(this) || t.buyer == address(vault) || t.buyer == msg.sender ||
             t.baseToken == t.quoteToken || t.baseToken.code.length == 0 || t.quoteToken.code.length == 0 ||
             t.allocation == 0 || t.quote == 0 || t.quote > type(uint256).max - t.quote / 200 ||
             t.expiry <= block.timestamp) revert InvalidTerms();
@@ -74,22 +87,23 @@ contract OtcDealsV2 is IOtcDealsV2 {
         if (block.timestamp >= t.expiry) revert Expired();
         d.status = Status.Settled;
 
+        if (t.delivery == Delivery.Immediate) {
+            move(t.baseToken, address(this), t.buyer, t.allocation);
+        } else {
+            // A deal has at most one grant, so its id is also a unique grant id.
+            move(t.baseToken, address(this), address(vault), t.allocation);
+            uint64 start = t.fixedStart == 0 ? uint64(block.timestamp) : t.fixedStart;
+            d.grantId = id;
+            grants[id] = Grant(id, t.baseToken, t.buyer, address(vault), t.allocation,
+                start, start + t.cliffSeconds, start + t.durationSeconds, 0);
+            emit GrantCreated(id, id, t.buyer);
+        }
         // Round each side independently, in quote-token base units.
         uint256 fee = t.quote / 200;
         move(t.quoteToken, msg.sender, address(this), t.quote + fee);
         move(t.quoteToken, address(this), d.seller, t.quote - fee);
         if (fee != 0) move(t.quoteToken, address(this), treasury, fee * 2);
 
-        if (t.delivery == Delivery.Immediate) {
-            move(t.baseToken, address(this), t.buyer, t.allocation);
-        } else {
-            // A deal has at most one grant, so its id is also a unique grant id.
-            uint64 start = t.fixedStart == 0 ? uint64(block.timestamp) : t.fixedStart;
-            d.grantId = id;
-            grants[id] = Grant(id, t.baseToken, t.buyer, address(this), t.allocation,
-                start, start + t.cliffSeconds, start + t.durationSeconds, 0);
-            emit GrantCreated(id, id, t.buyer);
-        }
         emit DealSettled(id, d.grantId, fee, fee);
     }
 
@@ -132,7 +146,7 @@ contract OtcDealsV2 is IOtcDealsV2 {
         uint256 due = claimable(id);
         if (due == 0) revert NothingToClaim();
         g.claimed += due;
-        move(g.token, address(this), g.beneficiary, due);
+        move(g.token, g.custodian, g.beneficiary, due);
         emit GrantClaimed(id, g.beneficiary, due);
     }
 
@@ -151,10 +165,25 @@ contract OtcDealsV2 is IOtcDealsV2 {
         IERC20Minimal asset = IERC20Minimal(token);
         uint256 beforeFrom = asset.balanceOf(from);
         uint256 beforeTo = asset.balanceOf(to);
-        bytes memory data = from == address(this)
-            ? abi.encodeCall(asset.transfer, (to, value))
-            : abi.encodeCall(asset.transferFrom, (from, to, value));
-        (bool ok, bytes memory result) = token.call(data);
+        if (from == address(this) || from == address(vault)) {
+            if (beforeFrom < reserved[from][token]) revert InexactTransfer(token);
+            reserved[from][token] -= value;
+        }
+        if (to == address(this) || to == address(vault)) {
+            if (beforeTo < reserved[to][token]) revert InexactTransfer(token);
+            reserved[to][token] += value;
+        }
+
+        bool ok;
+        bytes memory result;
+        if (from == address(vault)) {
+            (ok, result) = vault.pay(token, to, value);
+        } else {
+            bytes memory data = from == address(this)
+                ? abi.encodeCall(asset.transfer, (to, value))
+                : abi.encodeCall(asset.transferFrom, (from, to, value));
+            (ok, result) = token.call(data);
+        }
         if (!ok || (result.length != 0 && !abi.decode(result, (bool)))) revert TransferFailed(token);
         if (asset.balanceOf(from) + value != beforeFrom || asset.balanceOf(to) != beforeTo + value)
             revert InexactTransfer(token);
