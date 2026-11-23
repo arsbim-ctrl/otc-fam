@@ -42,13 +42,41 @@ export class ChainV2 extends Chain {
     const grant = deal.grantId ? await this.grant(deal.grantId, block.number) : null;
     return { deal, grant, time: Number(BigInt(block.timestamp)) };
   }
-  // Settlement, cancellation and claim receipts, read back from contract events so they survive a reload.
+  // First block to read events from: config contractV2Block if given, else the first block with code at the
+  // contract, found by binary search with eth_getCode and cached. Never one request from block 0.
+  async startBlock(latest) {
+    if (this.fromBlock === undefined) {
+      let low = 0n, high = latest;
+      while (low < high) {
+        const mid = (low + high) / 2n;
+        if (((await this.rpc("eth_getCode", [this.contract, `0x${mid.toString(16)}`])) ?? "0x").length > 2) high = mid; else low = mid + 1n;
+      }
+      this.fromBlock = low;
+    }
+    return this.fromBlock;
+  }
+  // Funding, settlement, cancellation and claim receipts, read back from contract events so they survive a reload.
+  // Logs are read in windows of at most 2,000 blocks; a node that refuses a range gets a smaller window.
   async history(deal) {
-    const logs = (topics) => this.rpc("eth_getLogs", [{ address: this.contract, fromBlock: "0x0", toBlock: "latest", topics }]);
-    const found = [...await logs([[SETTLED, CANCELLED], `0x${word(deal.id)}`]), ...(deal.grantId ? await logs([CLAIMED, `0x${word(deal.grantId)}`]) : [])]
-      .filter(l => !l.removed).sort((a, b) => Number(BigInt(a.blockNumber) - BigInt(b.blockNumber)) || Number(BigInt(a.logIndex) - BigInt(b.logIndex)));
+    const latest = BigInt(await this.rpc("eth_blockNumber", [])), dealTopic = `0x${word(deal.id)}`, grantTopic = deal.grantId ? `0x${word(deal.grantId)}` : null;
+    const found = [];
+    for (let from = await this.startBlock(latest), size = 2_000n; from <= latest;) {
+      const to = from + size - 1n < latest ? from + size - 1n : latest;
+      let logs;
+      try {
+        logs = await this.rpc("eth_getLogs", [{ address: this.contract, fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}`,
+          topics: [[FUNDED, SETTLED, CANCELLED, CLAIMED], [dealTopic, grantTopic].filter(Boolean)] }]);
+      } catch (e) {
+        if (size > 1n && (e.code === -32005 || /range|returned more than|exceed|too large|HTTP 41[03]/i.test(e.message))) { size /= 2n; continue; }
+        throw e;
+      }
+      found.push(...logs.filter(l => !l.removed && (l.topics[0] === CLAIMED ? l.topics[1] === grantTopic : l.topics[1] === dealTopic)));
+      from = to + 1n;
+    }
+    found.sort((a, b) => Number(BigInt(a.blockNumber) - BigInt(b.blockNumber)) || Number(BigInt(a.logIndex) - BigInt(b.logIndex)));
+    const kinds = { [FUNDED]: "Funding and escrow", [SETTLED]: "Settlement", [CANCELLED]: "Cancellation and refund", [CLAIMED]: "Claim" };
     return Promise.all(found.map(async l => ({
-      kind: l.topics[0] === SETTLED ? "Settlement" : l.topics[0] === CANCELLED ? "Cancellation and refund" : "Claim",
+      kind: kinds[l.topics[0]],
       claimed: l.topics[0] === CLAIMED ? uint(words(l.data)[0]) : null,
       receipt: await this.rpc("eth_getTransactionReceipt", [l.transactionHash]),
     })));

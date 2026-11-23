@@ -40,9 +40,9 @@ for(const width of [390,1440]) for(const delivery of [0,1]) test(`V2 seller → 
       await configure(page,site,w,width); await status(page,'funded');
       await pressUntil(page,async()=>(await w.v2.read.getDeal(id)).status===2n,'V2 settled');
       await status(page,'settled');
-      await until(async()=>await page.getByTestId('transaction-receipt').count()===1,'settlement receipt');
+      await until(async()=>await page.getByTestId('transaction-receipt').count()===2,'funding and settlement receipts');
       await page.reload(); await status(page,'settled');
-      await until(async()=>(await seen(page,'transaction-receipt'))?.startsWith('Settlement'),'settlement receipt after reload');
+      await until(async()=>(await page.getByTestId('transaction-receipt').nth(1).textContent().catch(()=>''))?.startsWith('Settlement'),'settlement receipt after reload');
       if(delivery) {
         assert.ok((await page.getByTestId('deal-status').textContent()).includes('vesting continues'));
         const g=await w.v2.read.getGrant(1);
@@ -64,9 +64,9 @@ for(const width of [390,1440]) for(const delivery of [0,1]) test(`V2 seller → 
         await until(async()=>(await w.v2.read.getGrant(1)).claimed===500000n*10n**18n,'midpoint claimed once');
         await until(async()=>await seen(page,'claimed')==='500,000 ALLOCATION','updated claimed amount');
         await until(async()=>await page.getByTestId('beneficiary-balance').textContent() !== beforeClaimBalance,'updated beneficiary balance');
-        await until(async()=>await page.getByTestId('transaction-receipt').count()===2,'settlement and claim receipts');
+        await until(async()=>await page.getByTestId('transaction-receipt').count()===3,'funding, settlement and claim receipts');
         await page.reload(); await until(async()=>await seen(page,'claimed')==='500,000 ALLOCATION','reload grant');
-        await until(async()=>(await page.getByTestId('transaction-receipt').nth(1).textContent().catch(()=>'')).includes('Claim of 500,000 ALLOCATION'),'claim receipt after reload');
+        await until(async()=>(await page.getByTestId('transaction-receipt').nth(2).textContent().catch(()=>'')).includes('Claim of 500,000 ALLOCATION'),'claim receipt after reload');
         await w.chain.setNextTime(Number(g.end)); await w.chain.mine(); await page.reload();
         await until(async()=>await seen(page,'claimable')==='500,000 ALLOCATION','final amount');
         await page.getByTestId('primary-action').click();
@@ -86,24 +86,30 @@ test('V2 receipts survive reload; seller, buyer / beneficiary and visitor each s
     await withPage(site,`#/v2/d/${id}`,wallet(w,w.maker),async page=>{
       await configure(page,site,w); await page.getByTestId('primary-action').click(); await role(page,'You are the seller');
       assert.equal(await page.getByTestId('cancel-action').count(),1);
+      await page.reload(); await status(page,'funded');
+      assert.equal(await page.getByTestId('deal-link').getAttribute('href'),`${site.url}/#/v2/d/${id}`);
+      await until(async()=>(await seen(page,'transaction-receipt'))?.startsWith('Funding and escrow'),'funding receipt after reload');
     });
     await withPage(site,`#/v2/d/${id}`,wallet(w,w.taker),async page=>{
       await configure(page,site,w);
       await pressUntil(page,async()=>(await w.v2.read.getDeal(id)).status===2n,'settled from the page');
       await role(page,'You are the designated buyer / beneficiary');
       await page.reload(); await status(page,'settled');
-      await until(async()=>(await seen(page,'transaction-receipt'))?.startsWith('Settlement'),'settlement receipt after reload');
+      await until(async()=>(await page.getByTestId('transaction-receipt').nth(1).textContent().catch(()=>''))?.startsWith('Settlement'),'settlement receipt after reload');
     });
     const g=await w.v2.read.getGrant(1); await w.chain.setNextTime(Number(g.end)); await w.chain.mine();
     await withPage(site,`#/v2/d/${id}`,wallet(w,w.other),async page=>{
       await configure(page,site,w); await page.getByTestId('primary-action').click();
       await role(page,'You can trigger a claim, but tokens pay only the recorded beneficiary');
       assert.equal(await page.getByTestId('cancel-action').count(),0);
+      await until(async()=>await seen(page,'primary-action')==='Claim vested tokens','claim offered');
+      const button=await page.getByTestId('primary-action').boundingBox();
+      assert.ok(button.y+button.height<=844,`claim button within the first 390px screen (bottom ${button.y+button.height})`);
       await pressUntil(page,async()=>(await w.v2.read.getGrant(1)).claimed===g.allocation,'visitor-triggered claim');
       assert.equal(await w.base.read.balanceOf(w.taker),2n*10n**24n);
       await page.reload(); await status(page,'settled');
-      await until(async()=>await page.getByTestId('transaction-receipt').count()===2,'both receipts after reload');
-      assert.ok((await page.getByTestId('transaction-receipt').nth(1).textContent()).includes('Claim of 1,000,000 ALLOCATION'));
+      await until(async()=>await page.getByTestId('transaction-receipt').count()===3,'all receipts after reload');
+      assert.ok((await page.getByTestId('transaction-receipt').nth(2).textContent()).includes('Claim of 1,000,000 ALLOCATION'));
     });
   } finally {await site.close();}
 });

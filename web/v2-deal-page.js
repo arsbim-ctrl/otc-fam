@@ -26,8 +26,9 @@ export function dealPageV2(app, idText) {
   const { config, chain, wallet } = app;
   const id = /^\d{1,78}$/.test(idText) && BigInt(idText) < 2n ** 256n ? BigInt(idText) : null;
   let live = true, busy = false, reading = 0, d, base, quote, grant, now, balance, allowance, treasury, beneficiaryBalance, notice, receipt, history = null, historyKey = null, readFailed = false;
-  const content = h("div"), grantArea = h("div"), actions = h("div"), receipts = h("div");
-  const shell = card(h("h1", {}, `Deal #${idText.slice(0, 78)} · v2`), content, grantArea, tokenWarning(), actions, receipts);
+  const content = h("div"), details = h("div"), grantArea = h("div"), actions = h("div"), receipts = h("div");
+  // Actions sit right under the status and amounts so the button is reachable without a long scroll on phones.
+  const shell = card(h("h1", {}, `Deal #${idText.slice(0, 78)} · v2`), content, actions, details, grantArea, tokenWarning(), receipts);
   shell.classList.add("v2-card");
   app.main.replaceChildren(shell);
   async function load() {
@@ -47,7 +48,7 @@ export function dealPageV2(app, idText) {
       if (!live || seq !== reading) return;
       // Receipts come from contract events; reread them only when the deal or its claims change.
       const key = `${deal.status}:${snapshot.grant?.claimed ?? ""}`;
-      if (key !== historyKey && deal.status !== "funded") {
+      if (key !== historyKey) {
         const found = await chain.history(deal).catch(() => null);
         if (!live || seq !== reading) return;
         if (found) { history = found; historyKey = key; }
@@ -86,9 +87,11 @@ export function dealPageV2(app, idText) {
       leg("Buyer total including fee", fees(d.quote).buyerTotal, quote, "pay"),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
       leg(d.delivery ? "Grant allocation · unlocks over time" : "Buyer receives immediately", d.allocation, base, "receive"),
-      h("p", { class: "held", testid: "funding-status" }, d.status === "funded" ? `On-chain funded: the full ${amount(d.allocation, base)} is escrowed in ${config.contract}.` : d.status === "settled" ? d.delivery ? "Settled: the grant was fully funded in this vault. Claims pay from the vault as tokens unlock." : "Settled: tokens were delivered immediately." : "Cancelled: allocation returned to the seller."),
+      h("p", { class: "held", testid: "funding-status" }, d.status === "funded" ? `On-chain funded: the full ${amount(d.allocation, base)} is escrowed in ${config.contract}.` : d.status === "settled" ? d.delivery ? "Settled: the grant was fully funded in this vault. Claims pay from the vault as tokens unlock." : "Settled: tokens were delivered immediately." : "Cancelled: allocation returned to the seller.")));
+    const link = `${location.href.split("#")[0]}#/v2/d/${d.id}`;
+    updateArea(details, h("div", {},
       economics(d.quote, quote),
-      h("dl", { class: "facts" }, fact("Seller", h("span", { class: "mono", testid: "maker" }, d.seller)), fact("Designated buyer / beneficiary", d.buyer),
+      h("dl", { class: "facts" }, fact("Private link", h("a", { testid: "deal-link", href: link }, link)), fact("Seller", h("span", { class: "mono", testid: "maker" }, d.seller)), fact("Designated buyer / beneficiary", d.buyer),
         fact("Treasury · all protocol fees", treasury), fact("Contract / custodian", config.contract),
         fact("Expires", h("span", { testid: "expires", "data-expiry": String(d.expiry) }, utc(d.expiry))),
         d.delivery && fact("Committed schedule", `${startLabel} Cliff after ${scheduleLength(d.cliffSeconds)}. Duration ${scheduleLength(d.durationSeconds)}. Accrual starts at start.`))));

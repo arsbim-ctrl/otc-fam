@@ -53,6 +53,8 @@ function route() {
     }
     const config = { ...app.config, contract: app.config.contractV2 };
     const v2 = { ...app, config, chain: new ChainV2(new URL(config.rpcUrl, location.href).href, config.contract) };
+    // Optional deployment block (decimal or 0x hex) where V2 event reads start.
+    if (/^(\d+|0x[0-9a-f]+)$/i.test(String(config.contractV2Block ?? ""))) v2.chain.fromBlock = BigInt(config.contractV2Block);
     const match = /^#\/v2\/d\/(.*)$/.exec(location.hash);
     page = match ? dealPageV2(v2, match[1]) : newDealPageV2(v2);
     document.getElementById("footer").textContent = `V2 deals contract: ${config.contract}`;
