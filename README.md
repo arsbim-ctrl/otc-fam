@@ -30,7 +30,7 @@ networks only.
 
 ## Run it
 
-Node.js 22 or later. Everything below runs with no network, no key and no wallet.
+Node.js 22 or later. After the two installs, everything below runs with no network, no key and no wallet.
 
 ```sh
 npm ci
@@ -118,6 +118,10 @@ deal said while the deal was marked Filled. `fill` now reverts in that case (`In
 stays open, and its maker can still cancel it. `cancel` is unchanged: it never checked what the maker
 receives, so a token's own fee cannot keep the maker's tokens locked.
 
+The rest is as before: a token that takes a fee from the amount or on top of it is refused on either side;
+`transfer` and `transferFrom` may answer nothing; each call writes the new status before it moves a token,
+behind a lock; a deal cannot be filled from its expiry on, and its maker can still cancel it.
+
 Not covered, in v1 and v2 alike: tokens whose balances change without a transfer (rebasing), and tokens
 that can freeze an address. They can leave a deal or a grant in that same token unpaid or stuck; they cannot
 touch any other token.
@@ -132,7 +136,7 @@ serves v1 only.
 | Link | What it is |
 | --- | --- |
 | `#/v2/new` | The seller's form: delivery, tokens, buyer, how long the deal stays open, and for vesting the start (at settlement, or a date and time in UTC), the cliff and the length in days. Next to it, before anything is signed: the buyer, what the buyer receives, until when the deal can be settled, the price, both fees, what each side and the treasury get, and the schedule. Its button connects, approves exactly the allocation, and funds; then the page gives the link. |
-| `#/v2/d/<id>` | One link for a deal's whole life. Funded: the terms, the money, that the allocation is held on the chain, and for the named buyer the button that connects, approves exactly the price and the fee, and settles. Settled with vesting: the grant, with start, cliff and end in UTC, what is vested, claimed, claimable and locked, a timeline and the same in words, and the button that claims. Receipts: every transaction of the deal with what moved, when, how deep in the chain it is, and its hash, a link to the block explorer where the network has one. |
+| `#/v2/d/<id>` | One link for a deal's whole life. Funded: the terms, the money, that the allocation is held on the chain, and for the named buyer the button that connects, approves exactly the price and the fee, and settles. Settled with vesting, which the page says is not unlocked: the grant, with start, cliff and end in UTC, what is vested, claimed, claimable and locked, a timeline and the same in words, when claiming becomes possible if it is not yet, and the button that claims. Receipts: every transaction of the deal with what moved, when, how deep in the chain it is, and its hash, a link to the block explorer where the network has one. |
 | `#/new`, `#/d/<id>` | v1's form and v1's deal page, as in round 1. |
 
 - Everything is read from `rpcUrl`, with or without a wallet. Times of a v2 deal are the chain's, in UTC;
