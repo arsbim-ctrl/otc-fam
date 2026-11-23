@@ -21,10 +21,16 @@ export function flow({ app, s, key, render, settle }) {
       localStorage.setItem(key, JSON.stringify(record));
     } catch {} // no storage: the page still follows the transaction until it is closed
   };
+  /** The remembered transaction, if it is one this page could have written; anything else is thrown away, not taken up. */
   const recall = () => {
     try {
       const pending = JSON.parse(localStorage.getItem(key));
-      return /^0x[0-9a-f]{64}$/i.test(pending?.hash) ? pending : null;
+      if (pending === null) return null;
+      const is = (pattern, value) => typeof value === "string" && pattern.test(value);
+      const sound = is(/^0x[0-9a-f]{64}$/i, pending.hash) && is(/^0x[0-9a-f]{40}$/i, pending.account) && typeof pending.label === "string"
+        && (pending.step === null || Number.isInteger(pending.step)) && (pending.nonce === null || is(/^\d+$/, pending.nonce));
+      if (!sound) forget();
+      return sound ? pending : null;
     } catch {
       return null;
     }
@@ -65,9 +71,9 @@ export function flow({ app, s, key, render, settle }) {
   return {
     act: (label, step, work) => act(label, step, work),
     /**
-     * After a reload: takes up the transaction this browser sent before, and runs `confirmed(receipt)` once the
-     * network has confirmed it. While it waits, `s.busy.waiting` is set: the page shows what is awaited, and a way
-     * to stop waiting.
+     * After a reload: takes up the transaction this browser sent before, and runs `confirmed(receipt, account)`
+     * once the network has confirmed it (`account` is the one that sent it). While it waits, `s.busy.waiting` is set:
+     * the page shows what is awaited, and a way to stop waiting.
      */
     resume(confirmed) {
       const pending = recall();
@@ -76,8 +82,8 @@ export function flow({ app, s, key, render, settle }) {
         const press = presses;
         s.busy.waiting = true;
         stage(`This page was reloaded while transaction ${pending.hash} was on its way. Waiting for the network to confirm it.`);
-        const receipt = await app.chain.confirmed(pending.hash, pending.account, /^\d+$/.test(pending.nonce ?? "") ? BigInt(pending.nonce) : null);
-        if (press === presses) await confirmed(receipt);
+        const receipt = await app.chain.confirmed(pending.hash, pending.account, pending.nonce === null ? null : BigInt(pending.nonce));
+        if (press === presses) await confirmed(receipt, pending.account);
         return receipt;
       }, true);
     },

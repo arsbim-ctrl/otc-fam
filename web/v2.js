@@ -1,7 +1,7 @@
 // The v2 deal contract (contracts/OtcDealsV2.sol), as the page uses it: what it reads of a deal and its grant, the
 // transactions it sends, the events it lists as receipts, and the fee and vesting arithmetic, written as the contract
 // writes it (whole numbers only, rounded down) so that the page shows before a press exactly what the chain will do.
-import { address, createdId, encode, say, uint, word, words } from "./eth.js";
+import { address, encode, same, say, uint, word, words } from "./eth.js";
 
 // keccak256 of each signature (test/v2-abi.test.mjs checks them against the compiled contract).
 const SELECTOR = {
@@ -52,8 +52,15 @@ export function createDealData({ baseToken, quoteToken, buyer, allocation, quote
   if (!DELIVERY.includes(delivery)) throw say("This kind of delivery is not supported.");
   return encode(SELECTOR.createDeal, baseToken, quoteToken, buyer, allocation, quote, expiry, DELIVERY.indexOf(delivery), fixedStart, cliffSeconds, durationSeconds);
 }
-/** The id of the deal a createDeal transaction funded, from its DealFunded event. */
-export const fundedId = (receipt, contract) => createdId(receipt, contract, TOPIC.funded);
+/**
+ * The id of the deal that `seller`'s createDeal funded, from the DealFunded event of `contract` that names that
+ * seller: a transaction that carries several people's calls (a bundle) can hold other sellers' deals too.
+ */
+export function fundedId(receipt, contract, seller) {
+  const log = receipt.logs.find((l) => same(l.address, contract) && l.topics[0] === TOPIC.funded && same(l.topics[2], `0x${word(seller)}`));
+  if (!log) throw say("The deal was sent, but its receipt names no new deal of this wallet's.");
+  return BigInt(log.topics[1]);
+}
 
 /** Reads the v2 deal contract at `contract` through `chain`. `fromBlock` is where its events start (its deployment). */
 export class DealsV2 {

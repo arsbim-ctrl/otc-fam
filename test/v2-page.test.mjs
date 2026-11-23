@@ -377,6 +377,13 @@ test("a wait taken up after a reload can be stopped: the page is usable again, a
     await noticeSays(page, "Stopped waiting.");
     assert.equal(await seen(page, "primary-action"), "Connect wallet", "the form is usable again");
     assert.deepEqual(await pending(page), []);
+
+    // A record this page could not have written (it has no label): it is thrown away, and the form works.
+    await page.evaluate(([key, record]) => localStorage.setItem(key, JSON.stringify(record)), [`otcfam:pending:31337:${contract}:new`, { hash: lost, nonce: null, account: w.seller }]);
+    await page.reload();
+    await says(page, "primary-action", "Connect wallet");
+    assert.ok(await offered(page), "the form is not left waiting on it");
+    assert.deepEqual(await pending(page), []);
   });
 }));
 

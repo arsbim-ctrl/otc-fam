@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { id, Interface } from "ethers";
 import { explain } from "../web/eth.js";
 import { explorerOf } from "../web/ui.js";
-import { createDealData, DealsV2, FEE_BPS, money, vestedAt } from "../web/v2.js";
+import { createDealData, DealsV2, FEE_BPS, fundedId, money, vestedAt } from "../web/v2.js";
 import { ALLOCATION, artifacts, DAY, errors, world } from "./lib/v2-world.mjs";
 
 const contract = new Interface(artifacts().OtcDealsV2.abi);
@@ -66,6 +66,13 @@ test("the page writes a deal's terms as the contract reads them, and reads a dea
   const data = createDealData({ ...t, delivery: "vesting" });
   assert.equal(data, w.deals.interface.encodeFunctionData("createDeal", [t]));
   assert.throws(() => createDealData({ ...t, delivery: "existing" }), /not supported/, "no other delivery can be written");
+
+  // A funded deal's number is read from the event that names its seller, whatever else the transaction carries.
+  const topic = (value) => `0x${BigInt(value).toString(16).padStart(64, "0")}`, funded = w.deals.interface.getEvent("DealFunded").topicHash;
+  const log = (address, dealId, seller) => ({ address, topics: [funded, topic(dealId), topic(seller), topic(w.buyer)] });
+  const bundled = { logs: [log(w.legacy.address, 9, w.seller), log(w.deals.address, 7, w.other), log(w.deals.address.toUpperCase().replace("0X", "0x"), 8, w.seller)] };
+  assert.equal(fundedId(bundled, w.deals.address, w.seller), 8n, "not another contract's event, and not another seller's deal");
+  assert.throws(() => fundedId(bundled, w.deals.address, w.buyer), /names no new deal of this wallet's/);
   await w.fam.as(w.deployer).mint(w.seller, t.allocation);
   await w.fam.as(w.seller).approve(w.deals.address, t.allocation);
   await w.chain.send(w.seller, { to: w.deals.address, data });

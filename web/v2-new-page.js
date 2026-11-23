@@ -309,7 +309,7 @@ export function newDealPageV2(app) {
     const deal = { baseToken: t.base.token.address, quoteToken: t.quote.token.address, buyer: t.buyer.address, allocation: t.base.units, quote: t.quote.units,
       expiry: BigInt(Math.floor(start + t.expiry.hours * 3600)), delivery: t.mode, ...t.schedule };
     const what = `Funding the deal: ${amount(deal.allocation, t.base.token)} for ${amount(deal.quote, t.quote.token)}`;
-    await showCreated(fundedId(await transact(app, v2.contract, createDealData(deal), stage, what, sent), v2.contract));
+    await showCreated(fundedId(await transact(app, v2.contract, createDealData(deal), stage, what, sent), v2.contract, wallet.account));
   });
   const stopWaiting = () => presses.stopWaiting("Stopped waiting. If that transaction is confirmed later, the deal exists: its seller finds it by its number, and can cancel it.");
 
@@ -343,7 +343,7 @@ export function newDealPageV2(app) {
   readClock();
   addEventListener("focus", readClock);
   // After a reload: the funding transaction this browser sent before is taken up again, and still ends with the link.
-  presses.resume((receipt) => showCreated(fundedId(receipt, v2.contract)));
+  presses.resume((receipt, seller) => showCreated(fundedId(receipt, v2.contract, seller)));
   return {
     update: () => {
       if (!s.busy) s.funds = null; // the account or the network changed: read the wallet's tokens again

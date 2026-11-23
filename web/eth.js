@@ -37,9 +37,9 @@ export const cancelData = (id) => encode(SELECTOR.cancel, id);
 export const createDealData = ({ sellToken, sellAmount, buyToken, buyAmount, taker, expiry }) =>
   encode(SELECTOR.createDeal, sellToken, sellAmount, buyToken, buyAmount, taker, expiry);
 
-/** The id of the deal a createDeal transaction made, from the event `topic` (DealCreated unless given) of `contract`. */
-export function createdId(receipt, contract, topic = DEAL_CREATED) {
-  const log = receipt.logs.find((l) => same(l.address, contract) && l.topics[0] === topic);
+/** The id of the deal a createDeal transaction made, from its DealCreated event. */
+export function createdId(receipt, contract) {
+  const log = receipt.logs.find((l) => same(l.address, contract) && l.topics[0] === DEAL_CREATED);
   if (!log) throw say("The deal was sent, but its receipt names no new deal.");
   return BigInt(log.topics[1]);
 }
