@@ -92,7 +92,7 @@ for (const [width, kind] of [[390, "vesting"], [1440, "vesting"], [390, "immedia
     const vesting = kind === "vesting";
     const recover = vesting && width === 390;
     const replace = !vesting && width === 1440;
-    let rejects = recover, reverts = recover, writes = 0, original, replacementHash, originalIndexed = false;
+    let rejects = recover, reverts = recover, writes = 0, original, replacementHash, originalIndexed = false, claimAt;
     const publicRpc = chain.publicRpc;
     chain.publicRpc = (request) => {
       if (original && request.method === "eth_getTransactionByHash" && request.params[0] === original) originalIndexed = true;
@@ -150,6 +150,9 @@ for (const [width, kind] of [[390, "vesting"], [1440, "vesting"], [390, "immedia
       const { page: buyer } = await open(browser, site, world, width, world.route(1), actors.buyer, {
         wrongNetwork: recover,
         onSend: async (tx) => {
+          if (claimAt !== undefined && tx.data.startsWith(SELECTORS.claim)) {
+            await chain.setNextTime(Number(claimAt));
+          }
           if (rejects) {
             rejects = false;
             return { error: { code: 4001, message: "Declined" } };
@@ -234,6 +237,7 @@ for (const [width, kind] of [[390, "vesting"], [1440, "vesting"], [390, "immedia
       const cliff = ALLOCATION / 3n;
       await expect(buyer.getByTestId("claimable")).toHaveText(formatted(cliff));
       if (!recover) await screen(buyer, "1440-cliff");
+      claimAt = grant.cliff;
       await press(buyer, `Claim ${formatted(cliff)}`);
       await expect(buyer.getByTestId("claimable")).toHaveText("0 ALFA");
       assert.equal(await base.read.balanceOf(actors.buyer), cliff);
@@ -245,6 +249,7 @@ for (const [width, kind] of [[390, "vesting"], [1440, "vesting"], [390, "immedia
       if (recover) await screen(buyer, "390-day-45");
 
       await warp(grant.end);
+      claimAt = grant.end;
       await press(buyer, `Claim ${formatted(ALLOCATION - cliff)}`);
       await expect(buyer.getByText("The full allocation has been claimed.")).toBeVisible();
       await expect(buyer.getByText(`Grant claimed · ${formatted(ALLOCATION - cliff)}`, { exact: true })).toBeVisible();
