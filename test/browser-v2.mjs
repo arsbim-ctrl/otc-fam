@@ -254,3 +254,86 @@ test("a wallet cancellation releases the form and a repriced funding receipt sur
     assert.equal(await w.base.read.balanceOf(w.v2.address), ALLOCATION);
     assert.equal((await w.v2.read.getDeal(2n)).status, 0n, "retry funded exactly one deal");
   }));
+
+test("a passive vesting update keeps keyboard focus on the claim control", { timeout: 45_000 }, () =>
+  browserFixture(390, async ({ w, open, deployment }) => {
+    await w.base.as(w.maker).approve(w.v2.address, ALLOCATION);
+    await w.v2.as(w.maker).createDeal(await w.termsV2());
+    await w.usdc.as(w.taker).approve(w.v2.address, feeBreakdown(QUOTE).buyerTotal);
+    await w.v2.as(w.taker).fill(1n);
+    const grant = await w.v2.read.getGrant(1n);
+    const answer = wallet(w, w.taker);
+    await answer({ method: "eth_requestAccounts" });
+    const page = await open(v2Link(deployment, 1n), answer);
+    const claim = button(page, /^Claim /);
+
+    await text(page, "claimable", "0 BASE");
+    assert.equal(await claim.count(), 0);
+
+    await w.warp(grant.cliff);
+    await text(page, "claimable", "333,333.333333333333333333 BASE");
+    const control = await claim.elementHandle();
+    for (let i = 0; i < 5 && !await control.evaluate((node) => node === document.activeElement); i++) {
+      await page.keyboard.press("Tab");
+    }
+    assert.equal(await control.evaluate((node) => node === document.activeElement), true, "Tab reaches the claim button");
+    assert.equal(await claim.isEnabled(), true);
+
+    const midpoint = grant.start + 45n * DAY;
+    await w.warp(midpoint);
+    await text(page, "claimable", "500,000 BASE");
+    assert.equal(await control.evaluate((node) => node.isConnected && node === document.activeElement), true,
+      "the same native button keeps focus through the polling update");
+    assert.equal(await claim.isEnabled(), true);
+
+    await w.chain.setNextTime(midpoint);
+    await page.keyboard.press("Enter");
+    await notice(page, /Claim confirmed/);
+    await text(page, "claimable", "0 BASE");
+    assert.equal(await claim.count(), 0, "no claim action remains when the available units are paid");
+    assert.equal((await w.v2.read.getGrant(1n)).claimed, ALLOCATION / 2n);
+  }));
+
+test("a seller can recheck balance after a same-account top-up and keep the draft", { timeout: 45_000 }, () =>
+  browserFixture(1440, async ({ w, open }) => {
+    const topUp = ALLOCATION / 10n;
+    await w.base.as(w.maker).transfer(w.other, topUp);
+    const answer = wallet(w, w.maker);
+    const walletRequests = [];
+    const page = await open("#/v2/new", (request) => {
+      walletRequests.push(request.method);
+      return answer(request);
+    });
+    await enterTerms(page, w, "vesting");
+    await page.getByTestId("cliff").fill("17");
+    await page.getByTestId("duration").fill("72");
+    await button(page, "Connect seller wallet").click();
+    const lowBalance = /holds 900,000 BASE/;
+    await notice(page, lowBalance);
+    assert.equal(await button(page, /^Approve |^Fund deal/).count(), 0);
+
+    const requestsBefore = [...walletRequests];
+    const recheck = button(page, "Recheck balance");
+    await recheck.click({ timeout: 3000 });
+    await notice(page, lowBalance);
+    assert.equal(await button(page, /^Approve |^Fund deal/).count(), 0);
+
+    await w.base.as(w.other).transfer(w.maker, topUp);
+    await recheck.click();
+    const approve = button(page, "Approve 1,000,000 BASE");
+    await approve.waitFor();
+    assert.deepEqual(walletRequests, requestsBefore, "balance rechecks use only the read-only RPC");
+    for (const [id, value] of Object.entries({
+      delivery: "vesting", "base-token": w.base.address, allocation: "1000000", "quote-token": w.usdc.address,
+      price: "123.456789", buyer: w.taker, cliff: "17", duration: "72",
+    })) assert.equal(await page.getByTestId(id).inputValue(), value);
+
+    await approve.click();
+    await button(page, "Fund deal & get link").click();
+    await states(page, "funded");
+    const { terms, seller } = await w.v2.read.getDeal(1n);
+    assert.equal(seller.toLowerCase(), w.maker);
+    assert.equal(terms.cliffSeconds, 17n * DAY);
+    assert.equal(terms.durationSeconds, 72n * DAY);
+    assert.equal(await w.base.read.balanceOf(w.v2.address), ALLOCATION);
+  }));

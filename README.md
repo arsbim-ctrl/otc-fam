@@ -66,7 +66,9 @@ of 123.456789, buyer total of 124.074072, seller net of 122.839506 and treasury 
 The grant cases check a fixed UTC start and a settlement-block start, day 29, the cliff, day 45
 after a prior claim and the final claim at day 90. The browser cases also exercise a new
 read-only session, wallet rejection, wrong network, a mined revert, transaction replacement
-and reload. [Screenshots](docs/evidence/) show the funded deal, seller review, immediate
+and reload. The browser run verifies that the claim button keeps keyboard focus as the claimable
+amount updates and that a seller can recheck after a top-up without losing the draft.
+[Screenshots](docs/evidence/) show the funded deal, seller review, immediate
 settlement and grant status before and after claims.
 
 ### V2 custody and limits

@@ -178,7 +178,7 @@ export function v2DealPage(app, id) {
     if (s.error) return action({ button: { label: "Refresh on-chain status", run: load }, notice: s.notice });
     const account = wallet?.account;
     const isSeller = same(account, d.seller);
-    const { grant, payment, funds, base } = s.data;
+    const { grant, payment, funds } = s.data;
     const mayClaim = !short && grant && grant.vested > grant.claimed;
     const mayRefund = isSeller && d.status === "funded";
     const maySettle = d.status === "funded" && !refundable && !short;
@@ -193,7 +193,7 @@ export function v2DealPage(app, id) {
     }
     if (mayRefund) return action({ extra: secondary("cancel-action", "Cancel deal & refund escrow", cancel),
       hint: "The allocation returns to the seller wallet.", notice: s.notice });
-    if (mayClaim) return action({ button: { label: `Claim ${amount(grant.vested - grant.claimed, base)}`, run: claim },
+    if (mayClaim) return action({ button: { label: "Claim tokens", run: claim },
       hint: same(account, grant.beneficiary) ? "Claims transfer available units to your beneficiary address."
         : `This wallet may trigger the claim. The tokens will go to ${grant.beneficiary}.`, notice: s.notice });
     if (!maySettle || !same(account, d.buyer)) return action({ notice: { kind: "warn", text: "Connect the designated buyer wallet to settle this deal." } });

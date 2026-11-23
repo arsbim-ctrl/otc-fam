@@ -1,6 +1,6 @@
 import { approveExactly, explain, same, transact, ZERO_ADDRESS } from "./eth.js";
 import { createV2Data, DELIVERY, feeBreakdown, fundedId } from "./eth-v2.js";
-import { action, amount, card, fact, h, leg, networkName, NO_WALLET, notice } from "./ui.js";
+import { action, amount, card, fact, h, leg, networkName, NO_WALLET, notice, secondary } from "./ui.js";
 import { isAddress, parseAmount } from "./units.js";
 import { transactionTracker } from "./v2-transactions.js";
 import { displayDelivery, economics, replaceIfChanged, schedule, spanAddress, tokenWarning, txDetails, utc, v2Link, version } from "./v2-ui.js";
@@ -151,6 +151,11 @@ export function v2NewPage(app) {
     return request;
   }
 
+  function recheckBalance() {
+    s.funds = null;
+    render();
+  }
+
   function render() {
     if (!live) return;
     const t = form();
@@ -183,10 +188,13 @@ export function v2NewPage(app) {
       return action({ button: { label: `Switch to ${networkName(config.chainId)}`, run: switchNetwork }, notice: s.notice });
     }
     const f = sellerFunds(t.asset);
-    if (f.error) return action({ button: { label: "Retry balance read", run: refresh }, notice: { kind: "error", text: f.error } });
+    if (f.error) return action({ button: { label: "Retry balance read", run: recheckBalance }, notice: { kind: "error", text: f.error } });
     if (f.balance === undefined) return action({ hint: "Checking your token balance and allowance…" });
     const give = amount(t.terms.allocation, t.asset);
-    if (f.balance < t.terms.allocation) return action({ notice: { kind: "warn", text: `This seller holds ${amount(f.balance, t.asset)}. Funding requires ${give}.` } });
+    if (f.balance < t.terms.allocation) return action({
+      notice: { kind: "warn", text: `This seller holds ${amount(f.balance, t.asset)}. Funding requires ${give}. Top up this wallet, then recheck.` },
+      extra: secondary("recheck-balance", "Recheck balance", recheckBalance),
+    });
     if (f.allowance < t.terms.allocation) return action({
       button: { label: `Approve ${give}`, run: approve },
       hint: "Approval allows the V2 contract to take this allocation when you fund the deal.", notice: s.notice,
@@ -205,9 +213,8 @@ export function v2NewPage(app) {
       s.notice = { kind: "error", text: explain(e) };
       s.txHash = e.transactionHash;
     }
-    s.funds = null;
     s.busy = null;
-    render();
+    recheckBalance();
   }
 
   const completed = (receipt, operation) => {
@@ -251,5 +258,5 @@ export function v2NewPage(app) {
   render();
   if (tracker.pending) resume();
   readChain().then(render);
-  return { update() { s.funds = null; render(); }, stop() { live = false; } };
+  return { update: recheckBalance, stop() { live = false; } };
 }
