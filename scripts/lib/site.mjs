@@ -1,4 +1,4 @@
-// The page on a v2 world (v2-world.mjs), as a person gets it: built by "npm run build", served from dist/ on
+// The page on a world (world.mjs), as a person gets it: built by "npm run build", served from dist/ on
 // 127.0.0.1 with a config.json that names both deal contracts and a read-only JSON-RPC endpoint, and opened in
 // Chromium at a phone's or a desktop's width, with a stand-in wallet as window.ethereum or with no wallet at all.
 // The tests (test/v2-page.test.mjs) and the scenes (scripts/play.mjs) both use it.

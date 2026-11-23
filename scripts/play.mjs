@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { formatAmount } from "../web/units.js";
-import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, until, walletFor } from "../test/lib/v2-site.mjs";
-import { ALLOCATION, DAY, feeOn, QUOTE, STATUS, world } from "../test/lib/v2-world.mjs";
+import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, until, walletFor } from "./lib/site.mjs";
+import { ALLOCATION, DAY, feeOn, QUOTE, STATUS, world } from "./lib/world.mjs";
 
 const folder = resolve(process.argv[2] ?? "screens");
 mkdirSync(folder, { recursive: true });

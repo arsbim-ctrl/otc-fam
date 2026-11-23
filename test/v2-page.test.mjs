@@ -1,10 +1,10 @@
 // The v2 pages, used as a person uses them: the seller's form, the buyer's fresh browser, the grant on its schedule,
 // the refusal of an existing position, and the ways back from a declined, failed, replaced or interrupted transaction.
-// Each test builds the page, serves it for a fresh v2 world (test/lib/v2-site.mjs) and drives it in Chromium at a
+// Each test builds the page, serves it for a fresh v2 world (scripts/lib/site.mjs) and drives it in Chromium at a
 // phone's width, a desktop's, or both ("npx playwright install chromium"). What moved is always read from the chain.
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, until, walletFor } from "./lib/v2-site.mjs";
+import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, until, walletFor } from "../scripts/lib/site.mjs";
 import { ALLOCATION, DAY, feeOn, QUOTE, STATUS, world } from "./lib/v2-world.mjs";
 
 after(closeBrowser);

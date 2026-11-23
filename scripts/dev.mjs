@@ -10,7 +10,7 @@ import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { CHAIN_ID } from "../.launchpad/checks/round-1/chain.mjs";
 import { wallet } from "../.launchpad/checks/round-1/page.mjs";
-import { world } from "../test/lib/v2-world.mjs";
+import { world } from "./lib/world.mjs";
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 const root = realpathSync(resolve("web")), port = Number(process.env.PORT ?? 8787), host = process.env.HOST ?? "127.0.0.1";
