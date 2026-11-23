@@ -64,12 +64,21 @@ export class DealsV2 {
     this.blockTimes = new Map();
   }
 
+  /** The `count` words the contract answers to `data`; fails, in words, when what is at its address is not a v2 deal contract. */
+  async ask(data, count) {
+    const absent = say(`There is no v2 deal contract at ${this.contract} on this network: the site's config.json may be wrong.`);
+    const answer = words(await this.chain.call(this.contract, data).catch((e) => {
+      throw e?.plain ? e : absent; // the network's own failure is said as it is; a refusal means another contract
+    }));
+    if (answer.length !== count) throw absent;
+    return answer;
+  }
+
   /** The treasury that receives both fees, once the contract has answered that it is a v2 deal contract with a 0.5% fee. */
   setup() {
-    this.ready ??= Promise.all([this.chain.call(this.contract, SELECTOR.treasury), this.chain.call(this.contract, SELECTOR.feeBps)]).then(([treasury, fee]) => {
-      if (words(treasury).length !== 1 || words(fee).length !== 1) throw say(`There is no v2 deal contract at ${this.contract} on this network: the site's config.json may be wrong.`);
-      if (uint(words(fee)[0]) !== FEE_BPS) throw say("The deal contract's fee is not the 0.5% this page shows: the site must be updated before it can be used.");
-      return { treasury: address(words(treasury)[0]) };
+    this.ready ??= Promise.all([this.ask(SELECTOR.treasury, 1), this.ask(SELECTOR.feeBps, 1)]).then(([[treasury], [fee]]) => {
+      if (uint(fee) !== FEE_BPS) throw say("The deal contract's fee is not the 0.5% this page shows: the site must be updated before it can be used.");
+      return { treasury: address(treasury) };
     });
     this.ready.catch(() => (this.ready = null)); // a failed look-up is tried again next time
     return this.ready;
@@ -77,8 +86,7 @@ export class DealsV2 {
 
   /** Deal `id` as the chain has it; `status` is "none" for an id no deal has. */
   async deal(id) {
-    const w = words(await this.chain.call(this.contract, encode(SELECTOR.getDeal, id)));
-    if (w.length !== 13) throw say(`There is no v2 deal contract at ${this.contract} on this network: the site's config.json may be wrong.`);
+    const w = await this.ask(encode(SELECTOR.getDeal, id), 13);
     return {
       id, seller: address(w[0]), baseToken: address(w[1]), quoteToken: address(w[2]), buyer: address(w[3]), allocation: uint(w[4]), quote: uint(w[5]),
       expiry: Number(uint(w[6])), delivery: DELIVERY[Number(uint(w[7]))], fixedStart: Number(uint(w[8])), cliffSeconds: uint(w[9]), durationSeconds: uint(w[10]),

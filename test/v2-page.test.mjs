@@ -33,7 +33,8 @@ async function enter(page, w, more = {}) {
   const entered = { "base-token": w.fam.address, allocation: "1000000", "quote-token": w.usdc.address, quote: "123.456789", buyer: w.buyer, ...more };
   for (const [id, value] of Object.entries(entered)) await page.getByTestId(id).fill(value);
 }
-const link = (page) => page.getByTestId("deal-link").evaluate((el) => el.href).catch(() => null);
+/** The link the form ends with, or null while there is none (asked without waiting for one to appear). */
+const link = async (page) => ((await page.getByTestId("deal-link").count()) === 1 ? page.getByTestId("deal-link").evaluate((el) => el.href) : null);
 
 for (const [name, size] of [["a phone's", PHONE], ["a desktop's", DESKTOP]]) {
   test(`at ${name} width: the seller funds an immediate deal and gets one link; a fresh buyer checks it with no wallet, then settles it`, () => onSite(async (site, w) => {

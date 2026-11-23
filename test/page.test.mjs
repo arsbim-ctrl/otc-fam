@@ -156,6 +156,56 @@ test("the maker of an expired deal connects from its page and takes the tokens b
   await w.moved(before, {}, "after the maker cancelled the expired deal");
 }));
 
+test("the deal's card is changed in place: the button keeps the focus while the time left changes, and from one step to the next", () => onSite(async (site, w) => {
+  const id = await w.offer({ expiry: (await w.chain.now()) + 3600 });
+  await withPage(site, `#/d/${id}`, wallet(w, w.taker), async (page) => {
+    const button = page.getByTestId("primary-action");
+    await button.focus();
+    await button.evaluate((el) => (el.marked = true));
+    const expires = await seen(page, "expires");
+    await w.chain.setNextTime((await w.chain.now()) + 600);
+    await w.chain.mine();
+    await page.evaluate(() => dispatchEvent(new Event("focus"))); // the page reads the chain again, as it does every few seconds
+    await until(async () => (await seen(page, "expires")) !== expires, "the time left to change on the page");
+    assert.equal(await page.evaluate(() => document.activeElement?.marked === true && document.activeElement.dataset.testid), "primary-action",
+      "the very same button still has the focus");
+    const ready = (label) => until(async () => (await seen(page, "primary-action")) === label
+      && (await page.evaluate(() => document.activeElement?.dataset.testid === "primary-action" && !document.activeElement.disabled)), `"${label}" focused and ready`);
+    for (const label of ["Connect wallet", "Approve 0.75 BRAVO", "Fill: pay 0.75 BRAVO"]) {
+      await ready(label);
+      await page.keyboard.press("Enter");
+    }
+    await until(filled(w, id), "the deal filled with three presses of Enter");
+  });
+}));
+
+test("a wallet with nothing to pay the network fee is told so in plain words, and nothing is sent", () => onSite(async (site, w) => {
+  const id = await w.offer();
+  await w.chain.rpc("hardhat_setBalance", [w.taker, "0x0"]);
+  const sent = [];
+  const counting = walletWith(w, w.taker, (request) => void (request.method === "eth_sendTransaction" && sent.push(request)));
+  await withPage(site, `#/d/${id}`, counting, async (page) => {
+    await pressUntil(page, async () => (await seen(page, "notice")) === "This wallet has too little of the network's own coin (ETH) to pay the network fee. "
+      + "Add some to it, then try again. Nothing was sent.", "the notice about the network fee");
+    assert.equal(await seen(page, "primary-action"), "Approve 0.75 BRAVO", "the same step is offered again");
+  });
+  assert.equal(sent.length, 0, "the wallet was not asked to send anything");
+}));
+
+test("a deal stays open at least a minute: fewer hours are refused, and a minute is accepted", () => onSite(async (site, w) => {
+  await withPage(site, "#/new", wallet(w, w.maker), async (page) => {
+    await fillForm(page, { "sell-token": w.alfa.address, "sell-amount": "1", "buy-token": w.bravo.address, "buy-amount": "1", "expiry-hours": "0.0001" });
+    await pressUntil(page, async () => (await seen(page, "primary-action")) === "Check the hours", "the button naming what to check");
+    assert.equal(await offered(page), false);
+    await noteSays(page, "at least 0.017 (one minute)");
+    await page.getByTestId("expiry-hours").fill("0.017");
+    const from = Math.floor(Date.now() / 1000);
+    await pressUntil(page, async () => (await page.getByTestId("deal-link").count()) === 1, "the deal's link");
+    const left = Number((await w.deals.read.getDeal(1)).expiry) - from;
+    assert.ok(left >= 60 && left < 70, `the deal expires ${left} s after it was made`);
+  });
+}));
+
 test("a link whose end is not a deal number says so", () => onSite(async (site) => {
   await withPage(site, "#/d/12abc", null, (page) => shows(page, "deal-status", (s) => s === "not-found", '"not-found"', "data-status"));
 }));

@@ -279,7 +279,7 @@ const REASONS = {
 
 // What a wallet or a node says in its own words when it refuses, and the sentence the page says instead.
 const REFUSALS = [
-  [/insufficient funds|not enough funds|insufficient balance|gas required exceeds|exceeds (the )?balance/i, NO_FEE],
+  [/insufficient funds|enough funds|insufficient balance|gas required exceeds|exceeds (the )?balance/i, NO_FEE],
   [/user (rejected|denied|cancel)|request rejected|rejected by user/i, "You declined in your wallet. Nothing was sent."],
   [/nonce too low|underpriced|already known|already (pending|imported)/i, "Your wallet already has a transaction waiting for the network. Let it finish, or cancel it in your wallet, then try again."],
   [/already processing|request of type .* already pending/i, "Your wallet already has a request open. Answer it there, then try again."],
