@@ -58,7 +58,12 @@ export function dealPageV2(app, idText) {
     if (of === s.historyOf || s.deal.status === "none") return;
     s.historyOf = of;
     const history = await v2.history(id).catch(() => null);
-    if (history || !s.history) s.history = history; // a failed re-read keeps the list it had
+    if (of !== s.historyOf) return; // the deal has changed since: a later read is on its way
+    if (history) s.history = history;
+    else {
+      s.history ??= null; // a failed re-read keeps the list it had
+      s.historyOf = null; // and is tried again the next time the deal is read
+    }
     render();
   }
 
@@ -67,21 +72,22 @@ export function dealPageV2(app, idText) {
   const startPassed = (d) => d.delivery === "vesting" && d.fixedStart > 0 && now() > d.fixedStart;
   /** A deal's state as the page says it: a funded deal that can no longer be settled is "expired". */
   const stateOf = (d) => (d.status === "funded" && (now() >= d.expiry || startPassed(d)) ? "expired" : d.status);
-  /** The last moment a funded deal can still be settled, in unix seconds. */
-  const settleBy = (d) => (d.delivery === "vesting" && d.fixedStart > 0 ? Math.min(d.expiry, d.fixedStart + 1) : d.expiry);
+  /** Until when a funded deal can be settled, in unix seconds: its expiry, or its fixed vesting start if that comes first. */
+  const settleBy = (d) => (d.delivery === "vesting" && d.fixedStart > 0 ? Math.min(d.expiry, d.fixedStart) : d.expiry);
 
   function render() {
     if (!live) return;
     show(app.main, view());
     clearTimeout(timer);
-    const left = s.deal?.status === "funded" ? settleBy(s.deal) - now() : 0;
-    if (left > 0 && left < 86_400) timer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time
+    const left = s.deal?.status === "funded" ? settleBy(s.deal) - now() : -1;
+    // The page turns to "expired" on time: a deal can still be settled in the very second of a fixed start.
+    if (left >= 0 && left < 86_400) timer = setTimeout(render, left * 1000 + 1250);
   }
 
   // A transaction that was sent and not yet seen in a block is remembered in this browser, so that a reload does not lose it.
-  const remember = (hash, label, step) => {
+  const remember = (hash, nonce, label, step) => {
     try {
-      localStorage.setItem(pendingKey, JSON.stringify({ hash, label, step, account: wallet.account }));
+      localStorage.setItem(pendingKey, JSON.stringify({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: wallet.account }));
     } catch {} // no storage: the page still follows the transaction until it is closed
   };
   const forget = () => {
@@ -109,7 +115,7 @@ export function dealPageV2(app, idText) {
         if (wait !== waits) return;
         s.busy.hint = hint;
         render();
-      }, (hash) => remember(hash, label, step));
+      }, (hash, nonce) => remember(hash, nonce, label, step));
       if (wait === waits && receipt?.transactionHash) s.receipt = { what: label.replace(/…$/, ""), hash: receipt.transactionHash, block: Number(receipt.blockNumber), gas: BigInt(receipt.gasUsed) };
     } catch (e) {
       if (wait === waits) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
@@ -128,7 +134,7 @@ export function dealPageV2(app, idText) {
     act(pending.label, pending.step, async (stage) => {
       s.busy.waiting = true;
       stage(`This page was reloaded while transaction ${pending.hash} was on its way. Waiting for the network to confirm it.`);
-      const receipt = await chain.confirmed(pending.hash, pending.account);
+      const receipt = await chain.confirmed(pending.hash, pending.account, /^\d+$/.test(pending.nonce ?? "") ? BigInt(pending.nonce) : null);
       s.notice = { kind: "info", text: "The transaction sent before this page was reloaded is confirmed. What you see is the chain's state now." };
       return receipt;
     });
@@ -164,7 +170,10 @@ export function dealPageV2(app, idText) {
           : `There is no v2 deal #${idText} on ${networkName(config.chainId)}. Check that you have the whole link, or ask the person who sent it.`),
         h("a", { class: "button secondary", href: "#/v2/new" }, "Make a deal of your own"));
     }
-    return h("div", { class: "board" }, dealCard(), s.grant && grantCard(), receiptsCard());
+    return h("div", { class: "board" },
+      // The last read failed: what is shown is what the chain said before, and the page says so.
+      s.failed && h("p", { class: "notice warn", testid: "stale", role: "status" }, `The chain could not be read just now, so this page may be out of date. ${s.failed}`),
+      dealCard(), s.grant && grantCard(), receiptsCard());
   }
 
   function dealCard() {
@@ -197,7 +206,7 @@ export function dealPageV2(app, idText) {
         sum("Seller receives", "seller-net", m.sellerNet),
         sum("Treasury receives both fees", "treasury-fee", m.feePool, h("span", { class: "mono block", testid: "treasury" }, s.treasury)),
         standing && h("div", {}, h("dt", {}, status === "funded" ? "Can be settled until" : "Could be settled until"),
-          h("dd", { testid: "expires", "data-expiry": String(d.expiry), class: status === "funded" && settleBy(d) - now() < 900 ? "soon" : null },
+          h("dd", { testid: "expires", "data-expiry": d.exact.expiry, class: status === "funded" && settleBy(d) - now() < 900 ? "soon" : null },
             `${utc(settleBy(d))} (${fromNow(settleBy(d) - now())})`)),
         vesting && !done && schedule(d)),
       status === "funded" && h("p", { class: "warning", testid: "token-warning" }, TOKEN_WARNING),
@@ -218,7 +227,7 @@ export function dealPageV2(app, idText) {
     const fixed = d.fixedStart > 0, start = BigInt(d.fixedStart), atCliff = amount((d.allocation * d.cliffSeconds) / d.durationSeconds, s.base);
     const line = (label, testid, seconds, words) => fact(label, h("span", { testid, "data-seconds": String(seconds) }, words));
     return [
-      line("Vesting starts", "schedule-start", d.fixedStart, fixed ? utc(start) : "When the buyer settles, at that block's time"),
+      line("Vesting starts", "schedule-start", d.exact.fixedStart, fixed ? utc(start) : "When the buyer settles, at that block's time"),
       line("Cliff", "schedule-cliff", d.cliffSeconds, d.cliffSeconds === 0n ? "None: unlocking begins with the start"
         : `${fixed ? `${utc(start + d.cliffSeconds)}, ` : ""}${span(d.cliffSeconds)} after the start. Nothing can be claimed before it; then ${atCliff} unlock at once.`),
       line("Fully vested", "schedule-end", d.durationSeconds, `${fixed ? `${utc(start + d.durationSeconds)}, ` : ""}${span(d.durationSeconds)} after the start. Until then it unlocks second by second.`),

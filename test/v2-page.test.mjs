@@ -330,6 +330,34 @@ test("a page reloaded while its transaction is on its way takes it up again: a s
   });
 }));
 
+test("while the chain cannot be read the page says that what it shows may be out of date, and it reads the receipts again afterwards", () => onSite(async (site, w) => {
+  const t = await w.terms();
+  const id = await w.fund(t);
+  await browse(site, `#/v2/d/${id}`, {}, async (page) => {
+    let down = "eth_getLogs"; // first the node refuses to search its logs, later it refuses everything
+    await page.route("**/rpc", (route) => {
+      const { method } = route.request().postDataJSON();
+      return down === "all" || method === down ? route.fulfill({ status: 503, body: "down" }) : route.continue();
+    });
+    await page.reload();
+    await says(page, "deal-status", "funded", "data-status");
+    await until(async () => (await read(page)).includes("node did not give this deal's past transactions"), "the page saying that the receipts could not be read");
+    down = null;
+    await refresh(page);
+    await until(async () => (await page.locator('[data-testid="receipts"] li[data-kind="funded"]').count()) === 1, "the receipts, read again at the next look");
+
+    down = "all";
+    await w.deals.as(w.seller).cancel(id);
+    await refresh(page);
+    await shows(page, "stale", (text) => text.startsWith("The chain could not be read just now, so this page may be out of date."), "the warning that the page may be out of date");
+    await says(page, "deal-status", "funded", "data-status");
+    down = null;
+    await refresh(page);
+    await says(page, "deal-status", "cancelled", "data-status");
+    assert.equal(await page.getByTestId("stale").count(), 0, "the warning goes once the chain is read again");
+  });
+}));
+
 test("the whole settlement can be done from the keyboard: the button keeps the focus from one step to the next", () => onSite(async (site, w) => {
   const t = await w.vesting();
   const id = await w.fund(t);

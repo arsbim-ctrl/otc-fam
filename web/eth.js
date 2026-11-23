@@ -128,15 +128,17 @@ export class Chain {
   }
 
   /**
-   * The receipt of transaction `hash`, once it is in a block. `from` and `nonce` (the sender, and its transaction
-   * count when `hash` was sent) let it notice a transaction that the wallet replaced: it fails then, with `replaced`.
+   * The receipt of transaction `hash`, once it is in a block. `from` and `nonce` (the sender, and the number the
+   * transaction was sent with) let it notice a transaction that the wallet replaced: it fails then, with `replaced`.
+   * A replacement is said only after three looks in a row found one, over a second at least: a node that lags
+   * behind another for a moment is not one.
    */
   async receipt(hash, from, nonce = null) {
     for (let waited = 0, pause = 250, gone = 0; waited < 600_000; waited += pause, pause = Math.min(pause * 2, 3000)) {
       const receipt = await this.rpc("eth_getTransactionReceipt", [hash]);
       if (receipt) return receipt;
       gone = from && (await this.overtaken(hash, from, nonce)) ? gone + 1 : 0;
-      if (gone >= 2) {
+      if (gone >= 3) {
         throw say("Your wallet replaced this transaction (it was sped up or cancelled), so this page cannot follow it. "
           + "The page has read the chain again: what it shows now is what happened.", { replaced: true });
       }
@@ -206,34 +208,29 @@ export class Wallet {
     if (this.chainId !== chainId) throw say("Your wallet changed network. Switch it back, then try again.");
     return this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.account, ...tx }] });
   }
+
+  /** The number (nonce) transaction `hash` was sent with, as the wallet's own node knows it; null if it does not say. */
+  nonceOf(hash) {
+    return this.provider.request({ method: "eth_getTransactionByHash", params: [hash] }).then((sent) => (sent?.nonce == null ? null : BigInt(sent.nonce)), () => null);
+  }
 }
 
 const NO_FEE = "This wallet has too little of the network's own coin (ETH) to pay the network fee. Add some to it, then try again. Nothing was sent.";
 
-/** Fails, in words, when `account` cannot pay the network fee of `tx`; says nothing when the chain cannot tell. */
-async function checkFee(chain, account, tx) {
-  const [balance, gas, price] = await Promise.all([
-    chain.rpc("eth_getBalance", [account, "latest"]).catch(() => null),
-    chain.rpc("eth_estimateGas", [{ from: account, ...tx }]).catch(() => null),
-    chain.rpc("eth_gasPrice", []).catch(() => null),
-  ]);
-  if (balance === null) return;
-  const fee = gas && price ? BigInt(gas) * BigInt(price) : 1n;
-  if (BigInt(balance) < fee) throw say(NO_FEE);
-}
-
 /**
- * Sends `data` to `to` from the app's wallet, once a call has shown that the chain would take it and that the wallet
- * can pay its fee, and waits until it is mined. `stage(text)` tells the person where it stands, and `sent(hash)`, if
- * given, runs as soon as the wallet has sent it. A transaction the chain would refuse is never sent.
+ * Sends `data` to `to` from the app's wallet, once a call has shown that the chain would take it, and waits until it
+ * is mined. `stage(text)` tells the person where it stands, and `sent(hash, nonce)`, if given, runs as soon as the
+ * wallet has sent it. A transaction the chain would refuse is never sent. Whether the wallet can pay the network
+ * fee is the wallet's to say (some have it paid for them): its refusal is worded by explain().
  */
 export async function transact({ chain, wallet, config }, to, data, stage, what, sent) {
   await chain.call(to, data, wallet.account);
-  await checkFee(chain, wallet.account, { to, data });
-  const nonce = await chain.rpc("eth_getTransactionCount", [wallet.account, "latest"]).then(BigInt, () => null);
+  const count = await chain.rpc("eth_getTransactionCount", [wallet.account, "latest"]).then(BigInt, () => null);
   stage(`${what}. Confirm it in your wallet.`);
   const hash = await wallet.send({ to, data }, config.chainId);
-  sent?.(hash);
+  // The wallet's node knows the number it gave the transaction; failing that, the account's count before it was sent.
+  const nonce = (await wallet.nonceOf(hash)) ?? count;
+  sent?.(hash, nonce);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
   return chain.confirmed(hash, wallet.account, nonce);
 }
@@ -284,7 +281,7 @@ const REFUSALS = [
   [/nonce too low|underpriced|already known|already (pending|imported)/i, "Your wallet already has a transaction waiting for the network. Let it finish, or cancel it in your wallet, then try again."],
   [/already processing|request of type .* already pending/i, "Your wallet already has a request open. Answer it there, then try again."],
   [/revert/i, "The transaction would fail on the chain, so it was not sent."],
-  [/timed? ?out|network|fetch|disconnect|unreachable/i, "The network cannot be reached. Check your connection and try again."],
+  [/timed? ?out|failed to fetch|fetch failed|network ?error|disconnect|unreachable|econn/i, "The network cannot be reached. Check your connection and try again."],
   [/unauthori[sz]ed|not connected|locked/i, "Your wallet is locked or not connected to this page. Unlock it, connect, then try again."],
 ];
 

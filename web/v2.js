@@ -91,6 +91,8 @@ export class DealsV2 {
       id, seller: address(w[0]), baseToken: address(w[1]), quoteToken: address(w[2]), buyer: address(w[3]), allocation: uint(w[4]), quote: uint(w[5]),
       expiry: Number(uint(w[6])), delivery: DELIVERY[Number(uint(w[7]))], fixedStart: Number(uint(w[8])), cliffSeconds: uint(w[9]), durationSeconds: uint(w[10]),
       status: STATUS[Number(uint(w[11]))], grantId: uint(w[12]),
+      // The two times again, digit for digit: a number cannot hold every time the chain can.
+      exact: { expiry: uint(w[6]).toString(), fixedStart: uint(w[8]).toString() },
     };
   }
 

@@ -171,9 +171,10 @@ page starts reading its events). Without `contractV2` the site serves v1 only.
   becomes possible.
 - Times of a v2 deal are the chain's, shown in UTC. Vested and claimable amounts are the contract's own
   answers at the latest block.
-- Before the wallet is asked to sign, the page runs the transaction as a call and checks that the wallet
-  can pay the network fee: a transaction the chain would refuse is not sent, and the reason is given in
-  words. No message of a wallet or a node is shown as it came.
+- Before the wallet is asked to sign, the page runs the transaction as a call: one that the chain would
+  refuse is not sent, and the contract's reason is given in words. Whatever a wallet or a node then says in
+  its own words (no ETH for the network fee, a transaction already waiting) is said in a plain sentence,
+  never shown as it came. When the chain cannot be read, a v2 page says that it may be out of date.
 - A press declined in the wallet, a wallet on another network, a transaction that fails on the chain or
   that the wallet replaces (sped up, cancelled): each ends with the page saying what happened and showing
   the chain's state. A v2 transaction sent before the page was reloaded is taken up again after the reload.

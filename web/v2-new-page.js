@@ -5,7 +5,7 @@
 // An existing vesting position is not something this contract can hold: choosing it is refused on the page, before
 // the wallet is ever asked for anything.
 import { approveExactly, explain, same, transact } from "./eth.js";
-import { action, amount, card, copyButton, dot, fact, h, networkName, NO_WALLET, setNote, show, span, TOKEN_WARNING, utc } from "./ui.js";
+import { action, amount, card, copyButton, dot, fact, h, networkName, NO_WALLET, secondary, setNote, show, span, TOKEN_WARNING, utc } from "./ui.js";
 import { daysToSeconds, formatAmount, isAddress, openFor, parseAmount, parseUtc } from "./units.js";
 import { createDealData, fundedId, money } from "./v2.js";
 
@@ -17,7 +17,7 @@ export function newDealPageV2(app) {
   const { config, chain, wallet, v2 } = app;
   const s = { tokens: {}, funds: null, treasury: null, busy: null, notice: null, created: null };
   const pendingKey = `otcfam:pending:${config.chainId}:${v2?.contract}:new`;
-  let live = true, fundsRead = 0;
+  let live = true, fundsRead = 0, waits = 0;
   if (!v2) {
     app.main.replaceChildren(card(h("h1", {}, "v2 deals are not set up here"),
       h("p", { class: "lead" }, "This site's config.json names no v2 deal contract (contractV2), so deals with fees and vesting cannot be made here."),
@@ -179,9 +179,9 @@ export function newDealPageV2(app) {
   }
 
   // A funding transaction that was sent and not yet seen in a block is remembered in this browser: a reload still ends with the link.
-  const remember = (hash) => {
+  const remember = (hash, nonce) => {
     try {
-      localStorage.setItem(pendingKey, JSON.stringify({ hash, account: wallet.account }));
+      localStorage.setItem(pendingKey, JSON.stringify({ hash, nonce: nonce === null ? null : String(nonce), account: wallet.account }));
     } catch {}
   };
   const forget = () => {
@@ -192,17 +192,20 @@ export function newDealPageV2(app) {
 
   /** Runs one press: `work(stage)` sends what it must, and the button comes back once the wallet's tokens are read again. */
   async function act(label, step, work) {
+    const wait = ++waits;
     s.notice = null;
     s.busy = { label, step, hint: "" };
     update();
     try {
       await work((hint) => {
+        if (wait !== waits) return;
         s.busy.hint = hint;
         update();
       });
     } catch (e) {
-      s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
+      if (wait === waits) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
     }
+    if (wait !== waits) return; // the person stopped waiting for it
     const sold = !s.created && wallet?.account && terms().base.token;
     if (sold) await loadFunds(sold);
     s.busy = null;
@@ -276,7 +279,10 @@ export function newDealPageV2(app) {
   function actions(t) {
     const steps = ["Connect", `Approve ${t.base.token?.symbol ?? "token"}`, "Fund"];
     if (t.mode === "existing") return action({ button: { label: "Existing positions are not supported" }, notice: { kind: "error", text: UNSUPPORTED } });
-    if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: s.busy.hint });
+    if (s.busy) {
+      return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: s.busy.hint,
+        extra: s.busy.waiting && secondary("stop-waiting", "Stop waiting for it", stopWaiting) });
+    }
     if (!wallet) return action({ steps, step: 0, button: { label: "Connect a wallet to make a deal" }, notice: { kind: "info", text: NO_WALLET } });
     if (!wallet.account) {
       return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: "Connect the wallet that holds the tokens you sell. Nothing is sent yet.",
@@ -311,8 +317,8 @@ export function newDealPageV2(app) {
     const deal = { baseToken: t.base.token.address, quoteToken: t.quote.token.address, buyer: t.buyer.address, allocation: t.base.units, quote: t.quote.units,
       expiry: BigInt(Math.floor(start + t.expiry.hours * 3600)), delivery: t.mode, ...t.schedule };
     const what = `Funding the deal: ${amount(deal.allocation, t.base.token)} for ${amount(deal.quote, t.quote.token)}`;
-    const receipt = await transact(app, v2.contract, createDealData(deal), stage, what, remember);
-    forget();
+    // The hash is remembered only while the transaction is on its way: however it ends here, it is forgotten.
+    const receipt = await transact(app, v2.contract, createDealData(deal), stage, what, remember).finally(forget);
     await showCreated(fundedId(receipt, v2.contract));
   });
 
@@ -324,13 +330,21 @@ export function newDealPageV2(app) {
     } catch {}
     if (!/^0x[0-9a-f]{64}$/i.test(pending?.hash)) return;
     act("Funding the deal…", 2, async (stage) => {
+      const wait = waits;
+      s.busy.waiting = true;
       stage(`This page was reloaded while the funding transaction ${pending.hash} was on its way. Waiting for the network to confirm it.`);
-      try {
-        await showCreated(fundedId(await chain.confirmed(pending.hash, pending.account), v2.contract));
-      } finally {
-        forget();
-      }
+      const receipt = await chain.confirmed(pending.hash, pending.account, /^\d+$/.test(pending.nonce ?? "") ? BigInt(pending.nonce) : null).finally(() => wait === waits && forget());
+      if (wait === waits) await showCreated(fundedId(receipt, v2.contract));
     });
+  }
+
+  /** Gives the form back while a transaction sent before a reload is still awaited. */
+  function stopWaiting() {
+    waits++;
+    forget();
+    s.busy = null;
+    s.notice = { kind: "info", text: "Stopped waiting. If that transaction is confirmed later, the deal exists: its seller finds it by its number, and can cancel it." };
+    update();
   }
 
   function created() {

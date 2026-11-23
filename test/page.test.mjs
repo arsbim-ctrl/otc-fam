@@ -179,17 +179,16 @@ test("the deal's card is changed in place: the button keeps the focus while the 
   });
 }));
 
-test("a wallet with nothing to pay the network fee is told so in plain words, and nothing is sent", () => onSite(async (site, w) => {
+test("a wallet with nothing to pay the network fee is told so in plain words, not in the node's", () => onSite(async (site, w) => {
   const id = await w.offer();
   await w.chain.rpc("hardhat_setBalance", [w.taker, "0x0"]);
-  const sent = [];
-  const counting = walletWith(w, w.taker, (request) => void (request.method === "eth_sendTransaction" && sent.push(request)));
-  await withPage(site, `#/d/${id}`, counting, async (page) => {
+  await withPage(site, `#/d/${id}`, wallet(w, w.taker), async (page) => {
+    // The wallet passes the approval to the node, which refuses it in its own words: the page says it in the person's.
     await pressUntil(page, async () => (await seen(page, "notice")) === "This wallet has too little of the network's own coin (ETH) to pay the network fee. "
       + "Add some to it, then try again. Nothing was sent.", "the notice about the network fee");
     assert.equal(await seen(page, "primary-action"), "Approve 0.75 BRAVO", "the same step is offered again");
   });
-  assert.equal(sent.length, 0, "the wallet was not asked to send anything");
+  assert.equal(await w.bravo.read.allowance(w.taker, w.deals.address), 0n, "nothing was sent");
 }));
 
 test("a deal stays open at least a minute: fewer hours are refused, and a minute is accepted", () => onSite(async (site, w) => {

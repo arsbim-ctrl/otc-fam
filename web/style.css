@@ -177,7 +177,7 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
 @media (min-width: 1000px) {
   main.wide { max-width: 1000px; }
   .board { grid-template-columns: minmax(0, 456px) minmax(0, 1fr); gap: 16px; align-items: start; max-width: none; }
-  .board > .card:first-child { grid-row: span 2; }
+  .board > .card:first-of-type { grid-row: span 2; }
   .board .facts.numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -193,3 +193,6 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
 @media (min-width: 1000px) {
   body:has(main.wide) .top, body:has(main.wide) footer { max-width: 1000px; }
 }
+
+/* A notice above a v2 deal's cards (the chain could not be read) spans them all. */
+.board > .notice { grid-column: 1 / -1; }
