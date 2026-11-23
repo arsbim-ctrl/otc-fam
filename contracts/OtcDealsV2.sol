@@ -37,6 +37,7 @@ contract OtcDealsV2 is IOtcDealsV2 {
     address public immutable treasury;
     mapping(uint256 => Deal) private deals;
     mapping(uint256 => Grant) private grants;
+    mapping(uint256 => uint64[]) private activityBlocks;
     // Funded deals plus the unpaid portion of settled grants, tracked separately for each token.
     mapping(address => uint256) private reserved;
     bool private transient locked;
@@ -70,6 +71,7 @@ contract OtcDealsV2 is IOtcDealsV2 {
         _requireBacking(terms.baseToken);
         _move(terms.baseToken, msg.sender, address(this), terms.allocation);
         reserved[terms.baseToken] += terms.allocation;
+        _recordActivity(dealId);
         emit DealFunded(dealId, msg.sender, terms.buyer);
     }
 
@@ -79,8 +81,6 @@ contract OtcDealsV2 is IOtcDealsV2 {
         if (deal.status != Status.Funded) revert NotOpen(dealId);
         if (block.timestamp >= terms.expiry) revert DealExpired(dealId);
         if (msg.sender != terms.buyer) revert NotYourDeal(dealId, terms.buyer);
-        _requireBacking(terms.baseToken);
-
         deal.status = Status.Settled;
         if (terms.delivery == Delivery.NewVesting) {
             if (terms.fixedStart != 0 && terms.fixedStart <= block.timestamp) revert FixedStartReached();
@@ -103,6 +103,7 @@ contract OtcDealsV2 is IOtcDealsV2 {
         } else {
             _requireBacking(terms.baseToken);
         }
+        _recordActivity(dealId);
         emit DealSettled(dealId, deal.grantId, fee, fee);
     }
 
@@ -113,10 +114,13 @@ contract OtcDealsV2 is IOtcDealsV2 {
 
         deal.status = Status.Cancelled;
         _release(deal.terms.baseToken, deal.seller, deal.terms.allocation);
+        _recordActivity(dealId);
         emit DealCancelled(dealId);
     }
 
-    function getDeal(uint256 dealId) external view returns (address, Terms memory, Status, uint256) {
+    function getDeal(uint256 dealId) external view returns (
+        address seller, Terms memory terms, Status status, uint256 grantId
+    ) {
         Deal storage deal = deals[dealId];
         return (deal.seller, deal.terms, deal.status, deal.grantId);
     }
@@ -143,7 +147,25 @@ contract OtcDealsV2 is IOtcDealsV2 {
 
         grant.claimed = totalVested;
         _release(grant.token, grant.beneficiary, payout);
+        _recordActivity(grant.dealId);
         emit GrantClaimed(grantId, grant.beneficiary, payout);
+    }
+
+    /// @notice Block numbers for funding, settlement or refund, and recent claims.
+    /// @dev RPC clients can fetch receipts using single-block log filters.
+    function recentActivityBlocks(uint256 dealId) external view returns (uint64[] memory blocks) {
+        uint64[] storage history = activityBlocks[dealId];
+        uint256 count = history.length < 12 ? history.length : 12;
+        blocks = new uint64[](count);
+        for (uint256 i; i < count; ++i) {
+            blocks[i] = history[i < 2 ? i : history.length - count + i];
+        }
+    }
+
+    function _recordActivity(uint256 dealId) private {
+        uint64[] storage history = activityBlocks[dealId];
+        uint64 current = uint64(block.number);
+        if (history.length == 0 || history[history.length - 1] != current) history.push(current);
     }
 
     function _fee(uint256 quote) private pure returns (uint256) {

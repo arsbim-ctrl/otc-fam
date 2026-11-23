@@ -12,7 +12,9 @@
     "build": "node scripts/build.mjs",
     "deploy": "node scripts/deploy.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node .launchpad/checks/round-1/run.mjs"
+    "check": "node .launchpad/checks/round-1/run.mjs",
+    "check:v2": "node .launchpad/checks/round-2/run.mjs",
+    "test:v2-browser": "node --test test/browser-v2.mjs"
   },
   "devDependencies": {
     "@nomicfoundation/edr": "0.25.1",

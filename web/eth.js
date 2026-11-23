@@ -20,11 +20,11 @@ const SELECTOR = {
 const DEAL_CREATED = "0x1c07d8ea6e5c6ec1eccadc84e71fb9989193eb338ddddea20f1445943761ff9c"; // DealCreated(uint256,address,address)
 const STATUS = ["none", "open", "filled", "cancelled"];
 
-const word = (value) => BigInt(value).toString(16).padStart(64, "0");
-const encode = (selector, ...args) => selector + args.map(word).join("");
-const words = (hex) => (hex ?? "0x").slice(2).match(/.{64}/g) ?? [];
-const uint = (w) => BigInt(`0x${w}`);
-const address = (w) => `0x${w.slice(24)}`;
+export const word = (value) => BigInt(value).toString(16).padStart(64, "0");
+export const encode = (selector, ...args) => selector + args.map(word).join("");
+export const words = (hex) => (hex ?? "0x").slice(2).match(/.{64}/g) ?? [];
+export const uint = (w) => BigInt(`0x${w}`);
+export const address = (w) => `0x${w.slice(24)}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -66,7 +66,10 @@ export class Chain {
   async rpc(method, params) {
     let response;
     try {
-      response = await fetch(this.rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      response = await fetch(this.rpcUrl, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(12_000),
+      });
     } catch {
       throw new Error("The network cannot be reached. Check your connection and try again.");
     }
@@ -77,8 +80,8 @@ export class Chain {
   }
 
   /** eth_call: what `to` answers to `data`, sent by `from`; throws the contract's reason if it would revert. */
-  call(to, data, from) {
-    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, "latest"]);
+  call(to, data, from, block = "latest") {
+    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, block]);
   }
 
   async deal(id) {
@@ -104,12 +107,12 @@ export class Chain {
     return this.tokens.get(key);
   }
 
-  async balanceOf(token, owner) {
-    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner)))[0] ?? "0");
+  async balanceOf(token, owner, block) {
+    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner), undefined, block))[0] ?? "0");
   }
 
-  async allowance(token, owner) {
-    return uint(words(await this.call(token, encode(SELECTOR.allowance, owner, this.contract)))[0] ?? "0");
+  async allowance(token, owner, block) {
+    return uint(words(await this.call(token, encode(SELECTOR.allowance, owner, this.contract), undefined, block))[0] ?? "0");
   }
 
   /** The time of the latest block, in unix seconds. */
@@ -164,10 +167,11 @@ export class Wallet {
   }
 
   /** Sends `{ to, data }` from the connected account on chain `chainId`, and returns the transaction's hash. */
-  async send(tx, chainId) {
+  async send(tx, chainId, account = this.account) {
     await this.readChain();
     if (this.chainId !== chainId) throw new Error("Your wallet changed network. Switch it back, then try again.");
-    return this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.account, ...tx }] });
+    if (!account || !same(account, this.account)) throw new Error("Your wallet changed accounts. Check the address and try again.");
+    return this.provider.request({ method: "eth_sendTransaction", params: [{ from: account, ...tx }] });
   }
 }
 
@@ -175,24 +179,34 @@ export class Wallet {
  * Sends `data` to `to` from the app's wallet, once a call has shown that the chain would take it, and waits until it
  * is mined. `stage(text)` tells the person where it stands. A transaction the chain would refuse is never sent.
  */
-export async function transact({ chain, wallet, config }, to, data, stage, what) {
-  await chain.call(to, data, wallet.account);
+export async function transact({ chain, wallet, config, waitForReceipt }, to, data, stage, what, from = wallet.account) {
+  const submittedAfter = waitForReceipt ? (await chain.snapshot()).block : undefined;
+  if (!from || !same(wallet.account, from)) throw new Error("Your wallet changed accounts. Check the address and try again.");
+  await chain.call(to, data, from);
   stage(`${what}. Confirm it in your wallet.`);
-  const hash = await wallet.send({ to, data }, config.chainId);
+  const hash = await wallet.send({ to, data }, config.chainId, from);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
-  const receipt = await chain.receipt(hash);
-  if (receipt.status !== "0x1") throw new Error("The transaction failed on the chain, and nothing moved. Try again.");
+  return waitForReceipt ? waitForReceipt({ hash, from, to, data, submittedAfter }) : checkReceipt(await chain.receipt(hash));
+}
+
+export function checkReceipt(receipt) {
+  if (receipt.status !== "0x1") {
+    throw Object.assign(new Error("The transaction failed on the chain, and nothing moved. Try again."), {
+      transactionHash: receipt.transactionHash,
+    });
+  }
   return receipt;
 }
 
 /** Approves the deal contract for exactly `units` of `token`, the amount of one deal and never more. */
 export async function approveExactly(app, token, units, allowance, stage) {
+  const from = app.wallet.account;
   const data = approveData(app.config.contract, units);
   // Some tokens (USDT among them) refuse to change an approval that is not zero: it is set to zero first.
-  if (allowance > 0n && (await app.chain.call(token.address, data, app.wallet.account).then(() => false, () => true))) {
-    await transact(app, token.address, approveData(app.config.contract, 0n), stage, `Setting your ${token.symbol} approval to zero first`);
+  if (allowance > 0n && (await app.chain.call(token.address, data, from).then(() => false, () => true))) {
+    await transact(app, token.address, approveData(app.config.contract, 0n), stage, `Setting your ${token.symbol} approval to zero first`, from);
   }
-  await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`);
+  return transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`, from);
 }
 
 // Why the deal contract refused a call, in words: its errors by selector, with their arguments' words.
@@ -208,6 +222,12 @@ const REASONS = {
   "0x9f220883": () => "Only the maker of this deal can cancel it.", // NotMaker(uint256)
   "0x39f1c8d9": ([token]) => `The token ${address(token)} refused the transfer: check the balance and the approval.`, // TransferFailed(address)
   "0xb5dfd9e5": () => "A token tried to call the deal contract back during its transfer: refused.", // Reentered()
+  "0xb1df0e06": () => "Enter a different, nonzero buyer address.", // InvalidBuyer()
+  "0xdba16ce8": () => "The vesting schedule is outside the supported range.", // InvalidSchedule()
+  "0xab36a7f4": () => "The fixed start has arrived. A funded deal with this start can only be refunded.", // FixedStartReached()
+  "0xe4614c8a": () => "The quote plus the buyer fee is too large.", // QuoteTooLarge()
+  "0xc7ad864e": () => "The contract's token balance is below its reserved allocation.", // InsufficientBacking(address)
+  "0x969bf728": () => "There are no new units available to claim.", // NothingToClaim()
 };
 
 /** Revert data in an error, wherever the node (geth: data; Hardhat: data.data) or the wallet put it. */
@@ -218,8 +238,11 @@ function revertData(error) {
 
 /** What went wrong, for the person: a refusal in their wallet, the deal contract's reason, or the error's own words. */
 export function explain(error) {
-  if (error?.code === 4001) return "You declined in your wallet. Nothing was sent.";
-  if (error?.code === 4902) return "Your wallet does not know this network yet. Add it in your wallet, then try again.";
+  if (Number(error?.code) === 4001) return "You declined in your wallet. Nothing was sent.";
+  if (Number(error?.code) === 4902) return "Your wallet does not know this network yet. Add it in your wallet, then try again.";
+  if (error?.code === "INSUFFICIENT_FUNDS" || /insufficient funds|cannot afford|enough (ether|eth) to pay/i.test(error?.message ?? "")) {
+    return "This wallet needs more native currency to pay the network fee.";
+  }
   const data = revertData(error);
   if (data) {
     const reason = REASONS[data.slice(0, 10)];
@@ -227,5 +250,6 @@ export function explain(error) {
     if (data.startsWith("0x08c379a0")) return `The transaction would fail: ${decodeText(`0x${data.slice(10)}`)}.`; // Error(string)
     return "The transaction would fail on the chain, so it was not sent.";
   }
+  if (Number.isInteger(Number(error?.code))) return "The network or wallet could not complete the request. Check your wallet and try again.";
   return String(error?.message ?? error).split("\n")[0];
 }

@@ -9,8 +9,8 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** Round 1: the deal contract, the page that shows a deal from its link and fills it, and
-the deployment script. Nothing here has been reviewed for security, and nothing is deployed.
+The legacy V1 contract offers fee-free swaps. V2 adds seller-funded, buyer-bound deals with immediate
+delivery or a new vesting grant. The repository ships with blank deployment addresses.
 
 ## What is in the repository
 
@@ -18,12 +18,14 @@ the deployment script. Nothing here has been reviewed for security, and nothing 
 | --- | --- |
 | `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed. |
 | `contracts/OtcDeals.sol` | The deal contract: one contract for every deal, no owner, no fee. |
+| `contracts/IOtcDealsV2.sol`, `contracts/OtcDealsV2.sol` | The separate V2 interface and implementation for exact fees and vesting. |
 | `web/` | The page, plain files and no dependency. `app.js` reads the config and routes to `deal-page.js` (`#/d/<id>`) or `new-deal-page.js` (`#/new`); `eth.js` reads the chain and sends through the wallet; `ui.js` and `units.js` build the page and word its amounts. `npm run build` copies it into `dist/`. |
 | `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
 | `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment. |
 | `test/` | The entry's own tests (`npm test`): what the round's checks leave out. |
 | `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
 | `.launchpad/checks/round-1/` | Round 1's checks. |
+| `.launchpad/checks/round-2/` | V2 balance and grant acceptance checks. |
 
 ## Install and run
 
@@ -34,6 +36,57 @@ npm ci
 npm run build                      # dist/ is the site: serve it with any static server
 python3 -m http.server -d dist 8080
 ```
+
+### V2 testnet setup
+
+Use a local Cancun-compatible chain, Base Sepolia, or Sepolia and synthetic tokens. Set
+`RPC_URL`, `DEPLOYER_KEY`, and `TREASURY` in the environment, then run `npm run deploy -- --v2`.
+Copy the reported testnet chain and contract address into the `v2` object in
+`web/config.json`. Set its `rpcUrl` to a public, browser-accessible RPC endpoint for that chain.
+The top-level configuration serves the existing V1 paths. Build and serve the site, open
+`#/v2/new` with the seller wallet, then share the resulting link. V2 links bind the chain,
+contract and deal ID. A fresh browser can read the deal and grant with no wallet. The deal terms
+are public on-chain and settlement is restricted to the buyer named by the seller.
+
+### V2 verification
+
+```sh
+npm ci --ignore-scripts
+npx playwright install chromium
+npm run check
+npm run check:v2
+npm test
+V2_EVIDENCE=screens/v2 npm run test:v2-browser
+```
+
+The fixtures use a local EVM and an injected wallet. The browser run covers both delivery modes
+at 390px and 1440px. It verifies the exact balance changes, including the six-decimal USDC quote
+of 123.456789, buyer total of 124.074072, seller net of 122.839506 and treasury total of
+1.234566. A token transfer failure leaves escrow funded and payment balances intact.
+The grant cases check a fixed UTC start and a settlement-block start, day 29, the cliff, day 45
+after a prior claim and the final claim at day 90. The browser cases also exercise a new
+read-only session, wallet rejection, wrong network, a mined revert, transaction replacement
+and reload. [Screenshots](docs/evidence/) show the funded deal, seller review, immediate
+settlement and grant status before and after claims.
+
+### V2 custody and limits
+
+The seller escrows the entire allocation in `createDeal`. Settlement alone charges
+`floor(quote / 200)` to each side. If delivery is vesting, the V2 contract assigns the
+allocation to a nontransferable grant backed by the existing escrow. The source deal ID is
+also the grant ID. Claimed amounts leave custody only for the fixed beneficiary. Anyone can
+trigger a positive claim. The seller can refund a funded deal until settlement, including
+after expiry or a missed fixed start.
+
+V2 checks both ends of each ERC-20 transfer. Tokens with rebasing balances, dishonest balance
+reports, frozen addresses or mutable transfer rules can block or invalidate their own token's
+deals. Existing vesting positions and revocable rights are unsupported. The activity view uses
+single-block log requests for funding, settlement or refund, and at least ten recent claim
+blocks when more than 12 distinct blocks contain events. Replacement
+tracking uses the wallet or RPC's original transaction nonce and inspects the recent chain
+history. A wallet that hides the nonce can leave a pending submission to be checked in its
+activity view. The in-browser tracker keeps pending details in the current tab across reloads.
+The implementation is for local and testnet use and has no independent audit.
 
 Deploying the contract takes the network and the key from the environment, never from a file:
 

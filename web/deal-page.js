@@ -41,7 +41,14 @@ export function dealPage(app, idText) {
   function render() {
     if (!live) return;
     const next = view();
-    if (!app.main.firstElementChild?.isEqualNode(next)) app.main.replaceChildren(next); // unchanged: leave it, and any text selected in it
+    const current = app.main.firstElementChild;
+    for (const fresh of next.querySelectorAll("[data-relative-time]")) {
+      const text = current?.querySelector(`[data-relative-time="${fresh.dataset.relativeTime}"]`);
+      if (!text) continue;
+      if (text.textContent !== fresh.textContent) text.textContent = fresh.textContent;
+      if (text.className !== fresh.className) text.className = fresh.className;
+    }
+    if (!current?.isEqualNode(next)) app.main.replaceChildren(next);
     clearTimeout(expiryTimer);
     const left = s.deal?.status === "open" ? Number(s.deal.expiry) - now() : 0;
     if (left > 0 && left < 86_400) expiryTimer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time
@@ -88,7 +95,7 @@ export function dealPage(app, idText) {
     document.title = `Deal #${idText}: ${amount(d.buyAmount, s.buy)} for ${get} · otc.fam`;
     return card(
       head(`Deal #${idText}`, status),
-      h("p", { class: "lead" }, lead(status, mine, taking)),
+      h("p", { class: "lead", "data-relative-time": status === "expired" ? "expired" : null }, lead(status, mine, taking)),
       leg(payLabel, d.buyAmount, s.buy, "pay"),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
       leg(receiveLabel, d.sellAmount, s.sell, "receive"),
@@ -100,7 +107,7 @@ export function dealPage(app, idText) {
         standing && (d.taker === ZERO_ADDRESS ? fact("Who can fill", "Anyone who has this link")
           : fact("Reserved for", h("span", { class: "mono" }, d.taker), me && same(me, d.taker) && " (you)")),
         standing && h("div", {}, h("dt", {}, status === "open" ? "Expires" : "Expired"),
-          h("dd", { testid: "expires", "data-expiry": String(d.expiry), class: status === "open" && Number(d.expiry) - now() < 900 ? "soon" : null },
+          h("dd", { testid: "expires", "data-expiry": String(d.expiry), "data-relative-time": "expiry", class: status === "open" && Number(d.expiry) - now() < 900 ? "soon" : null },
             when(Number(d.expiry), now())))),
       status === "open" ? actions(d) : ended(status, mine));
   }

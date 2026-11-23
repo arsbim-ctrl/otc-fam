@@ -1,5 +1,6 @@
 {
   "chainId": 84532,
   "contract": "0x0000000000000000000000000000000000000000",
-  "rpcUrl": "https://sepolia.base.org"
+  "rpcUrl": "https://sepolia.base.org",
+  "v2": null
 }

@@ -47,4 +47,5 @@ interface IOtcDealsV2 {
     function vested(uint256 grantId) external view returns (uint256);
     function claimable(uint256 grantId) external view returns (uint256);
     function claim(uint256 grantId) external;
+    function recentActivityBlocks(uint256 dealId) external view returns (uint64[] memory);
 }
