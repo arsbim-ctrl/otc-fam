@@ -41,7 +41,14 @@ export function dealPage(app, idText) {
   function render() {
     if (!live) return;
     const next = view();
-    if (!app.main.firstElementChild?.isEqualNode(next)) app.main.replaceChildren(next); // unchanged: leave it, and any text selected in it
+    const current = app.main.firstElementChild;
+    const expiry = current?.querySelector('[data-testid="expires"]');
+    const nextExpiry = next.querySelector('[data-testid="expires"]');
+    if (expiry && nextExpiry) {
+      expiry.className = nextExpiry.className;
+      expiry.textContent = nextExpiry.textContent;
+    }
+    if (!current?.isEqualNode(next)) app.main.replaceChildren(next);
     clearTimeout(expiryTimer);
     const left = s.deal?.status === "open" ? Number(s.deal.expiry) - now() : 0;
     if (left > 0 && left < 86_400) expiryTimer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time

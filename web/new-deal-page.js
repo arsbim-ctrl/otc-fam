@@ -70,8 +70,8 @@ export function newDealPage(app) {
       : !isAddress(takerText) ? { problem: "Check the taker's address", note: "An address is 0x followed by 40 letters and digits. Leave it empty to let anyone fill." }
       : wallet?.account && same(takerText, wallet.account) ? { problem: "Check the taker's address", note: "This is your own address: put the other side's, or leave it empty." }
       : { address: takerText.toLowerCase() };
-    const expiry = /^\d+(\.\d+)?$/.test(hoursText) && hours > 0 && hours <= 8760 ? { hours }
-      : { problem: "Check the hours", note: "Write a number of hours, more than 0 and at most 8760 (a year), like 24 or 0.5." };
+    const expiry = /^\d+(\.\d+)?$/.test(hoursText) && hours >= 1 / 60 && hours <= 8760 ? { hours }
+      : { problem: "Check the hours", note: "Write a number of hours, at least 1 minute and at most 8760 hours (a year), like 24 or 0.5." };
     const distinct = sell.token && buy.token && sell.token.address === buy.token.address
       ? { problem: "Pick two different tokens", note: "The token you give and the token you get are the same." } : {};
     const problem = [sell, buy, distinct, taker, expiry].find((x) => x.problem)?.problem;

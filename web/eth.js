@@ -21,14 +21,14 @@ const DEAL_CREATED = "0x1c07d8ea6e5c6ec1eccadc84e71fb9989193eb338ddddea20f144594
 const STATUS = ["none", "open", "filled", "cancelled"];
 
 const word = (value) => BigInt(value).toString(16).padStart(64, "0");
-const encode = (selector, ...args) => selector + args.map(word).join("");
-const words = (hex) => (hex ?? "0x").slice(2).match(/.{64}/g) ?? [];
-const uint = (w) => BigInt(`0x${w}`);
-const address = (w) => `0x${w.slice(24)}`;
+export const encode = (selector, ...args) => selector + args.map(word).join("");
+export const words = (hex) => (hex ?? "0x").slice(2).match(/.{64}/g) ?? [];
+export const uint = (w) => BigInt(`0x${w}`);
+export const address = (w) => `0x${w.slice(24)}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
-const approveData = (spender, amount) => encode(SELECTOR.approve, spender, amount);
+export const approveData = (spender, amount) => encode(SELECTOR.approve, spender, amount);
 export const fillData = (id) => encode(SELECTOR.fill, id);
 export const cancelData = (id) => encode(SELECTOR.cancel, id);
 export const createDealData = ({ sellToken, sellAmount, buyToken, buyAmount, taker, expiry }) =>
@@ -77,8 +77,8 @@ export class Chain {
   }
 
   /** eth_call: what `to` answers to `data`, sent by `from`; throws the contract's reason if it would revert. */
-  call(to, data, from) {
-    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, "latest"]);
+  call(to, data, from, block = "latest") {
+    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, block]);
   }
 
   async deal(id) {
@@ -104,8 +104,8 @@ export class Chain {
     return this.tokens.get(key);
   }
 
-  async balanceOf(token, owner) {
-    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner)))[0] ?? "0");
+  async balanceOf(token, owner, block) {
+    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner), undefined, block))[0] ?? "0");
   }
 
   async allowance(token, owner) {
@@ -164,10 +164,11 @@ export class Wallet {
   }
 
   /** Sends `{ to, data }` from the connected account on chain `chainId`, and returns the transaction's hash. */
-  async send(tx, chainId) {
+  async send(tx, chainId, expectedAccount = this.account) {
     await this.readChain();
     if (this.chainId !== chainId) throw new Error("Your wallet changed network. Switch it back, then try again.");
-    return this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.account, ...tx }] });
+    if (!same(expectedAccount, this.account)) throw new Error("Your wallet changed account. Check the active account, then try again.");
+    return this.provider.request({ method: "eth_sendTransaction", params: [{ from: expectedAccount, ...tx }] });
   }
 }
 
@@ -227,5 +228,7 @@ export function explain(error) {
     if (data.startsWith("0x08c379a0")) return `The transaction would fail: ${decodeText(`0x${data.slice(10)}`)}.`; // Error(string)
     return "The transaction would fail on the chain, so it was not sent.";
   }
-  return String(error?.message ?? error).split("\n")[0];
+  const message = String(error?.message ?? error).split("\n")[0];
+  if (/insufficient funds|insufficient balance for gas/i.test(message)) return "This wallet needs more of the network’s native token to pay for gas.";
+  return message;
 }

@@ -1,7 +1,10 @@
 // otc.fam's page. #/d/<id> shows a deal to whoever opens its link and lets its taker fill it (deal-page.js); #/new
 // makes a deal (new-deal-page.js). This file reads config.json, finds the browser's wallet, and routes.
+import { newVestingDealPage } from "./new-vesting-deal-page.js";
+import { vestingDealPage } from "./vesting-deal-page.js";
+import { VestingChain } from "./vesting-chain.js";
 import { dealPage } from "./deal-page.js";
-import { Chain, Wallet } from "./eth.js";
+import { Chain, Wallet, ZERO_ADDRESS } from "./eth.js";
 import { newDealPage } from "./new-deal-page.js";
 import { card, h, networkName, short } from "./ui.js";
 import { isAddress } from "./units.js";
@@ -32,7 +35,6 @@ async function start() {
     await Promise.race([app.wallet.ready, new Promise((resolve) => setTimeout(resolve, 1000))]);
   }
   document.getElementById("network").textContent = networkName(app.config.chainId);
-  document.getElementById("footer").replaceChildren(`Deals contract on ${networkName(app.config.chainId)}: `, h("span", { class: "mono" }, app.config.contract));
   showAccount();
   addEventListener("hashchange", route);
   route();
@@ -41,6 +43,27 @@ async function start() {
 function route() {
   page?.stop();
   const deal = /^#\/d\/(.*)$/.exec(location.hash);
+  const v2 = /^#\/v2\/(.*)$/.exec(location.hash);
+  if (v2) {
+    const { contractV2, v2DeploymentBlock, rpcUrl } = app.config;
+    if (!isAddress(contractV2) || contractV2 === ZERO_ADDRESS) {
+      app.main.replaceChildren(card(h("h1", {}, "V2 is not configured"),
+        h("p", { class: "lead" }, "Configure a V2 contract on this test network to create or open a V2 deal."),
+        h("a", { class: "button secondary", href: "#/" }, "Return to otc.fam")));
+      page = null;
+    } else {
+      const config = { ...app.config, contract: contractV2 };
+      const v2App = { ...app, config, chain: new VestingChain(new URL(rpcUrl, location.href).href, contractV2, v2DeploymentBlock) };
+      page = v2[1] === "new" ? newVestingDealPage(v2App) : vestingDealPage(v2App, v2[1]);
+    }
+    document.title = "Private V2 deals · otc.fam";
+    document.getElementById("footer").replaceChildren("V2 contract on " + networkName(app.config.chainId) + ": ",
+      h("span", { class: "mono" }, contractV2 ?? "Unconfigured"));
+    scrollTo(0, 0);
+    return;
+  }
+  document.getElementById("footer").replaceChildren("Legacy V1 contract on " + networkName(app.config.chainId) + ": ",
+    h("span", { class: "mono" }, app.config.contract));
   page = deal ? dealPage(app, deal[1]) : location.hash === "#/new" ? newDealPage(app) : homePage();
   scrollTo(0, 0);
 }
@@ -56,7 +79,8 @@ function homePage() {
     h("h1", {}, "One deal, one link"),
     h("p", { class: "lead" }, "Offer tokens for other tokens and send the link to the other side. They see what they pay and what they get, "
       + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
-    h("a", { class: "button primary", href: "#/new" }, "Make a deal"),
+    h("a", { class: "button primary", href: "#/v2/new" }, "Make a private deal · V2"),
+    h("div", { class: "row" }, h("a", { class: "button secondary", href: "#/new" }, "Make a legacy deal · V1")),
     h("form", { class: "row", onsubmit: open }, number, h("button", { class: "secondary", type: "submit" }, "Open"))));
   return { update() {}, stop() {} };
 }

@@ -9,8 +9,9 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** Round 1: the deal contract, the page that shows a deal from its link and fills it, and
-the deployment script. Nothing here has been reviewed for security, and nothing is deployed.
+**Where it stands.** V1 supports the original fee-free deals and links. V2 adds private immediate
+delivery and funded vesting on a separate contract. See the [V2 guide](docs/vesting-v2.md) for
+testnet setup, checks and browser evidence.
 
 ## What is in the repository
 

@@ -6,7 +6,7 @@ const NETWORKS = {
   1: "Ethereum", 10: "OP Mainnet", 137: "Polygon", 8453: "Base", 42161: "Arbitrum One", 84532: "Base Sepolia", 11155111: "Sepolia",
   31337: "Local test chain",
 };
-const STATUS_WORDS = { open: "Open", filled: "Filled", cancelled: "Cancelled", expired: "Expired", "not-found": "No such deal" };
+const STATUS_WORDS = { open: "Open", funded: "Funded", settled: "Settled", filled: "Filled", cancelled: "Cancelled", expired: "Expired", "not-found": "No such deal" };
 const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 export const DATE = new Intl.DateTimeFormat(undefined, {
   weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
@@ -90,8 +90,8 @@ export function action({ steps, step, button, hint, notice: message, extra }) {
     extra);
 }
 
-export function copyButton(text) {
-  return h("button", { class: "secondary", type: "button", onclick: async (e) => {
+export function copyButton(text, testid) {
+  return h("button", { class: "secondary", type: "button", testid, onclick: async (e) => {
     const button = e.currentTarget;
     const copied = navigator.clipboard ? await navigator.clipboard.writeText(text).then(() => true, () => false) : false;
     button.textContent = copied ? "Link copied" : "Copying failed: copy the link from the address bar";
