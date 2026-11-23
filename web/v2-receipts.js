@@ -16,7 +16,7 @@ export function receiptsCard({ config, v2, explorer }, s, idText) {
     settled: (e) => `Settled. The buyer, ${short(d.buyer)}, paid ${amount(d.quote + e.buyerFee, q)}: the price, ${amount(d.quote, q)}, and a buyer fee of ${amount(e.buyerFee, q)}. `
       + `The seller received ${amount(d.quote - e.sellerFee, q)}, after a seller fee of ${amount(e.sellerFee, q)}. The treasury received ${amount(e.buyerFee + e.sellerFee, q)}. `
       + (d.delivery === "vesting" ? `All ${give} moved into the grant's vault.` : `All ${give} went to the buyer.`),
-    granted: () => `Grant #${d.grantId} created for the buyer${s.grant ? `, with its vault at ${short(s.grant.custodian)}` : ""}.`,
+    granted: () => `Grant #${idText} created for the buyer${s.grant ? `, with its vault at ${short(s.grant.custodian)}` : ""}.`, // a deal's grant has the deal's number
     claimed: (e) => `Claimed. The grant's vault paid ${amount(e.amount, t)} to the beneficiary, ${short(d.buyer)}. No fee.`,
     cancelled: () => `Cancelled. ${give} went back to the seller, ${short(d.seller)}. No fee.`,
   };

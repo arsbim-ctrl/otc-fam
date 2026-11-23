@@ -193,11 +193,17 @@ export function newDealPageV2(app) {
     update();
   }, () => {}); // unread, the browser's clock stands
 
-  /** Reads deal `id` back from the chain and shows its link: what the buyer will see is what the chain holds. */
+  /**
+   * Deal `id` is funded: its link is shown whatever comes next, and with it the deal as read back from the chain,
+   * so that what the seller sends is what the chain holds. If that read fails the link still stands.
+   */
   async function showCreated(id) {
-    const deal = await v2.deal(id);
-    const [base, quote] = await Promise.all([chain.token(deal.baseToken), chain.token(deal.quoteToken)]);
-    s.created = { deal, base, quote, link: `${location.href.split("#")[0]}#/v2/d/${id}` };
+    s.created = { id, link: `${location.href.split("#")[0]}#/v2/d/${id}` };
+    try {
+      const deal = await v2.deal(id);
+      const [base, quote] = await Promise.all([chain.token(deal.baseToken), chain.token(deal.quoteToken)]);
+      Object.assign(s.created, { deal, base, quote });
+    } catch {} // the link shows the terms itself
   }
 
   function update() {
@@ -308,21 +314,21 @@ export function newDealPageV2(app) {
   const stopWaiting = () => presses.stopWaiting("Stopped waiting. If that transaction is confirmed later, the deal exists: its seller finds it by its number, and can cancel it.");
 
   function created() {
-    const { deal: d, base, quote, link } = s.created, m = money(d.quote), vesting = d.delivery === "vesting";
+    const { id, deal: d, base, quote, link } = s.created, m = d && money(d.quote), vesting = d?.delivery === "vesting";
     return card(
-      h("div", { class: "card-head" }, h("h1", {}, `Deal #${d.id} is funded`, " ", h("span", { class: "version", testid: "version" }, "v2"))),
+      h("div", { class: "card-head" }, h("h1", {}, `Deal #${id} is funded`, " ", h("span", { class: "version", testid: "version" }, "v2"))),
       h("p", { class: "lead" }, "Send this one link to the buyer. It shows them the terms, both fees and that your tokens are held on the chain, and lets them settle from their wallet."),
       h("div", { class: "linkbox" }, h("a", { testid: "deal-link", href: link }, link)),
       h("div", { class: "row" }, copyButton(link), h("a", { class: "button secondary", href: link }, "Open the deal")),
-      h("dl", { class: "facts" },
+      d ? h("dl", { class: "facts" },
         fact("Delivery", vesting ? "Vesting: a new grant for the buyer" : "Immediate: to the buyer's wallet"),
         fact("Buyer", h("span", { class: "mono" }, d.buyer)),
         fact("They get", amount(d.allocation, base)),
         fact("They pay, fee included", amount(m.buyerTotal, quote)),
         fact("You receive, fee taken", amount(m.sellerNet, quote)),
-        fact("Can be settled until", utc(vesting && d.fixedStart ? Math.min(d.expiry, d.fixedStart) : d.expiry))),
-      h("p", { class: "hint" }, `Your ${amount(d.allocation, base)} are held by the deal contract. `
-        + "To take them back before the buyer settles, open the deal with this wallet and cancel it: that costs no fee."));
+        fact("Can be settled until", utc(vesting && d.fixedStart ? Math.min(d.expiry, d.fixedStart) : d.expiry)))
+        : h("p", { class: "hint" }, "The deal could not be read back from the chain just now. It is funded all the same, and its link shows its terms."),
+      h("p", { class: "hint" }, "Your tokens are held by the deal contract. To take them back before the buyer settles, open the deal with this wallet and cancel it: that costs no fee."));
   }
 
   app.main.replaceChildren(form);

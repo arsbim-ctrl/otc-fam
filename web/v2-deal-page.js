@@ -134,7 +134,7 @@ export function dealPageV2(app, idText) {
       leg(payLabel, m.buyerTotal, q, "pay", `Price ${amount(d.quote, q)} + 0.5% buyer fee ${amount(m.buyerFee, q)}`),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
       leg(receiveLabel, d.allocation, s.base, "receive", vesting ? "As a vesting grant, held in a vault of its own." : "To the buyer's wallet, at settlement."),
-      standing && funding(d, give, vesting),
+      standing && funding(d, give, vesting, status),
       h("dl", { class: "facts" },
         fact("Seller", h("span", { class: "mono", testid: "seller" }, d.seller), role === "seller" && " (you)"),
         fact("Buyer, the only address that can settle", h("span", { class: "mono", testid: "buyer" }, d.buyer), role === "buyer" && " (you)"),
@@ -157,11 +157,11 @@ export function dealPageV2(app, idText) {
    * transaction that took its whole allocation; the page adds what the contract holds of that token now, for this
    * deal and any other, and warns if that is ever less than this deal's.
    */
-  function funding(d, give, vesting) {
+  function funding(d, give, vesting, status) {
     const ok = s.escrow >= d.allocation;
     return h("p", { class: ok ? "held" : "held bad", testid: "funding", "data-funded": String(ok) }, ok
       ? `Funded on the chain: the deal contract took the seller's whole ${give} when this deal was made, and holds ${amount(s.escrow, s.base)} now `
-        + `(read at block ${s.block.number}). ${d.status !== "funded" ? "" : vesting ? "Settling moves this deal's allocation into the buyer's grant." : "Settling sends this deal's allocation to the buyer."}`
+        + `(read at block ${s.block.number}). ${status !== "funded" ? "" : vesting ? "Settling moves this deal's allocation into the buyer's grant." : "Settling sends this deal's allocation to the buyer."}`
       : `The deal contract holds only ${amount(s.escrow, s.base)}, less than this deal's ${give}. Do not settle it: tell the seller.`);
   }
 

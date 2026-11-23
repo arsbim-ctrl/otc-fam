@@ -342,6 +342,63 @@ test("a page reloaded while its transaction is on its way takes it up again: a s
   });
 }));
 
+test("a wait taken up after a reload can be stopped: the page is usable again, and a press that sent nothing leaves another's transaction remembered", () => onSite(async (site, w) => {
+  const id = await w.fund(await w.terms());
+  await w.usdc.as(w.deployer).mint(w.buyer, TOTAL);
+  const contract = w.deals.address.toLowerCase(), lost = `0x${"cd".repeat(32)}`; // a transaction the network never confirms
+  const pending = (page) => page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("otcfam:pending")));
+  const remembered = (page, key, label, step) => page.evaluate(([k, record]) => localStorage.setItem(k, JSON.stringify(record)),
+    [`otcfam:pending:31337:${contract}:${key}`, { hash: lost, nonce: null, label, step, account: w.buyer }]);
+
+  await browse(site, `#/v2/d/${id}`, { wallet: walletFor(w, w.buyer) }, async (page) => {
+    await says(page, "deal-status", "funded", "data-status");
+    await remembered(page, `deal:${id}`, "Settling the deal…", 2);
+    await page.reload();
+    await shows(page, "waiting", (text) => text.includes(`This page was reloaded while transaction ${lost} was on its way`), "what is awaited");
+    assert.equal(await offered(page), false, "nothing else can be pressed while it waits");
+    await page.getByTestId("stop-waiting").click();
+    await noticeSays(page, "Stopped waiting.");
+    assert.equal(await seen(page, "primary-action"), "Connect wallet");
+    assert.ok(await offered(page), "the page is usable again");
+    assert.deepEqual(await pending(page), [], "the transaction is forgotten: the next reload does not wait for it");
+
+    await remembered(page, `deal:${id}`, "Settling the deal…", 2); // as another tab on this deal would, with its own transaction on its way
+    await page.getByTestId("primary-action").click(); // connect: a press that sends nothing
+    await says(page, "primary-action", "Approve 124.074072 USDC");
+    assert.equal((await pending(page)).length, 1, "the other tab's transaction is still remembered");
+  });
+
+  await browse(site, "#/v2/new", { wallet: walletFor(w, w.seller) }, async (page) => {
+    await page.getByTestId("primary-action").waitFor();
+    await remembered(page, "new", "Funding the deal…", 2);
+    await page.reload();
+    await until(async () => (await read(page)).includes(`This page was reloaded while transaction ${lost} was on its way`), "the form waiting");
+    await page.getByTestId("stop-waiting").click();
+    await noticeSays(page, "Stopped waiting.");
+    assert.equal(await seen(page, "primary-action"), "Connect wallet", "the form is usable again");
+    assert.deepEqual(await pending(page), []);
+  });
+}));
+
+test("a funded deal's link is given even when the deal cannot be read back from the chain at that moment", () => onSite(async (site, w) => {
+  await w.fam.as(w.deployer).mint(w.seller, ALLOCATION);
+  await browse(site, "#/v2/new", { wallet: walletFor(w, w.seller) }, async (page) => {
+    let down = false; // once the deal is funded, the node stops answering reads of deals
+    await page.route("**/rpc", (route) => {
+      const { method, params } = route.request().postDataJSON();
+      return down && method === "eth_call" && params[0].data?.startsWith("0x82fd5bac") ? route.fulfill({ status: 503, body: "down" }) : route.continue(); // getDeal(uint256)
+    });
+    await enter(page, w);
+    await pressUntil(page, async () => (await seen(page, "primary-action")) === "Fund the deal", "the fund button");
+    down = true;
+    await page.getByTestId("primary-action").click();
+    await until(async () => (await link(page)) === `${site.url}/#/v2/d/1`, "the link of the deal that was funded");
+    assert.match(await read(page), /Deal #1 is funded/);
+    assert.match(await read(page), /could not be read back from the chain just now\. It is funded all the same/);
+  });
+  assert.equal(await statusOf(w, 1), STATUS.Funded);
+}));
+
 test("while the chain cannot be read the page says that what it shows may be out of date, and it reads the receipts again afterwards", () => onSite(async (site, w) => {
   const t = await w.terms();
   const id = await w.fund(t);

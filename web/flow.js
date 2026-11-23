@@ -33,9 +33,11 @@ export function flow({ app, s, key, render, settle }) {
   /**
    * Runs one press. `work(stage, sent)` does what the press is for: `stage(text)` tells the person where it stands,
    * and `sent(hash, nonce)` is for transact(), to remember the transaction as soon as the wallet has sent it. However
-   * the work ends, the transaction is forgotten again, since the page has then seen its end.
+   * the work ends, a transaction it remembered is forgotten again, since the page has then seen its end. `mine` says
+   * that the remembered transaction is this press's from the start (a wait taken up after a reload). A press that
+   * remembered nothing forgets nothing: the record may be another tab's, whose transaction is still on its way.
    */
-  async function act(label, step, work) {
+  async function act(label, step, work, mine = false) {
     const press = ++presses;
     let result;
     s.notice = null;
@@ -46,19 +48,22 @@ export function flow({ app, s, key, render, settle }) {
         if (press !== presses) return;
         s.busy.hint = hint;
         render();
-      }, (hash, nonce) => remember({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: app.wallet.account }));
+      }, (hash, nonce) => {
+        mine = true;
+        remember({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: app.wallet.account });
+      });
     } catch (e) {
       if (press === presses) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
     }
     if (press !== presses) return; // the person stopped waiting for it, or left the page
-    forget();
+    if (mine) forget();
     await settle(result, label);
     s.busy = null;
     render();
   }
 
   return {
-    act,
+    act: (label, step, work) => act(label, step, work),
     /**
      * After a reload: takes up the transaction this browser sent before, and runs `confirmed(receipt)` once the
      * network has confirmed it. While it waits, `s.busy.waiting` is set: the page shows what is awaited, and a way
@@ -74,7 +79,7 @@ export function flow({ app, s, key, render, settle }) {
         const receipt = await app.chain.confirmed(pending.hash, pending.account, /^\d+$/.test(pending.nonce ?? "") ? BigInt(pending.nonce) : null);
         if (press === presses) await confirmed(receipt);
         return receipt;
-      });
+      }, true);
     },
     /** Gives the page back while a transaction sent before a reload is still awaited, and says `text`. */
     async stopWaiting(text) {
