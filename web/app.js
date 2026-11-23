@@ -64,7 +64,8 @@ function route() {
 }
 
 function homePage() {
-  const number = h("input", { id: "deal-number", inputmode: "numeric", placeholder: "Legacy deal number", autocomplete: "off" });
+  const hasV2 = isAddress(app.config.contractV2) && app.config.contractV2 !== ZERO_ADDRESS;
+  const number = h("input", { id: "deal-number", inputmode: "numeric", placeholder: hasV2 ? "Legacy deal number" : "Deal number", autocomplete: "off" });
   const open = (e) => {
     e.preventDefault();
     if (/^\d+$/.test(number.value.trim())) location.hash = `#/d/${number.value.trim()}`;
@@ -74,8 +75,8 @@ function homePage() {
     h("h1", {}, "One deal, one link"),
     h("p", { class: "lead" }, "Offer tokens for other tokens and send the link to the other side. They see what they pay and what they get, "
       + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
-    h("a", { class: "button primary", href: "#/v2/new" }, "Create a funded deal"),
-    h("a", { class: "button secondary", href: "#/new" }, "Make a legacy swap"),
+    hasV2 && h("a", { class: "button primary", href: "#/v2/new" }, "Create a funded deal"),
+    h("a", { class: hasV2 ? "button secondary" : "button primary", href: "#/new" }, hasV2 ? "Make a legacy swap" : "Make a deal"),
     h("form", { class: "row", onsubmit: open }, number, h("button", { class: "secondary", type: "submit" }, "Open"))));
   return { update() {}, stop() {} };
 }
