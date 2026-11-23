@@ -321,7 +321,7 @@ export function dealPageV2(app, idText) {
       Number(seconds) === time ? " (now)" : ` (${fromNow(Number(seconds) - time)})`);
     const vestedShare = percent(g.vested, g.allocation), claimedShare = percent(g.claimed, g.allocation), cliffAt = percent(g.cliff - g.start, g.end - g.start);
     const position = percent(BigInt(time) - g.start, g.end - g.start);
-    return card(
+    return h("section", { class: "card grant" },
       h("div", { class: "card-head" }, h("h2", {}, `Grant #${g.id}`),
         h("span", { class: `status grant-${state}`, testid: "grant-status", "data-status": state }, GRANT_WORDS[state])),
       h("p", { class: "lead" }, `${amount(g.allocation, t)} for ${mine ? "you" : "the buyer"}, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.`),

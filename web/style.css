@@ -196,3 +196,9 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
 
 /* A notice above a v2 deal's cards (the chain could not be read) spans them all. */
 .board > .notice { grid-column: 1 / -1; }
+
+/* On a narrow screen a settled deal's grant comes first: it is what its buyer opens the link for. */
+@media (max-width: 999px) {
+  .board > .notice { order: -2; }
+  .board > .card.grant { order: -1; }
+}
