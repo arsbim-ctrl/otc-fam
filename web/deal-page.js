@@ -1,7 +1,7 @@
 // A deal's page, #/d/<id>: what the taker pays and receives, from whom, until when, and the one button that moves the
 // deal forward (connect, switch network, approve, fill). It reads the deal with or without a wallet and follows it.
 import { approveExactly, cancelData, explain, fillData, same, transact, ZERO_ADDRESS } from "./eth.js";
-import { action, amount, card, copyButton, fact, fromNow, h, head, leg, networkName, NO_WALLET, notice, secondary, short, when } from "./ui.js";
+import { action, amount, card, copyButton, fact, fromNow, h, head, leg, networkName, NO_WALLET, notice, secondary, short, show, when } from "./ui.js";
 
 export function dealPage(app, idText) {
   const { config, chain, wallet } = app;
@@ -40,8 +40,7 @@ export function dealPage(app, idText) {
 
   function render() {
     if (!live) return;
-    const next = view();
-    if (!app.main.firstElementChild?.isEqualNode(next)) app.main.replaceChildren(next); // unchanged: leave it, and any text selected in it
+    show(app.main, view()); // changed in place: the focus, and any text selected, stay where they are
     clearTimeout(expiryTimer);
     const left = s.deal?.status === "open" ? Number(s.deal.expiry) - now() : 0;
     if (left > 0 && left < 86_400) expiryTimer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time
@@ -87,7 +86,7 @@ export function dealPage(app, idText) {
     const get = amount(d.sellAmount, s.sell), standing = status === "open" || status === "expired";
     document.title = `Deal #${idText}: ${amount(d.buyAmount, s.buy)} for ${get} · otc.fam`;
     return card(
-      head(`Deal #${idText}`, status),
+      head(`Deal #${idText}`, status, "v1"),
       h("p", { class: "lead" }, lead(status, mine, taking)),
       leg(payLabel, d.buyAmount, s.buy, "pay"),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),

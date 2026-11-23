@@ -29,6 +29,7 @@ let compiled;
 /** OtcDealsV2, GrantVault and the tokens the tests trade with, compiled once as the checks compile. */
 export function artifacts() {
   compiled ??= {
+    ...compile(ROOT, "contracts/OtcDeals.sol"),
     ...compile(ROOT, "contracts/OtcDealsV2.sol"),
     ...compile(ROOT, "contracts/GrantVault.sol"),
     ...compile(ROOT, "test/tokens/EdgeToken.sol"),
@@ -125,5 +126,7 @@ export async function world() {
   };
   w.fam = await w.token("FAM", 18);
   w.usdc = await w.token("USDC", 6);
+  /** The round 1 contract, deployed next to v2 as on a real site (the page's config names both). */
+  w.legacy = await deploy(chain, PEOPLE.deployer, a.OtcDeals, [], { label: "OtcDeals" });
   return w;
 }
