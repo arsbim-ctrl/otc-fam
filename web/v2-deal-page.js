@@ -1,9 +1,26 @@
 import { explainV2 as explain } from "./eth-v2.js";
 import { approveExactly, cancelData, fillData, same, transact } from "./eth.js";
 import { encodeV2 } from "./eth-v2.js";
-import { action, amount, card, fact, h, leg, NO_WALLET, secondary } from "./ui.js";
+import { action, amount, card, fact, fromNow, h, leg, NO_WALLET, secondary } from "./ui.js";
 import { fees, vesting } from "./vesting.js";
 import { economics, receiptView, tokenWarning, utc, updateArea } from "./v2-ui.js";
+
+const DAY = 86_400n;
+const units = (count, unit) => `${count} ${unit}${count === 1n ? "" : "s"}`;
+
+function scheduleLength(seconds) {
+  const days = seconds / DAY, hours = seconds % DAY / 3_600n, remainder = seconds % 3_600n;
+  if (seconds === 0n) return "0 days";
+  return [[days, "day"], [hours, "hour"], [remainder, "second"]]
+    .filter(([count]) => count > 0n).map(([count, unit]) => units(count, unit)).join(", ");
+}
+
+function relativeTime(delta) {
+  const distance = delta < 0n ? -delta : delta;
+  if (distance < DAY) return fromNow(Number(delta));
+  const days = units((distance + DAY / 2n) / DAY, "day");
+  return delta < 0n ? `${days} ago` : `in ${days}`;
+}
 
 export function dealPageV2(app, idText) {
   const { config, chain, wallet } = app;
@@ -52,6 +69,9 @@ export function dealPageV2(app, idText) {
       settled: !d.delivery ? "Settled — tokens delivered"
         : grant?.claimed === d.allocation ? "Settled — fully claimed" : "Settled — vesting continues",
     }[status];
+    const startLabel = d.fixedStart
+      ? `Start ${utc(d.fixedStart)}. Cliff ${utc(d.fixedStart + d.cliffSeconds)}. End ${utc(d.fixedStart + d.durationSeconds)}.`
+      : "Start at settlement block.";
     updateArea(content, h("div", {},
       h("p", { class: `status ${status}`, testid: "deal-status", "data-status": status }, statusLabel),
       h("h2", { testid: "delivery-mode", class: `delivery ${d.delivery ? "new-vesting" : "immediate"}` }, mode),
@@ -63,7 +83,7 @@ export function dealPageV2(app, idText) {
       h("dl", { class: "facts" }, fact("Seller", h("span", { class: "mono", testid: "maker" }, d.seller)), fact("Designated buyer / beneficiary", d.buyer),
         fact("Treasury · all protocol fees", treasury), fact("Contract / custodian", config.contract),
         fact("Expires", h("span", { testid: "expires", "data-expiry": String(d.expiry) }, utc(d.expiry))),
-        d.delivery && fact("Committed schedule", `${d.fixedStart ? `Start ${utc(d.fixedStart)}; cliff ${utc(d.fixedStart + d.cliffSeconds)}; end ${utc(d.fixedStart + d.durationSeconds)}` : `Start at settlement block; cliff +${d.cliffSeconds} seconds; end +${d.durationSeconds} seconds`}. Accrual starts at start.`))));
+        d.delivery && fact("Committed schedule", `${startLabel} Cliff after ${scheduleLength(d.cliffSeconds)}. Duration ${scheduleLength(d.durationSeconds)}. Accrual starts at start.`))));
     if (grant) renderGrant();
     renderActions();
   }
@@ -84,10 +104,13 @@ export function dealPageV2(app, idText) {
       grantArea.append(h("section", { class: "vesting", "aria-label": "Vesting schedule" }, h("h2", {}, `Grant #${grant.id}`),
         h("dl", { class: "facts" }, fact("Start UTC", utc(grant.start)), fact("Cliff UTC", utc(grant.cliff)), fact("End UTC", utc(grant.end)), fact("Beneficiary", grant.beneficiary),
           ...["vested", "claimed", "claimable", "locked", "beneficiary-balance"].map(k => fact(k === "beneficiary-balance" ? "Beneficiary wallet balance" : k[0].toUpperCase() + k.slice(1), h("span", { testid: k })))),
-        h("div", { class: "vesting-timeline" },
+        h("div", { class: "vesting-timeline", style: `--cliff: ${cliffPosition}%` },
           h("progress", { max: "100", value: "0", "aria-label": "Time elapsed in vesting schedule", testid: "vesting-timeline" }),
-          h("span", { class: `vesting-cliff${cliffPosition > 50 ? " near-end" : ""}`, style: `left: ${cliffPosition}%`, "aria-hidden": "true" }, "Cliff")),
+          h("span", { class: "vesting-start", "aria-hidden": "true" }, "Start"),
+          h("span", { class: "vesting-cliff", "aria-hidden": "true" }, "Cliff"),
+          h("span", { class: "vesting-end", "aria-hidden": "true" }, "End")),
         h("p", { class: "hint", testid: "chain-now" }),
+        h("p", { class: "hint", testid: "vesting-countdown" }),
         h("p", { testid: "claim-timing", class: "hint" })));
     }
     for (const k of ["vested", "claimed", "claimable", "locked"]) grantArea.querySelector(`[data-testid="${k}"]`).textContent = amount(v[k], base);
@@ -95,8 +118,15 @@ export function dealPageV2(app, idText) {
     const timeline = grantArea.querySelector("progress");
     timeline.value = time <= start ? 0 : time >= end ? 100 : position(time);
     const nowText = `Chain now: ${utc(time)}`;
-    timeline.setAttribute("aria-valuetext", `${nowText}. Cliff: ${utc(cliff)}.`);
+    const cliffText = time < cliff ? `Cliff ${relativeTime(cliff - time)}`
+      : time === cliff ? "Cliff reached" : `Cliff passed ${relativeTime(cliff - time)}`;
+    const endText = time < end ? `Ends ${relativeTime(end - time)}`
+      : time === end ? "Ends now" : `Ended ${relativeTime(end - time)}`;
+    const startText = time < start ? `Starts ${relativeTime(start - time)}. ` : "";
+    const countdown = `${startText}${cliffText}. ${endText}.`;
+    timeline.setAttribute("aria-valuetext", `${nowText}. Start: ${utc(start)}. Cliff: ${utc(cliff)}. End: ${utc(end)}. ${countdown}`);
     grantArea.querySelector('[data-testid="chain-now"]').textContent = nowText;
+    grantArea.querySelector('[data-testid="vesting-countdown"]').textContent = countdown;
     grantArea.querySelector('[data-testid="claim-timing"]').textContent = timing;
   }
   function renderActions() {

@@ -66,7 +66,7 @@ function route() {
 }
 
 function homePage() {
-  const number = h("input", { id: "deal-number", placeholder: "Deal number or V2 link", "aria-label": "Deal number or V2 link", autocomplete: "off" });
+  const number = h("input", { id: "deal-number", placeholder: "ID or V2 link", "aria-label": "Deal number or V2 link", autocomplete: "off" });
   const open = (e) => {
     e.preventDefault();
     const value = number.value.trim();
