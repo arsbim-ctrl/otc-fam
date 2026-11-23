@@ -1,10 +1,11 @@
-// npm run deploy: compiles contracts/OtcDeals.sol as the checks do (solc 0.8.38, optimizer on with 200 runs, EVM
+// npm run deploy (or deploy:v2) compiles the selected contract as the checks do (solc 0.8.38, optimizer on with 200 runs, EVM
 // cancun), deploys it to the network at RPC_URL from the key in DEPLOYER_KEY, and prints the contract's address
 // on stdout (progress goes to stderr). Both values come from the environment only: nothing is written to a file,
 // and neither is ever printed (an RPC URL can hold an API key).
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { ContractFactory, JsonRpcProvider, Wallet } from "ethers";
+import { ContractFactory, isAddress, JsonRpcProvider, Wallet, ZeroAddress } from "ethers";
+import { TEST_NETWORKS } from "../web/v2-chain.js";
 
 const solc = createRequire(import.meta.url)("solc");
 const fail = (message) => {
@@ -12,20 +13,29 @@ const fail = (message) => {
   process.exit(1);
 };
 
+const v2 = process.argv.includes("--v2");
+const name = v2 ? "OtcDealsV2" : "OtcDeals";
+const treasury = process.env.TREASURY?.trim();
+if (v2 && (!treasury || !isAddress(treasury) || treasury.toLowerCase() === ZeroAddress)) {
+  fail("Set TREASURY to the nonzero treasury address for this V2 deployment.");
+}
+
 const rpcUrl = process.env.RPC_URL?.trim(), key = process.env.DEPLOYER_KEY?.trim();
 if (!rpcUrl || !key) fail("Usage: RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy");
 if (!/^(0x)?[0-9a-fA-F]{64}$/.test(key)) fail("DEPLOYER_KEY is not a private key: it must be 64 hex digits, with or without 0x.");
 
-const { abi, bytecode } = compile("contracts/OtcDeals.sol", "OtcDeals");
 const chainId = await chainIdAt(rpcUrl);
+if (v2 && !TEST_NETWORKS.has(chainId)) fail(`OTC V2 deployment is limited to local and supported test chains. RPC_URL reports chain ${chainId}.`);
+const { abi, bytecode } = compile(`contracts/${name}.sol`, name);
 const deployer = new Wallet(key, new JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true }));
-console.error(`Deploying OtcDeals to chain ${chainId} from ${deployer.address}…`);
+console.error(`Deploying ${name} to chain ${chainId} from ${deployer.address}…`);
 try {
-  const contract = await new ContractFactory(abi, bytecode, deployer).deploy();
+  const contract = await new ContractFactory(abi, bytecode, deployer).deploy(...(v2 ? [treasury] : []));
   const receipt = await contract.deploymentTransaction().wait();
   const address = await contract.getAddress();
   console.error(`Deployed in block ${receipt.blockNumber} by transaction ${receipt.hash}.`);
-  console.error(`In web/config.json: { "chainId": ${chainId}, "contract": "${address}", "rpcUrl": "<a public JSON-RPC URL of chain ${chainId}>" }`);
+  if (v2) console.error(`Set v2Contract to ${address} and v2DeploymentBlock to ${receipt.blockNumber} in web/config.json.`);
+  else console.error(`In web/config.json: { "chainId": ${chainId}, "contract": "${address}", "rpcUrl": "<a public JSON-RPC URL of chain ${chainId}>" }`);
   console.log(address);
 } catch (e) {
   fail(e.code === "INSUFFICIENT_FUNDS" ? `${deployer.address} has too little ether on chain ${chainId} to pay for the deployment.` : `The deployment failed: ${e.shortMessage ?? e.message}`);

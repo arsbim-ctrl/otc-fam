@@ -40,6 +40,13 @@ export async function checkTransaction(chain, job, block) {
   const receipt = await chain.rpc("eth_getTransactionReceipt", [job.hash]);
   if (receipt) return outcome(receipt, false);
 
+  if (job.replacement) {
+    const replacementReceipt = await chain.rpc("eth_getTransactionReceipt", [job.replacement.hash]);
+    if (replacementReceipt) return job.replacement.matches
+      ? outcome(replacementReceipt, true)
+      : { hash: job.replacement.hash, status: "replaced" };
+  }
+
   if (job.nonce === undefined) {
     const original = await chain.rpc("eth_getTransactionByHash", [job.hash]);
     if (original && matches(job, original) && same(job.from, original.from)) job.nonce = original.nonce;
@@ -61,13 +68,29 @@ export async function checkTransaction(chain, job, block) {
     return outcome(await chain.rpc("eth_getTransactionReceipt", [tx.hash]), tx.hash !== job.hash);
   }
   // The nonce was used, but the RPC could no longer identify the mined transaction within the search window.
-  return { hash: job.hash, status: "unresolved" };
+  job.uncertain = true;
+  return null;
+}
+
+export async function identifyReplacement(chain, job, hash) {
+  if (!/^0x[0-9a-f]{64}$/i.test(hash) || same(hash, job.hash)) {
+    throw new Error("Enter the new transaction hash from your wallet.");
+  }
+  await chain.verifyNetwork();
+  const tx = await chain.rpc("eth_getTransactionByHash", [hash]);
+  if (!tx || !same(tx.from, job.from)) throw new Error("The new transaction was not found for this wallet on the configured network.");
+  const sameAction = matches(job, tx);
+  const sameNonce = job.nonce !== undefined && BigInt(job.nonce) === BigInt(tx.nonce);
+  const oldBlock = tx.blockNumber !== null && tx.blockNumber !== undefined && BigInt(tx.blockNumber) < BigInt(job.firstBlock);
+  if (oldBlock || (job.nonce === undefined ? !sameAction : !sameNonce)) {
+    throw new Error("The new transaction does not match this submission.");
+  }
+  return { hash: tx.hash, matches: sameAction };
 }
 
 export function transactionMessage(job, result) {
   if (result.status === "reverted") return { kind: "error", text: "The transaction reverted. No tokens moved. Review the current deal and try again." };
   if (result.status === "replaced") return { kind: "warn", text: "Your wallet replaced this transaction with a different action. Review the updated on-chain state." };
-  if (result.status === "unresolved") return { kind: "warn", text: "The wallet used this transaction’s nonce, but its receipt could not be matched. Check wallet activity before submitting again." };
   const labels = {
     "reset-approval": "Previous token approval cleared. Approve the exact amount to continue.",
     approve: "Token approval confirmed.",

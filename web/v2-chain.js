@@ -13,6 +13,8 @@ export const EVENTS = {
 };
 const EVENT_NAMES = Object.fromEntries(Object.entries(EVENTS).map(([name, topic]) => [topic, name]));
 
+export const TEST_NETWORKS = new Set([31337, 1337, 84532, 11155111]);
+
 export const IMMEDIATE = 0;
 export const NEW_VESTING = 1;
 export const UINT256_MAX = (1n << 256n) - 1n;

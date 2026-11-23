@@ -9,7 +9,7 @@ parts are the creator's words and which are proposals he can still change.
 - Totally non-custodial.
 - A page that looks like Uniswap, not like a SaaS form.
 
-Everything else below is **proposed**: the chain, the contract's shape, the link's format, the rounds.
+The sections below record the interfaces for the first two rounds and the remaining proposals.
 
 ## The parts
 
@@ -38,15 +38,34 @@ browser's wallet (`window.ethereum`).
 `primary-action`…), listed in round 1's brief. The checks and later rounds rely on them: a round may add
 handles, never rename one.
 
+## V2 settlement and vesting
+
+`OtcDealsV2` implements `IOtcDealsV2` alongside the legacy contract. The funding caller is the
+seller and the terms designate a distinct buyer. Funding moves the full allocation into the deal
+contract. Only the buyer can settle a funded deal before the expiry and any fixed start. Only the seller
+can cancel while funded. Both terminal paths consume that deal status.
+
+Settlement checks the exact debit and credit of payment and delivery transfers. For a raw quote `Q`,
+each side’s fee is `floor(Q / 200)`. The buyer pays `Q + fee`, the seller receives `Q - fee`, and
+the deployment’s immutable treasury receives `2 * fee`. A grant uses the source deal ID and is
+recorded only after the vesting vault receives the full allocation. A failed operation rolls the whole
+transaction back. The deal contract creates and controls a dedicated vault at deployment, keeping
+open-deal escrow and vested grant reserves at separate addresses.
+
+The vault records an immutable beneficiary and schedule, plus cumulative claimed units. Before the cliff,
+vested is zero. At the cliff, elapsed accrual becomes vested. Between cliff and end, the computation is
+`(A / duration) * elapsed + (A % duration) * elapsed / duration`. Elapsed and the remainder each fit in
+64 bits. At the end, vested is exactly `A`. Anyone can trigger a claim to the recorded beneficiary.
+
 ## The rounds
 
 | Round | Title | What it adds | How it is checked | Prize |
 | --- | --- | --- | --- | --- |
 | 1 | One deal, one link | The deal contract, and the smallest page that shows a deal from its link and fills it | The contract on a local chain with the checks' own tokens; the built page in a browser with a stand-in wallet | 1,000,000 points |
-| 2 | The page people send around (proposed) | The Uniswap look, real wallets, a deployment on a test network, the link's preview in Telegram, warnings about tokens, so that a fake token is noticed | Decided after round 1 | To set |
+| 2 | Vesting OTC: funded grants and exact fees | Immediate or new-grant delivery through V2, with immutable buyer and treasury terms | Cumulative checks on a local EVM and end-to-end browser scenarios | 1,000,000 points |
 | 3 | What a real deal needs (proposed) | Decided after the creator has shown round 2 to three people who do OTC deals | Decided after round 2 | To set |
 
-Only round 1 is specified. Rounds 2 and 3 are added on Hotpod, each after the one before has settled.
+Hotpod publishes each round after the previous round settles.
 
 ## Where it runs
 

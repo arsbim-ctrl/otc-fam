@@ -4,7 +4,7 @@ import { isAddress, parseAmount } from "./units.js";
 import { createData, fees, IMMEDIATE, NEW_VESTING, receiptEvents, UINT256_MAX } from "./v2-chain.js";
 import { sendV2, tabStorage } from "./v2-transactions.js";
 import {
-  addressText, dealLink, economics, facts, money, panel, replaceChanged, scheduledTerms, submitApproval,
+  addressText, dealLink, economics, facts, money, panel, replaceChanged, replacementForm, scheduledTerms, submitApproval,
   tokenWarning, transactionFlow, transactionStatus, txHash, utc, walletAction, wireButton,
 } from "./v2-ui.js";
 
@@ -90,7 +90,7 @@ export function v2CreatePage(app) {
       h("div", { class: "leg v2-input-leg" }, label(fields.quote, "Quoted payment"),
         label(fields.quoteToken, "Payment token contract"), quoteInfo),
       label(fields.buyer, "Designated buyer address"),
-      label(fields.minutes, "Settle within (minutes)", h("p", { class: "hint" }, "Measured from the funding transaction’s latest block.")),
+      label(fields.minutes, "Settle within (minutes)", h("p", { class: "hint" }, "Measured from the latest block when you submit funding.")),
       schedule));
   const unsupported = h("p", { class: "notice warn", testid: "unsupported-position", role: "status", hidden: true },
     "Existing vesting positions are unsupported. Sablier positions, revocable rights, screenshots and URLs cannot be funded here. Select immediate delivery or a new grant.");
@@ -107,6 +107,9 @@ export function v2CreatePage(app) {
     save();
   });
 
+  const replacement = replacementForm(flow, refresh);
+  statusBox.after(replacement);
+
   function save() {
     draft.set({ fields: Object.fromEntries(Object.entries(fields).map(([name, input]) => [name, input.value])), created: state.created });
   }
@@ -118,9 +121,10 @@ export function v2CreatePage(app) {
 
   async function loadToken(input) {
     const token = input.value.trim().toLowerCase();
-    if (!isAddress(token) || token === ZERO_ADDRESS || cache.has(token)) return;
+    const cached = cache.get(token);
+    if (!isAddress(token) || token === ZERO_ADDRESS || (cached && (!cached.retryAt || cached.retryAt > Date.now()))) return;
     cache.set(token, { loading: true });
-    cache.set(token, await chain.token(token).then((info) => ({ info }), () => ({ missing: true })));
+    cache.set(token, await chain.token(token).then((info) => ({ info }), () => ({ missing: true, retryAt: Date.now() + 15_000 })));
     render();
   }
 
@@ -246,6 +250,7 @@ export function v2CreatePage(app) {
     wireButton(submit, state, flow.busy || (flow.job ? "Waiting for receipt…" : next.label || "Fund and create link"),
       !busy && !refused && next.run);
     replaceChanged(statusBox, transactionStatus(config, flow));
+    replacement.hidden = !flow.job;
     replaceChanged(readError, state.readError ? h("div", { class: "notice error v2-error", role: "status" },
       h("p", {}, state.readError),
       h("button", { class: "v2-link-button", type: "button", onclick: () => {
@@ -264,9 +269,10 @@ export function v2CreatePage(app) {
       const token = fields.baseToken.value.trim().toLowerCase();
       const account = wallet?.account;
       const treasury = state.treasury ?? await chain.beneficiaryTreasury(block.number);
+      const supported = fields.delivery.value !== "external";
       const [, , funds] = await Promise.all([
-        loadToken(fields.baseToken), loadToken(fields.quoteToken),
-        account && isAddress(token) && fields.delivery.value !== "external"
+        supported && loadToken(fields.baseToken), supported && loadToken(fields.quoteToken),
+        account && isAddress(token) && supported
           ? Promise.all([chain.balanceOf(token, account, block.number), chain.allowance(token, account, block.number)])
             .then(([balance, allowance]) => ({ account, token, balance, allowance }), () => null)
           : null,

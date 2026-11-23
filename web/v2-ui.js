@@ -1,12 +1,13 @@
 import { approveData, explain } from "./eth.js";
 import { amount, h, networkName, NO_WALLET } from "./ui.js";
-import { checkTransaction, sendV2, tabStorage, transactionMessage } from "./v2-transactions.js";
+import { checkTransaction, identifyReplacement, sendV2, tabStorage, transactionMessage } from "./v2-transactions.js";
 import { fees, NEW_VESTING } from "./v2-chain.js";
 
-export const TEST_NETWORKS = new Set([31337, 1337, 84532, 11155111]);
-
 export function dealLink(config, id) {
-  return `${location.href.split("#")[0]}#/v2/d/${config.chainId}/${config.v2Contract.toLowerCase()}/${id}`;
+  const url = new URL(location.href);
+  url.search = "";
+  url.hash = `/v2/d/${config.chainId}/${config.v2Contract.toLowerCase()}/${id}`;
+  return url.href;
 }
 
 export function utc(seconds) {
@@ -16,7 +17,9 @@ export function utc(seconds) {
 
 export function lengthText(seconds) {
   if (seconds === 0n) return "0 seconds";
-  return seconds % 86400n === 0n ? `${seconds / 86400n} days` : `${seconds} seconds`;
+  const days = seconds / 86400n;
+  if (seconds % 86400n === 0n) return `${days} day${days === 1n ? "" : "s"}`;
+  return `${seconds} second${seconds === 1n ? "" : "s"}`;
 }
 
 export const money = (units, token) => amount(units, token).trim();
@@ -56,7 +59,9 @@ export function panel(id, title, ...children) {
 export function replaceChanged(slot, next) {
   const current = slot.firstElementChild;
   if (current?.isEqualNode(next)) return;
+  const focus = current?.contains(document.activeElement) ? document.activeElement.id : "";
   slot.replaceChildren(next);
+  if (focus) next.querySelector(`#${CSS.escape(focus)}`)?.focus({ preventScroll: true });
 }
 
 export function wireButton(button, state, label, run) {
@@ -127,6 +132,26 @@ export function transactionFlow(app, key, render, onResult) {
     }
   };
 
+  flow.recover = async (hash, refresh) => {
+    const job = flow.job;
+    if (!job || flow.recovering) return;
+    flow.recovering = true;
+    try {
+      const replacement = await identifyReplacement(app.chain, job, hash);
+      if (flow.job !== job) return;
+      job.replacement = replacement;
+      flow.feedback = { kind: "info", text: "Checking the replacement receipt." };
+      save();
+    } catch (error) {
+      if (flow.job !== job) return;
+      flow.feedback = { kind: "error", text: explain(error) };
+    } finally {
+      flow.recovering = false;
+      render();
+    }
+    await refresh();
+  };
+
   flow.check = async (block) => {
     if (!flow.job || checking) return;
     checking = true;
@@ -159,10 +184,23 @@ export function transactionStatus(config, flow) {
   return h("div", { class: "v2-feedback", role: "status", "aria-live": "polite" },
     flow.busy && h("p", { class: "hint" }, flow.busy),
     flow.job && h("div", { class: "notice info" },
-      h("p", {}, "Waiting for a transaction receipt. Check your wallet activity for a pending or replaced transaction."),
-      txHash(config, flow.job.hash)),
+      h("p", {}, flow.job.uncertain
+        ? "The wallet used this transaction’s nonce. Enter its replacement hash to recover the receipt."
+        : "Waiting for a transaction receipt. Check your wallet activity for a pending or replaced transaction."),
+      txHash(config, flow.job.replacement?.hash ?? flow.job.hash)),
     feedback && h("p", { class: `notice ${feedback.kind}`, testid: "notice" }, feedback.text),
     flow.last && !flow.job && h("p", { class: "hint v2-last" }, `Last transaction · ${flow.last.status} `, txHash(config, flow.last.hash)));
+}
+
+export function replacementForm(flow, refresh) {
+  const input = h("input", { id: "replacement-hash", spellcheck: "false", autocomplete: "off", class: "mono", placeholder: "0x…" });
+  return h("details", { class: "v2-replacement", hidden: true },
+    h("summary", {}, "Use a replacement transaction hash"),
+    h("form", { class: "v2-field", onsubmit: (event) => {
+      event.preventDefault();
+      flow.recover(input.value.trim(), refresh);
+    } }, h("label", { for: input.id }, "New hash from wallet activity"), input,
+    h("button", { type: "submit", class: "secondary" }, "Check replacement receipt")));
 }
 
 export function tokenWarning() {

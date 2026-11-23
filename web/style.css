@@ -129,6 +129,9 @@ body:has(.v2-layout) .top, body:has(.v2-layout) footer { max-width: 1056px; }
 .v2-panel h2, .v2-funding-receipt h2 { margin: 0 0 12px; font-size: 17px; letter-spacing: -.012em; }
 .v2-card .lead { margin: 7px 0 0; }
 .v2-status { display: inline-block; text-align: center; }
+.v2-card .amount { font-size: clamp(25px, 7vw, 32px); line-height: 1.12; }
+.v2-card .amount.mid { font-size: 24px; }
+.v2-card .amount.long { font-size: 18px; }
 .v2-inputs { border: 0; margin: 0; min-width: 0; padding: 0; }
 .v2-fields, .v2-schedule, .v2-field, .v2-input-leg { display: grid; gap: 8px; min-width: 0; }
 .v2-fields { margin-top: 14px; gap: 13px; }
@@ -156,7 +159,7 @@ body:has(.v2-layout) .top, body:has(.v2-layout) footer { max-width: 1056px; }
 .v2-error p, .v2-feedback p { margin: 0; }
 .v2-last { overflow-wrap: anywhere; }
 .v2-card .notice.success { color: var(--ok); background: var(--ok-bg); }
-.v2-grant-slot:not(:empty), .v2-card #v2-activity { margin-top: 18px; }
+.v2-grant-slot:not(:empty) { margin-top: 18px; }
 .v2-grant-slot:has(> [hidden]) { margin-top: 0; }
 .v2-card progress { display: block; width: 100%; margin-top: 16px; height: 10px; accent-color: var(--accent); }
 .v2-timeline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; list-style: none; padding: 0; margin: 10px 0; }
@@ -168,9 +171,10 @@ body:has(.v2-layout) .top, body:has(.v2-layout) footer { max-width: 1056px; }
 .v2-receipts li { display: grid; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .v2-receipts li:last-child { border-bottom: 0; padding-bottom: 0; }
 .v2-card > div:has(> section[aria-labelledby="v2-activity"]) { margin-top: 16px; }
-.v2-card #v2-activity { margin-top: 0; }
 .v2-funding-receipt { margin: 20px 0; }
 .v2-complete .linkbox { margin-top: 14px; }
+.v2-replacement summary { cursor: pointer; color: #542dcf; font-size: 14px; }
+.v2-replacement form { margin-top: 8px; }
 .v2-link-button { background: transparent; color: #542dcf; text-decoration: underline; width: auto; padding: 5px 0; font-size: 14px; }
 .sr-only { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; white-space: nowrap; }
 

@@ -3,7 +3,7 @@ import { card, copyButton, h, leg, networkName } from "./ui.js";
 import { dealAction, fees, NEW_VESTING, receiptEvents } from "./v2-chain.js";
 import { sendV2 } from "./v2-transactions.js";
 import {
-  addressText, economics, facts, money, panel, replaceChanged, scheduledTerms, submitApproval,
+  addressText, dealLink, economics, facts, money, panel, replaceChanged, replacementForm, scheduledTerms, submitApproval,
   tokenWarning, transactionFlow, transactionStatus, txHash, utc, walletAction, wireButton,
 } from "./v2-ui.js";
 
@@ -32,6 +32,10 @@ export function v2DealPage(app, id) {
 
   const badge = h("span", { class: "status v2-status", testid: "deal-status", "data-status": "loading" }, "Reading chain");
   const lead = h("p", { class: "lead", testid: "deal-summary" });
+  const jump = h("button", { class: "v2-link-button v2-jump", type: "button", hidden: true, onclick: () => {
+    document.getElementById("v2-grant")?.focus();
+    document.getElementById("v2-grant")?.scrollIntoView({ block: "start" });
+  } }, "View vesting schedule and claims");
   const readError = h("div");
   const dealBody = h("div", { class: "v2-grid", hidden: true });
   const swap = h("div", { class: "v2-panel" });
@@ -43,20 +47,23 @@ export function v2DealPage(app, id) {
   const button = h("button", { class: "primary", type: "button", testid: "primary-action", onclick: () => state.run?.(), hidden: true });
   const share = h("div", { class: "v2-share", hidden: true },
     h("p", { class: "hint" }, "Anyone with this link can read the terms. Only the designated buyer can settle."),
-    copyButton(location.href));
+    copyButton(dealLink(config, id)));
   const controls = h("div", { class: "v2-actions" }, button, hint, feedback);
   const actionSlot = h("div");
   const grantActions = h("div");
   const shell = card(h("div", { class: "v2-heading" },
     h("span", { class: "v2-kicker" }, "OTC V2"),
     h("div", { class: "card-head" }, h("h1", {}, `Private deal #${id}`), badge),
-    lead),
+    lead, jump),
     readError, dealBody, grant, grantActions, receipts);
   shell.classList.add("v2-card");
   dealBody.append(h("div", { class: "v2-deal-left" }, swap, actionSlot, share), terms);
   const flow = transactionFlow(app, `otc-v2:${config.chainId}:${chain.contract}:deal:${id}`, render, (_job, receipt) => {
     mergeHistory(receiptEvents(receipt, chain.contract));
   });
+
+  const replacement = replacementForm(flow, refresh);
+  controls.append(replacement);
 
   function mergeHistory(events) {
     const unique = new Map([...state.activity, ...events].map((event) => [`${event.hash}:${event.index}`, event]));
@@ -92,7 +99,7 @@ export function v2DealPage(app, id) {
         run: send("cancel", "the refund", "cancel"), refund: true,
       };
     }
-    if (me && !buyer) return { hint: `This wallet cannot settle. The designated buyer is ${deal.buyer}.` };
+    if (me && !buyer) return { hint: `This wallet cannot settle. Switch to the designated buyer ${deal.buyer} in your wallet.` };
     if (status !== "funded") return me ? { hint: "The seller can still reclaim the allocated tokens." } : walletStep();
     if (!snapshot.backed) return { hint: "The deal contract reports less than this allocation. Settlement is unavailable." };
     const step = walletStep();
@@ -152,6 +159,7 @@ export function v2DealPage(app, id) {
       "start-passed": "The fixed vesting start has passed. The seller can reclaim the allocation.",
     };
     lead.textContent = messages[status];
+    jump.hidden = !snapshot.grant;
     share.hidden = deal.status !== "funded" || !same(deal.seller, wallet?.account);
 
     replaceChanged(swap, h("div", {},
@@ -177,6 +185,7 @@ export function v2DealPage(app, id) {
     button.className = next.refund ? "secondary" : "primary";
     wireButton(button, state, flow.busy || (flow.job ? "Waiting for receipt…" : next.label || ""), next.run);
     replaceChanged(feedback, transactionStatus(config, flow));
+    replacement.hidden = !flow.job;
 
     const activity = state.activity.map((event) => h("li", {},
       h("strong", {}, LABELS[event.name], event.amount === undefined ? "" : ` · ${money(event.amount, base)}`),
@@ -189,7 +198,7 @@ export function v2DealPage(app, id) {
 
   function grantPanel(grant, token) {
     const vestedPercent = Number(grant.vested * 10000n / grant.allocation) / 100;
-    return panel("v2-grant", `Vesting grant #${grant.id}`,
+    const section = panel("v2-grant", `Vesting grant #${grant.id}`,
       h("p", { class: "hint" }, "The cliff releases accrued tokens. The remainder vests linearly until the end."),
       h("label", { for: "vesting-progress", class: "sr-only" }, "Portion of the allocation vested"),
       h("progress", { id: "vesting-progress", max: 100, value: vestedPercent }),
@@ -202,6 +211,8 @@ export function v2DealPage(app, id) {
         ["Locked", money(grant.allocation - grant.vested, token)],
       ], "facts v2-grant-balances"),
       facts([["Beneficiary", addressText(grant.beneficiary)], ["Vesting vault", addressText(grant.custodian)]], "facts v2-addresses"));
+    section.querySelector("h2").tabIndex = -1;
+    return section;
   }
 
   async function readSnapshot() {

@@ -9,21 +9,22 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** Round 1: the deal contract, the page that shows a deal from its link and fills it, and
-the deployment script. Nothing here has been reviewed for security, and nothing is deployed.
+The V1 contract and routes support the original fee-free swap. V2 adds buyer-specific escrow, exact fees,
+and either direct token delivery or a funded vesting grant. The V2 demo and tests use synthetic balances.
 
 ## What is in the repository
 
 | Path | What it is |
 | --- | --- |
 | `contracts/IOtcDeals.sol` | The deal contract's interface. It is fixed. |
-| `contracts/OtcDeals.sol` | The deal contract: one contract for every deal, no owner, no fee. |
+| `contracts/OtcDeals.sol` | V1 escrow for the original fee-free deals. |
+| `contracts/IOtcDealsV2.sol`, `contracts/OtcDealsV2.sol`, `contracts/VestingVault.sol` | The versioned interface, settlement contract and grant custodian. |
 | `web/` | The page, plain files and no dependency. `app.js` reads the config and routes to `deal-page.js` (`#/d/<id>`) or `new-deal-page.js` (`#/new`); `eth.js` reads the chain and sends through the wallet; `ui.js` and `units.js` build the page and word its amounts. `npm run build` copies it into `dist/`. |
-| `web/config.json` | The chain, the contract's address and the JSON-RPC URL the page reads at load. |
+| `web/config.json` | The chain, V1 and V2 contract addresses and the JSON-RPC URL the page reads at load. |
 | `scripts/build.mjs`, `scripts/deploy.mjs` | The build, and the deployment. |
 | `test/` | The entry's own tests (`npm test`): what the round's checks leave out. |
 | `.launchpad/project.md` | The pod's settings and each round's brief, as Hotpod reads them. |
-| `.launchpad/checks/round-1/` | Round 1's checks. |
+| `.launchpad/checks/` | Frozen Round 1 and Round 2 acceptance checks. |
 
 ## Install and run
 
@@ -45,7 +46,51 @@ It compiles `contracts/OtcDeals.sol` as the checks do, prints the contract's add
 stdout, and never prints `RPC_URL` or the key. Put the address in `web/config.json`, with the network's chain
 id and a public RPC URL.
 
-## Run the checks
+## Try V2 locally
+
+```sh
+npm ci --ignore-scripts
+npm run demo:v2
+```
+
+Open the seller URL printed in the terminal. Use the two printed token addresses and the designated
+buyer address. Enter an allocation of `1000000` ALFA and a payment of `123.456789` mock USDC. Select
+**New vesting grant** to use the default 30-day cliff and 90-day duration, or choose **Immediate delivery**.
+Connect the simulated seller, approve the allocation and fund the deal. Open the resulting link in a
+fresh tab to read the funded terms without a wallet. To settle, add `?wallet=buyer` before the link’s `#`,
+then connect, approve the displayed buyer total and settle. A short schedule in seconds makes it possible
+to try claims manually. The browser test mines exact boundary blocks for the 30/90-day example.
+
+For a local or testnet wallet deployment, run `npm run deploy:v2` with `RPC_URL`, `DEPLOYER_KEY`
+and `TREASURY` supplied in the environment. Set `v2Contract`, `v2DeploymentBlock`, `chainId` and a
+wallet-free `rpcUrl` in `web/config.json`, then rebuild. Optional `explorerUrl` links receipt hashes.
+The configured RPC needs `eth_getLogs` over the deployment range for fresh-browser receipt history.
+V2 creates deals at `#/v2/new` and shares `#/v2/d/<chainId>/<v2Contract>/<id>`. V1 uses the original routes.
+
+## Verify V2
+
+```sh
+npx playwright install chromium
+LAUNCHPAD_GATE_OUT=/tmp/otc-round2-report.json node .launchpad/checks/round-2/run.mjs
+node --test test/v2-contract.test.mjs
+OTC_SCREENSHOTS=evidence/v2 node --test test/v2-browser.test.mjs
+```
+
+Use the Chromium already installed in the pinned Hotpod runner when running offline. The frozen checks
+exercise raw-unit rounding, grant boundaries, payout and refund. The additional local tests measure
+balance and allowance deltas for vault funding failures and claim failures, full and partial claims,
+reentrancy, fee-on-transfer tokens, fixed starts and expiry. The browser scenarios verify the seller and
+fresh buyer at 390px and 1440px, wallet rejection, network switching, a mined revert, a replacement
+transaction, and reload recovery. [Screenshots and balance deltas](evidence/v2/README.md)
+
+V2 targets testnet and local tokens on Cancun-capable chains. The supported deliveries are immediate
+tokens and immutable new grants. The contract can handle ERC-20 transfers with exact balance deltas,
+including tokens that return no data. Issuer freezes, rebases and dishonest balance reporting can
+impair the affected asset. Automatic transaction replacement recovery uses the recent block window and
+the original nonce when available. The pending screen can verify a replacement hash from wallet activity.
+Draft and pending state are kept in the current tab. Confirmed deal and grant state are on-chain.
+
+## Run the V1 checks
 
 ```sh
 npm ci
@@ -74,7 +119,7 @@ npm test
 | `amounts.test.mjs`, `abi.test.mjs` | Amounts are never rounded; the page's hand-written selectors and error words match the compiled contract; a symbol is read as a string or as bytes32, without characters that turn the text around. |
 | `deploy.test.mjs` | `npm run deploy` against a local node, with a fresh key. |
 
-## The deal contract
+## The V1 deal contract
 
 `OtcDeals` holds the maker's tokens from `createDeal` until the deal ends: `fill` swaps both sides in one
 transaction, and `cancel` gives the tokens back to the maker. An open link is therefore always backed, and
@@ -102,7 +147,7 @@ every approval is for the exact amount of one deal. Where the brief left the cho
   `InexactTransfer(token)`, `NotOpen(id)`, `DealExpired(id)`, `NotYourDeal(id, taker)`, `NotMaker(id)`,
   `TransferFailed(token)`, `Reentered()`.
 
-## The page
+## The V1 page
 
 - `#/d/<id>` reads the deal from `rpcUrl`, with or without a wallet. Its one button takes the taker through
   each step and says what the step does: connect, switch network if needed, approve exactly the amount to

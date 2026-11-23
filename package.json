@@ -11,6 +11,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "deploy": "node scripts/deploy.mjs",
+    "deploy:v2": "node scripts/deploy.mjs --v2",
+    "demo:v2": "node scripts/demo-v2.mjs",
     "test": "node --test test/*.test.mjs",
     "check": "node .launchpad/checks/round-1/run.mjs"
   },

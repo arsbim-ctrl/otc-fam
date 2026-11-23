@@ -5,10 +5,9 @@ import { Chain, same, Wallet, ZERO_ADDRESS } from "./eth.js";
 import { newDealPage } from "./new-deal-page.js";
 import { card, h, networkName, short } from "./ui.js";
 import { isAddress } from "./units.js";
-import { UINT256_MAX, VestingChain } from "./v2-chain.js";
+import { TEST_NETWORKS, UINT256_MAX, VestingChain } from "./v2-chain.js";
 import { v2CreatePage } from "./v2-create-page.js";
 import { v2DealPage } from "./v2-deal-page.js";
-import { TEST_NETWORKS } from "./v2-ui.js";
 
 /** What every page works with: where it draws, the config, the chain it reads, and the wallet, if the browser has one. */
 const app = { main: document.getElementById("app"), config: null, chain: null, v2Chain: null, wallet: null };
