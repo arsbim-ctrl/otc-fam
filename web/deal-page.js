@@ -41,7 +41,20 @@ export function dealPage(app, idText) {
   function render() {
     if (!live) return;
     const next = view();
-    if (!app.main.firstElementChild?.isEqualNode(next)) app.main.replaceChildren(next); // unchanged: leave it, and any text selected in it
+    const current = app.main.firstElementChild;
+    if (current?.querySelector('[data-testid="deal-status"]')?.dataset.status === next.querySelector('[data-testid="deal-status"]')?.dataset.status) {
+      const expiry = current?.querySelector('[data-testid="expires"]');
+      const updatedExpiry = next.querySelector('[data-testid="expires"]');
+      if (expiry && updatedExpiry) {
+        if (expiry.textContent !== updatedExpiry.textContent) expiry.textContent = updatedExpiry.textContent;
+        expiry.className = updatedExpiry.className;
+      }
+    }
+    if (!current?.isEqualNode(next)) {
+      const focus = current?.contains(document.activeElement) && document.activeElement.dataset.testid;
+      app.main.replaceChildren(next);
+      if (focus) next.querySelector(`[data-testid="${focus}"]:enabled`)?.focus({ preventScroll: true });
+    }
     clearTimeout(expiryTimer);
     const left = s.deal?.status === "open" ? Number(s.deal.expiry) - now() : 0;
     if (left > 0 && left < 86_400) expiryTimer = setTimeout(render, left * 1000 + 250); // the page turns to "expired" on time
@@ -138,7 +151,8 @@ export function dealPage(app, idText) {
         s.notice && notice(s.notice));
     }
     return h("div", { class: "action" },
-      secondary("cancel-action", s.busy?.label ?? `Cancel it and take back your ${get}`, !s.busy && cancel),
+      secondary("cancel-action", s.busy?.label ?? (wallet.chainId === config.chainId ? `Cancel it and take back your ${get}` : `Switch to ${networkName(config.chainId)}`),
+        !s.busy && (wallet.chainId === config.chainId ? cancel : switchNetwork)),
       s.busy?.hint && h("p", { class: "hint" }, s.busy.hint),
       s.notice && notice(s.notice));
   }
@@ -150,7 +164,7 @@ export function dealPage(app, idText) {
     if (s.busy?.step === null) return action({ hint: s.busy.hint, extra: secondary("cancel-action", s.busy.label) });
     if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: s.busy.hint });
     if (!wallet) {
-      return action({ steps, step: 0, button: { label: "Connect a wallet to fill" }, notice: { kind: "info", text: NO_WALLET }, extra: copyButton(location.href) });
+      return action({ notice: { kind: "info", text: NO_WALLET }, extra: copyButton(location.href) });
     }
     if (!me) {
       return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: "Connect the wallet you will pay from. Nothing is sent yet.",
@@ -158,7 +172,8 @@ export function dealPage(app, idText) {
     }
     if (same(me, d.maker)) {
       return action({ notice: { kind: "info", text: `This is your own deal: you cannot fill it. Until someone does, you can cancel it and take back your ${get}.` },
-        extra: secondary("cancel-action", `Cancel the deal and take back ${get}`, cancel) });
+        extra: wallet.chainId === config.chainId ? secondary("cancel-action", `Cancel the deal and take back ${get}`, cancel)
+          : secondary("cancel-action", `Switch to ${networkName(config.chainId)}`, switchNetwork) });
     }
     if (!mayFill(d, me)) {
       return action({ notice: { kind: "warn", text: `This deal is for another address: only ${d.taker} can fill it. `

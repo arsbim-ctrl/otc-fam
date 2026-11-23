@@ -104,3 +104,77 @@ input.mono { font-size: 13px; }
 .linkbox a { color: var(--accent); font-weight: 600; }
 .row { display: flex; gap: 8px; margin-top: 12px; }
 .row > * { flex: 1; }
+
+/* V2 layout on the same static site and network header. */
+:focus-visible, .leg-row input.amount-input:focus-visible {
+  outline: 2px solid #5a33d9;
+  outline-offset: 3px;
+}
+footer a, .v2-layout a { color: #542dcf; }
+.v2-layout .primary { color: #fff; }
+.v2-layout { max-width: 1056px; }
+body:has(.v2-layout) .top, body:has(.v2-layout) footer { max-width: 1056px; }
+.v2-card { padding: clamp(16px, 3vw, 36px); margin-top: 8px; }
+.v2-heading { margin-bottom: 20px; }
+.v2-heading h1 { font-size: clamp(25px, 4vw, 37px); letter-spacing: -.035em; }
+.v2-kicker { display: inline-block; margin-bottom: 5px; color: #542dcf; font-size: 12px; font-weight: 750; letter-spacing: .1em; }
+.v2-grid { display: grid; gap: 16px; align-items: start; }
+.v2-panel {
+  min-width: 0;
+  padding: clamp(13px, 2vw, 22px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+.v2-panel .v2-panel { border: 0; padding: 0; }
+.v2-panel h2, .v2-funding-receipt h2 { margin: 0 0 12px; font-size: 17px; letter-spacing: -.012em; }
+.v2-card .lead { margin: 7px 0 0; }
+.v2-status { display: inline-block; text-align: center; }
+.v2-inputs { border: 0; margin: 0; min-width: 0; padding: 0; }
+.v2-fields, .v2-schedule, .v2-field, .v2-input-leg { display: grid; gap: 8px; min-width: 0; }
+.v2-fields { margin-top: 14px; gap: 13px; }
+.v2-field label, .v2-schedule legend { font-size: 14px; font-weight: 700; }
+.v2-field :is(input, select) { min-height: 44px; }
+.v2-card select { font: inherit; color: var(--ink); padding: 8px; background: white; border: 1px solid var(--line); border-radius: 10px; width: 100%; }
+.v2-input-leg { padding: 13px; border-radius: 14px; }
+.v2-input-leg input[inputmode="decimal"] { font-size: 23px; font-variant-numeric: tabular-nums; }
+.v2-schedule { margin: 0; border: 1px solid var(--line); border-radius: 12px; padding: 11px; }
+.v2-schedule legend { padding: 0 5px; color: var(--ink); }
+.v2-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.v2-meta:empty, .v2-actions > .hint:empty, .v2-feedback:empty { display: none; }
+.v2-allocation { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: var(--accent-soft); border-radius: 12px; overflow-wrap: anywhere; }
+.v2-allocation span { font-size: 13px; color: #542dcf; }
+.v2-card .facts > div, .v2-grant-balances > div { display: grid; grid-template-columns: minmax(84px, 1fr) minmax(0, 1.35fr); gap: 5px 12px; }
+.v2-card .facts dt, .v2-grant-balances dt { margin-top: 3px; }
+.v2-card .facts dd, .v2-grant-balances dd { margin: 0; font-variant-numeric: tabular-nums; }
+.v2-addresses { padding-top: 13px; border-top: 1px solid var(--line); }
+.v2-token-warning { margin: 16px 0 0; padding: 10px; border: 1px solid #eee0c4; border-radius: 10px; background: #fffaed; color: #64471a; font-size: 13px; line-height: 1.45; }
+.v2-actions, .v2-share, .v2-feedback { display: grid; gap: 9px; }
+.v2-actions:not(:empty) { margin-top: 13px; }
+.v2-actions button { overflow-wrap: anywhere; }
+.v2-share { margin-top: 11px; }
+.v2-error { margin-bottom: 12px; }
+.v2-error p, .v2-feedback p { margin: 0; }
+.v2-last { overflow-wrap: anywhere; }
+.v2-card .notice.success { color: var(--ok); background: var(--ok-bg); }
+.v2-grant-slot:not(:empty), .v2-card #v2-activity { margin-top: 18px; }
+.v2-grant-slot:has(> [hidden]) { margin-top: 0; }
+.v2-card progress { display: block; width: 100%; margin-top: 16px; height: 10px; accent-color: var(--accent); }
+.v2-timeline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; list-style: none; padding: 0; margin: 10px 0; }
+.v2-timeline li { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.v2-timeline li strong { display: block; color: var(--ink); margin-bottom: 3px; }
+.v2-grant-balances { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 8px; margin: 15px 0; }
+.v2-card .v2-grant-balances > div { display: block; background: var(--soft); border-radius: 10px; padding: 8px; }
+.v2-receipts { list-style: none; padding: 0; margin: 0; }
+.v2-receipts li { display: grid; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.v2-receipts li:last-child { border-bottom: 0; padding-bottom: 0; }
+.v2-card > div:has(> section[aria-labelledby="v2-activity"]) { margin-top: 16px; }
+.v2-card #v2-activity { margin-top: 0; }
+.v2-funding-receipt { margin: 20px 0; }
+.v2-complete .linkbox { margin-top: 14px; }
+.v2-link-button { background: transparent; color: #542dcf; text-decoration: underline; width: auto; padding: 5px 0; font-size: 14px; }
+.sr-only { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; white-space: nowrap; }
+
+@media (min-width: 760px) {
+  .v2-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 20px; }
+  .v2-complete { max-width: 690px; margin-inline: auto; }
+}
