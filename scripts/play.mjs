@@ -243,5 +243,5 @@ async function play(size) {
 
 for (const size of [PHONE, DESKTOP]) await play(size);
 await closeBrowser();
-console.log(`\nEvery scene played at 390 px and 1440 px, and every balance was as the deal says. ${shots} screenshots are in ${folder}`);
+console.log(`\nEvery scene played at 390 px and 1440 px, and every balance was as the deal says. ${shots} screenshots are in ${process.argv[2] ?? "screens"}/`);
 process.exit(0);
