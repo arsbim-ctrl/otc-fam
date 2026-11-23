@@ -1,0 +1,3886 @@
+
+=== 390 px · 1. The seller chooses immediate delivery, sees the exact money, funds, and gets one link
+
+--- 01-form-immediate (01-form-immediate-390.jpg)
+    otc.fam
+    Local test chain
+    Make a deal v2
+    
+    Sell tokens to one buyer. Your tokens are held by the deal contract until the buyer pays; each side pays a 0.5% fee at settlement, and nothing before.
+    
+    Delivery
+    Immediate
+    The buyer gets the tokens when they pay.
+    Vesting
+    The buyer gets a new grant that unlocks over time.
+    Existing position
+    A stream or a locked allocation you already hold.
+    You sell
+    FAM
+    Token
+    
+    FAM, 18 decimals
+    
+    ↓
+    Price the buyer pays you, before fees
+    USDC
+    Token
+    
+    USDC, 6 decimals
+    
+    Buyer
+    
+    Only this address can settle the deal, and a vesting grant only ever pays this address.
+    
+    Open for (hours)
+    
+    The buyer can settle until Tue, 24 Nov 2026, 14:24:41 UTC. After that you take the tokens back.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything. A token that keeps a fee on its transfers is refused.
+    
+    What this deal does
+    DELIVERY
+    Immediate: 1,000,000 FAM go to the buyer when they pay
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    BUYER RECEIVES
+    1,000,000 FAM
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:41 UTC
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    YOU RECEIVE
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Fees are rounded down to the payment token's smallest unit and taken only when the buyer settles: funding, cancelling and claiming cost no fee.
+    
+    Connect
+    Approve FAM
+    Fund
+    Connect wallet
+    
+    Connect the wallet that holds the tokens you sell. Nothing is sent yet.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+    [in the form: delivery-immediate chosen; allocation = 1000000; base-token = 0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7; quote = 123.456789; quote-token = 0x8246b2b8b128ab7744967f603359206c66e99e60; buyer = 0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081; expiry-hours = 24]
+
+--- 02-funded-link (02-funded-link-390.jpg)
+    otc.fam
+    Local test chain
+    0x1a2b…3c4d
+    Deal #1 is funded v2
+    
+    Send this one link to the buyer. It shows them the terms, both fees and that your tokens are held on the chain, and lets them settle from their wallet.
+    
+    http://127.0.0.1:34753/#/v2/d/1
+    Copy link
+    Open the deal
+    DELIVERY
+    Immediate: to the buyer's wallet
+    BUYER
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    THEY GET
+    1,000,000 FAM
+    THEY PAY, FEE INCLUDED
+    124.074072 USDC
+    YOU RECEIVE, FEE TAKEN
+    122.839506 USDC
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:42 UTC
+    
+    Your tokens are held by the deal contract. To take them back before the buyer settles, open the deal with this wallet and cancel it: that costs no fee.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, funding the deal (no fee): seller -1,000,000 FAM, deals +1,000,000 FAM. Nothing else moved.
+
+=== 390 px · 2. The seller chooses vesting delivery: a 30-day cliff over 90 days, from the settlement
+
+--- 03-form-vesting (03-form-vesting-390.jpg)
+    otc.fam
+    Local test chain
+    Make a deal v2
+    
+    Sell tokens to one buyer. Your tokens are held by the deal contract until the buyer pays; each side pays a 0.5% fee at settlement, and nothing before.
+    
+    Delivery
+    Immediate
+    The buyer gets the tokens when they pay.
+    Vesting
+    The buyer gets a new grant that unlocks over time.
+    Existing position
+    A stream or a locked allocation you already hold.
+    You sell
+    FAM
+    Token
+    
+    FAM, 18 decimals
+    
+    ↓
+    Price the buyer pays you, before fees
+    USDC
+    Token
+    
+    USDC, 6 decimals
+    
+    Buyer
+    
+    Only this address can settle the deal, and a vesting grant only ever pays this address.
+    
+    Open for (hours)
+    
+    The buyer can settle until Tue, 24 Nov 2026, 14:24:42 UTC. After that you take the tokens back.
+    
+    Vesting starts
+    At settlement
+    When the buyer pays, at that block's time.
+    At a fixed time
+    A date and time in UTC, still in the future.
+    Cliff (days)
+    
+    30 days of chain time: nothing can be claimed before it.
+    
+    Whole vesting (days)
+    
+    90 days of chain time, from the start to fully vested.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything. A token that keeps a fee on its transfers is refused.
+    
+    What this deal does
+    DELIVERY
+    Vesting: 1,000,000 FAM go into a new grant for the buyer when they pay
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    BUYER RECEIVES
+    1,000,000 FAM
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:42 UTC
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    YOU RECEIVE
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    VESTING SCHEDULE
+    Starts when the buyer settles. Cliff 30 days later: 333,333.333333333333333333 FAM unlock at once. Fully vested 90 days after the start; until then it unlocks second by second.
+    
+    Fees are rounded down to the payment token's smallest unit and taken only when the buyer settles: funding, cancelling and claiming cost no fee.
+    
+    Connect
+    Approve FAM
+    Fund
+    Connect wallet
+    
+    Connect the wallet that holds the tokens you sell. Nothing is sent yet.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+    [in the form: delivery-vesting chosen; allocation = 1000000; base-token = 0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7; quote = 123.456789; quote-token = 0x8246b2b8b128ab7744967f603359206c66e99e60; buyer = 0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081; expiry-hours = 24; start-settlement chosen; cliff-days = 30; duration-days = 90]
+
+=== 390 px · 3. An existing vesting position is refused, before the wallet is asked for anything
+
+--- 04-existing-position-refused (04-existing-position-refused-390.jpg)
+    otc.fam
+    Local test chain
+    Make a deal v2
+    
+    Sell tokens to one buyer. Your tokens are held by the deal contract until the buyer pays; each side pays a 0.5% fee at settlement, and nothing before.
+    
+    Delivery
+    Immediate
+    The buyer gets the tokens when they pay.
+    Vesting
+    The buyer gets a new grant that unlocks over time.
+    Existing position
+    A stream or a locked allocation you already hold.
+    The position you would like to sell
+    What this deal does
+    
+    Nothing: this kind of delivery is not supported.
+    
+    Existing positions are not supported
+    
+    otc.fam cannot sell an existing vesting position. A Sablier stream, an allocation locked at another contract, a grant that can be revoked, a screenshot or a link: the page cannot check any of them and the deal contract cannot hold them, so none is accepted as delivery. Nothing was asked of your wallet. To sell tokens you hold, choose immediate or vesting delivery: the deal contract then holds the tokens themselves.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+    [in the form: delivery-existing chosen; existing-position = https://app.sablier.com/stream/LL2-1-1234]
+
+    WALLET: the page only asked which account and which network; it never asked to connect, approve or send.
+
+=== 390 px · 4. A fresh buyer opens each link with no wallet: the terms, both fees, the delivery and the funding on the chain
+
+--- 05-buyer-no-wallet-immediate (05-buyer-no-wallet-immediate-390.jpg)
+    otc.fam
+    Local test chain
+    Deal #1 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    A private deal for one buyer. Anyone can check its terms and its funding here; only the buyer's wallet can settle it.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 10). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:42 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Connect a wallet to settle
+    
+    There is no wallet in this browser. Open this link in your wallet app's browser (MetaMask, Rabby, Coinbase Wallet…) or in a browser with a wallet extension.
+    
+    Copy link
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #1
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:42 UTC, block 8: confirmed, 3 blocks deep
+    0xe1435057903e88a9b310ed28b796edf40453772f8d175b9938a5d09909ccf4ea
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 06-buyer-no-wallet-vesting (06-buyer-no-wallet-vesting-390.jpg)
+    otc.fam
+    Local test chain
+    Deal #2 v2
+    Funded
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    A private deal for one buyer. Anyone can check its terms and its funding here; only the buyer's wallet can settle it.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 10). Settling moves this deal's allocation into the buyer's grant.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:43 UTC (in 24 hours)
+    VESTING STARTS
+    When the buyer settles, at that block's time
+    CLIFF
+    30 days after the start. Nothing can be claimed before it; then 333,333.333333333333333333 FAM unlock at once.
+    FULLY VESTED
+    90 days after the start. Until then it unlocks second by second.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Connect a wallet to settle
+    
+    There is no wallet in this browser. Open this link in your wallet app's browser (MetaMask, Rabby, Coinbase Wallet…) or in a browser with a wallet extension.
+    
+    Copy link
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 1 block deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+=== 390 px · 5. The buyer connects and settles the immediate deal: each press, then the receipt
+    press 1: Connect wallet
+    press 2: Approve 124.074072 USDC
+    press 3: Settle: pay 124.074072 USDC
+    press 4: null
+
+--- 07-settled-immediate (07-settled-immediate-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #1 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 1,000,000 FAM now.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #1
+    
+    Settling the deal: confirmed in block 12, using 161,161 gas. Transaction
+    0x1c513f539c5dc8f35d9024a734964c5843d45ba234d4fc518c518967b1bf544a
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:42 UTC, block 8: confirmed, 5 blocks deep
+    0xe1435057903e88a9b310ed28b796edf40453772f8d175b9938a5d09909ccf4ea
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Mon, 23 Nov 2026, 14:24:44 UTC, block 12: confirmed, 1 block deep
+    0x1c513f539c5dc8f35d9024a734964c5843d45ba234d4fc518c518967b1bf544a
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the immediate settlement (0.5% + 0.5% of 123.456789 USDC): buyer -124.074072 USDC, seller +122.839506 USDC, treasury +1.234566 USDC, buyer +1,000,000 FAM, deals -1,000,000 FAM. Nothing else moved.
+
+=== 390 px · 6. The buyer declines once in the wallet, then settles the vesting deal: settled is not unlocked
+
+--- 08-declined-in-the-wallet (08-declined-in-the-wallet-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Funded
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    This deal is for you. Check the tokens, the price, both fees and the delivery, then settle it from your wallet.
+    
+    You pay
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You receive
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 1,000,000 FAM now (read at block 12). Settling moves this deal's allocation into the buyer's grant.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:43 UTC (in 24 hours)
+    VESTING STARTS
+    When the buyer settles, at that block's time
+    CLIFF
+    30 days after the start. Nothing can be claimed before it; then 333,333.333333333333333333 FAM unlock at once.
+    FULLY VESTED
+    90 days after the start. Until then it unlocks second by second.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Approve 124.074072 USDC
+    
+    This lets the deal contract take exactly 124.074072 USDC from your wallet, the price and the buyer fee, and only when you settle. Nothing moves yet.
+    
+    You declined in your wallet. Nothing was sent.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 3 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 09-settled-vesting-day-0 (09-settled-vesting-day-0-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Before the cliff
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    0 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    1,000,000 FAM
+    
+    Nothing can be claimed yet. Claiming becomes possible at the cliff, Wed, 23 Dec 2026, 14:24:45 UTC (in 30 days). Then 333,333.333333333333333333 FAM unlock at once, what accrued since the start, and the rest unlocks second by second until Sun, 21 Feb 2027, 14:24:45 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:45 UTC (now)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:45 UTC (in 30 days)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:45 UTC (in 90 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 14, Mon, 23 Nov 2026, 14:24:45 UTC
+    Connect
+    Claim
+    Nothing to claim yet
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 5 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 1 block deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 1 block deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the vesting settlement: the whole allocation is in the grant's vault: buyer -124.074072 USDC, seller +122.839506 USDC, treasury +1.234566 USDC, deals -1,000,000 FAM, vault +1,000,000 FAM. Nothing else moved.
+
+=== 390 px · 7. The grant on day 29, at the cliff, on day 45 with a claim, and on day 90 with the last claim
+
+--- 10-grant-day-29 (10-grant-day-29-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Before the cliff
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    0 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    1,000,000 FAM
+    
+    Nothing can be claimed yet. Claiming becomes possible at the cliff, Wed, 23 Dec 2026, 14:24:45 UTC (in 24 hours). Then 333,333.333333333333333333 FAM unlock at once, what accrued since the start, and the rest unlocks second by second until Sun, 21 Feb 2027, 14:24:45 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:45 UTC (29 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:45 UTC (in 24 hours)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:45 UTC (in 61 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 15, Tue, 22 Dec 2026, 14:24:45 UTC
+    Connect
+    Claim
+    Nothing to claim yet
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 6 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 2 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 2 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 11-grant-day-30-cliff (11-grant-day-30-cliff-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Vesting
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    333,333.333333333333333333 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    333,333.333333333333333333 FAM
+    LOCKED
+    666,666.666666666666666667 FAM
+    
+    333,333.333333333333333333 FAM can be claimed now. 666,666.666666666666666667 FAM are still locked and unlock second by second until Sun, 21 Feb 2027, 14:24:45 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:45 UTC (30 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:45 UTC (now)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:45 UTC (in 60 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 16, Wed, 23 Dec 2026, 14:24:45 UTC
+    Connect
+    Claim
+    Claim 333,333.333333333333333333 FAM
+    
+    The tokens go to your wallet, with no fee. The chain pays everything vested at the moment the transaction is confirmed, so it can be slightly more than shown.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 7 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 3 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 3 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 12-grant-day-45 (12-grant-day-45-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Vesting
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    500,000 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    500,000 FAM
+    LOCKED
+    500,000 FAM
+    
+    500,000 FAM can be claimed now. 500,000 FAM are still locked and unlock second by second until Sun, 21 Feb 2027, 14:24:45 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:45 UTC (45 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:45 UTC (15 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:45 UTC (in 45 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 17, Thu, 7 Jan 2027, 14:24:45 UTC
+    Connect
+    Claim
+    Claim 500,000 FAM
+    
+    The tokens go to your wallet, with no fee. The chain pays everything vested at the moment the transaction is confirmed, so it can be slightly more than shown.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 8 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 4 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 4 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 13-grant-day-45-claimed (13-grant-day-45-claimed-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Vesting
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    500,000 FAM
+    CLAIMED
+    500,000 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    500,000 FAM
+    
+    Everything vested so far is claimed. 500,000 FAM are still locked and unlock second by second until Sun, 21 Feb 2027, 14:24:45 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:45 UTC (45 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:45 UTC (15 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:45 UTC (in 45 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,500,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 500,000 FAM, everything not claimed yet.
+    READ AT
+    block 18, Thu, 7 Jan 2027, 14:24:45 UTC
+    Connect
+    Claim
+    Nothing to claim yet
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Claiming: confirmed in block 18, using 77,490 gas. Transaction
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 9 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 5 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 5 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Thu, 7 Jan 2027, 14:24:45 UTC, block 18: confirmed, 1 block deep
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the claim (no fee): buyer +500,000 FAM, vault -500,000 FAM. Nothing else moved.
+
+--- 14-grant-day-90 (14-grant-day-90-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Fully vested
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    1,000,000 FAM
+    CLAIMED
+    500,000 FAM
+    CLAIMABLE NOW
+    500,000 FAM
+    LOCKED
+    0 FAM
+    
+    The grant is fully vested: the 500,000 FAM not claimed yet can be claimed at any time.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:45 UTC (90 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:45 UTC (60 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:45 UTC (now)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,500,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 500,000 FAM, everything not claimed yet.
+    READ AT
+    block 19, Sun, 21 Feb 2027, 14:24:45 UTC
+    Connect
+    Claim
+    Claim 500,000 FAM
+    
+    The tokens go to your wallet, with no fee. The chain pays everything vested at the moment the transaction is confirmed, so it can be slightly more than shown.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Claiming: confirmed in block 18, using 77,490 gas. Transaction
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 10 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 6 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 6 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Thu, 7 Jan 2027, 14:24:45 UTC, block 18: confirmed, 2 blocks deep
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 15-grant-day-90-claimed (15-grant-day-90-claimed-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Fully claimed
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    1,000,000 FAM
+    CLAIMED
+    1,000,000 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    0 FAM
+    
+    Everything has been claimed: this grant is complete.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:45 UTC (90 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:45 UTC (60 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:45 UTC (now)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 2,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 0 FAM, everything not claimed yet.
+    READ AT
+    block 20, Sun, 21 Feb 2027, 14:24:45 UTC
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Claiming: confirmed in block 20, using 54,621 gas. Transaction
+    0x92e8e41652115700ffa9e170e5d59050a70a5f41aa1a2ab088c74d95e50604f9
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:43 UTC, block 10: confirmed, 11 blocks deep
+    0xb561dd690a8d0d6ef18d02cd10de6e63bbfab61082ad7cd378800789501c48ec
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 7 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:45 UTC, block 14: confirmed, 7 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Thu, 7 Jan 2027, 14:24:45 UTC, block 18: confirmed, 3 blocks deep
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Sun, 21 Feb 2027, 14:24:45 UTC, block 20: confirmed, 1 block deep
+    0x92e8e41652115700ffa9e170e5d59050a70a5f41aa1a2ab088c74d95e50604f9
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the claim (no fee): buyer +500,000 FAM, vault -500,000 FAM. Nothing else moved.
+
+=== 390 px · 8. Ways back: a wallet on another network, a settlement that fails on the chain, one the wallet replaces, a reload
+
+--- 16-wallet-on-another-network (16-wallet-on-another-network-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #3 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    This deal is for you. Check the tokens, the price, both fees and the delivery, then settle it from your wallet.
+    
+    You pay
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You receive
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 6,000,000 FAM now (read at block 39). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:45 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Switch to Local test chain
+    
+    Your wallet is on Ethereum, and this deal is on Local test chain. Nothing can be sent until it is switched.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #3
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 23: confirmed, 17 blocks deep
+    0x9367a3bf63b9b0959d1a4763303f24fe2eca5f304982cbed7db197568cf27186
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 17-settlement-failed-on-the-chain (17-settlement-failed-on-the-chain-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #4 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    This deal is for you. Check the tokens, the price, both fees and the delivery, then settle it from your wallet.
+    
+    You pay
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You receive
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 5,000,000 FAM now (read at block 43). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:45 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Settle: pay 124.074072 USDC
+    
+    One transaction: you pay 124.074072 USDC, the seller receives 122.839506 USDC, the treasury receives 1.234566 USDC, and the 1,000,000 FAM come to your wallet. All of it happens, or nothing moves.
+    
+    The transaction failed on the chain, and nothing moved. Try again.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #4
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 26: confirmed, 18 blocks deep
+    0x890f45f22a0cfa78fd728178c427d5974fb38a4c2b22b6333f3a5890130dbae3
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the settlement that failed on the chain: nothing. Nothing else moved.
+
+--- 18-transaction-replaced-in-the-wallet (18-transaction-replaced-in-the-wallet-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #5 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 5,000,000 FAM now.
+    
+    Your wallet replaced this transaction (it was sped up or cancelled), so this page cannot follow it. The page has read the chain again: what it shows now is what happened.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #5
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 29: confirmed, 18 blocks deep
+    0x97cdc7224075c60bde135a6dd553cb7dc8c678eae48de68f70dce25b14ce1180
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Sun, 21 Feb 2027, 14:24:48 UTC, block 46: confirmed, 1 block deep
+    0x0246be4f5163ba644b3358d94a386a75042c87df1d5291def2b29ab77cbdb829
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 19-reloaded-while-settling (19-reloaded-while-settling-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #6 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    This page was reloaded while transaction 0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409 was on its way. Waiting for the network to confirm it.
+    
+    Stop waiting for it
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 6,000,000 FAM now.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #6
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 32: confirmed, 17 blocks deep
+    0xff400379e74b9c427c5179d9a99048f6a7f773bd173d3b4c93cd2a4eab7690a2
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Sun, 21 Feb 2027, 14:24:49 UTC, block 48: confirmed, 1 block deep
+    0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 20-reloaded-and-confirmed (20-reloaded-and-confirmed-390.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #6 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 6,000,000 FAM now.
+    
+    The transaction sent before this page was reloaded is confirmed. What you see is the chain's state now.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #6
+    
+    Settling the deal: confirmed in block 48, using 107,649 gas. Transaction
+    0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 32: confirmed, 17 blocks deep
+    0xff400379e74b9c427c5179d9a99048f6a7f773bd173d3b4c93cd2a4eab7690a2
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Sun, 21 Feb 2027, 14:24:49 UTC, block 48: confirmed, 1 block deep
+    0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+=== 390 px · 9. Not for you, cancelled, and expired
+
+--- 21-not-the-buyer (21-not-the-buyer-390.jpg)
+    otc.fam
+    Local test chain
+    0x9a8b…7c6d
+    Deal #7 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    A private deal for one buyer. Anyone can check its terms and its funding here; only the buyer's wallet can settle it.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 48). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:45 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    This deal is for another address: only 0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 can settle it. Your wallet is connected as 0x9a8b…7c6d, so it cannot. If that other address is yours too, switch to it in your wallet.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #7
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 35: confirmed, 14 blocks deep
+    0x9e4d906a6a16c5bbca871e9d82eb7e125ae73b7f95fc24cb142c7aeff16e14ea
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 22-seller-can-cancel (22-seller-can-cancel-390.jpg)
+    otc.fam
+    Local test chain
+    0x1a2b…3c4d
+    Deal #8 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Your deal is funded and waits for its buyer. Send them this link: they settle it from their wallet.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You sell
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 48). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d (you)
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:45 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    This is your own deal: only its buyer can settle it. Until then you can cancel it and take back your 1,000,000 FAM. Cancelling costs no fee.
+    
+    Cancel the deal and take back 1,000,000 FAM
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #8
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 38: confirmed, 11 blocks deep
+    0x0d5b1861af046646999d27371dff36a250ce35977e79a2d878c0d805a135dfab
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 23-cancelled (23-cancelled-390.jpg)
+    otc.fam
+    Local test chain
+    0x1a2b…3c4d
+    Deal #8 v2
+    Cancelled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    The seller cancelled this deal and took the allocation back. It can no longer be settled, and no fee was taken.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You sell
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d (you)
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #8
+    
+    Cancelling: confirmed in block 49, using 68,176 gas. Transaction
+    0x3689e702fcc55344ad271224f9dfc726b2cdf7aed1c3f2bee36d99a0f6df1ceb
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 38: confirmed, 12 blocks deep
+    0x0d5b1861af046646999d27371dff36a250ce35977e79a2d878c0d805a135dfab
+    Cancelled. 1,000,000 FAM went back to the seller, 0x1a2b…3c4d. No fee.
+    Sun, 21 Feb 2027, 14:24:52 UTC, block 49: confirmed, 1 block deep
+    0x3689e702fcc55344ad271224f9dfc726b2cdf7aed1c3f2bee36d99a0f6df1ceb
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the cancellation (no fee): seller +1,000,000 FAM, deals -1,000,000 FAM. Nothing else moved.
+
+--- 24-expired (24-expired-390.jpg)
+    otc.fam
+    Local test chain
+    Deal #7 v2
+    Expired
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    This deal expired in less than a minute. It can no longer be settled.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 1,000,000 FAM now (read at block 50).
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    COULD BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:45 UTC (in less than a minute)
+    
+    The seller's 1,000,000 FAM stay in the deal contract until the seller cancels the deal and takes them back.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #7
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:46 UTC, block 35: confirmed, 16 blocks deep
+    0x9e4d906a6a16c5bbca871e9d82eb7e125ae73b7f95fc24cb142c7aeff16e14ea
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+=== 1440 px · 1. The seller chooses immediate delivery, sees the exact money, funds, and gets one link
+
+--- 01-form-immediate (01-form-immediate-1440.jpg)
+    otc.fam
+    Local test chain
+    Make a deal v2
+    
+    Sell tokens to one buyer. Your tokens are held by the deal contract until the buyer pays; each side pays a 0.5% fee at settlement, and nothing before.
+    
+    Delivery
+    Immediate
+    The buyer gets the tokens when they pay.
+    Vesting
+    The buyer gets a new grant that unlocks over time.
+    Existing position
+    A stream or a locked allocation you already hold.
+    You sell
+    FAM
+    Token
+    
+    FAM, 18 decimals
+    
+    ↓
+    Price the buyer pays you, before fees
+    USDC
+    Token
+    
+    USDC, 6 decimals
+    
+    Buyer
+    
+    Only this address can settle the deal, and a vesting grant only ever pays this address.
+    
+    Open for (hours)
+    
+    The buyer can settle until Tue, 24 Nov 2026, 14:24:54 UTC. After that you take the tokens back.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything. A token that keeps a fee on its transfers is refused.
+    
+    What this deal does
+    DELIVERY
+    Immediate: 1,000,000 FAM go to the buyer when they pay
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    BUYER RECEIVES
+    1,000,000 FAM
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:54 UTC
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    YOU RECEIVE
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Fees are rounded down to the payment token's smallest unit and taken only when the buyer settles: funding, cancelling and claiming cost no fee.
+    
+    Connect
+    Approve FAM
+    Fund
+    Connect wallet
+    
+    Connect the wallet that holds the tokens you sell. Nothing is sent yet.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+    [in the form: delivery-immediate chosen; allocation = 1000000; base-token = 0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7; quote = 123.456789; quote-token = 0x8246b2b8b128ab7744967f603359206c66e99e60; buyer = 0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081; expiry-hours = 24]
+
+--- 02-funded-link (02-funded-link-1440.jpg)
+    otc.fam
+    Local test chain
+    0x1a2b…3c4d
+    Deal #1 is funded v2
+    
+    Send this one link to the buyer. It shows them the terms, both fees and that your tokens are held on the chain, and lets them settle from their wallet.
+    
+    http://127.0.0.1:36943/#/v2/d/1
+    Copy link
+    Open the deal
+    DELIVERY
+    Immediate: to the buyer's wallet
+    BUYER
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    THEY GET
+    1,000,000 FAM
+    THEY PAY, FEE INCLUDED
+    124.074072 USDC
+    YOU RECEIVE, FEE TAKEN
+    122.839506 USDC
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:55 UTC
+    
+    Your tokens are held by the deal contract. To take them back before the buyer settles, open the deal with this wallet and cancel it: that costs no fee.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, funding the deal (no fee): seller -1,000,000 FAM, deals +1,000,000 FAM. Nothing else moved.
+
+=== 1440 px · 2. The seller chooses vesting delivery: a 30-day cliff over 90 days, from the settlement
+
+--- 03-form-vesting (03-form-vesting-1440.jpg)
+    otc.fam
+    Local test chain
+    Make a deal v2
+    
+    Sell tokens to one buyer. Your tokens are held by the deal contract until the buyer pays; each side pays a 0.5% fee at settlement, and nothing before.
+    
+    Delivery
+    Immediate
+    The buyer gets the tokens when they pay.
+    Vesting
+    The buyer gets a new grant that unlocks over time.
+    Existing position
+    A stream or a locked allocation you already hold.
+    You sell
+    FAM
+    Token
+    
+    FAM, 18 decimals
+    
+    ↓
+    Price the buyer pays you, before fees
+    USDC
+    Token
+    
+    USDC, 6 decimals
+    
+    Buyer
+    
+    Only this address can settle the deal, and a vesting grant only ever pays this address.
+    
+    Open for (hours)
+    
+    The buyer can settle until Tue, 24 Nov 2026, 14:24:55 UTC. After that you take the tokens back.
+    
+    Vesting starts
+    At settlement
+    When the buyer pays, at that block's time.
+    At a fixed time
+    A date and time in UTC, still in the future.
+    Cliff (days)
+    
+    30 days of chain time: nothing can be claimed before it.
+    
+    Whole vesting (days)
+    
+    90 days of chain time, from the start to fully vested.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything. A token that keeps a fee on its transfers is refused.
+    
+    What this deal does
+    DELIVERY
+    Vesting: 1,000,000 FAM go into a new grant for the buyer when they pay
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    BUYER RECEIVES
+    1,000,000 FAM
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:55 UTC
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    YOU RECEIVE
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    VESTING SCHEDULE
+    Starts when the buyer settles. Cliff 30 days later: 333,333.333333333333333333 FAM unlock at once. Fully vested 90 days after the start; until then it unlocks second by second.
+    
+    Fees are rounded down to the payment token's smallest unit and taken only when the buyer settles: funding, cancelling and claiming cost no fee.
+    
+    Connect
+    Approve FAM
+    Fund
+    Connect wallet
+    
+    Connect the wallet that holds the tokens you sell. Nothing is sent yet.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+    [in the form: delivery-vesting chosen; allocation = 1000000; base-token = 0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7; quote = 123.456789; quote-token = 0x8246b2b8b128ab7744967f603359206c66e99e60; buyer = 0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081; expiry-hours = 24; start-settlement chosen; cliff-days = 30; duration-days = 90]
+
+=== 1440 px · 3. An existing vesting position is refused, before the wallet is asked for anything
+
+--- 04-existing-position-refused (04-existing-position-refused-1440.jpg)
+    otc.fam
+    Local test chain
+    Make a deal v2
+    
+    Sell tokens to one buyer. Your tokens are held by the deal contract until the buyer pays; each side pays a 0.5% fee at settlement, and nothing before.
+    
+    Delivery
+    Immediate
+    The buyer gets the tokens when they pay.
+    Vesting
+    The buyer gets a new grant that unlocks over time.
+    Existing position
+    A stream or a locked allocation you already hold.
+    The position you would like to sell
+    What this deal does
+    
+    Nothing: this kind of delivery is not supported.
+    
+    Existing positions are not supported
+    
+    otc.fam cannot sell an existing vesting position. A Sablier stream, an allocation locked at another contract, a grant that can be revoked, a screenshot or a link: the page cannot check any of them and the deal contract cannot hold them, so none is accepted as delivery. Nothing was asked of your wallet. To sell tokens you hold, choose immediate or vesting delivery: the deal contract then holds the tokens themselves.
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+    [in the form: delivery-existing chosen; existing-position = https://app.sablier.com/stream/LL2-1-1234]
+
+    WALLET: the page only asked which account and which network; it never asked to connect, approve or send.
+
+=== 1440 px · 4. A fresh buyer opens each link with no wallet: the terms, both fees, the delivery and the funding on the chain
+
+--- 05-buyer-no-wallet-immediate (05-buyer-no-wallet-immediate-1440.jpg)
+    otc.fam
+    Local test chain
+    Deal #1 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    A private deal for one buyer. Anyone can check its terms and its funding here; only the buyer's wallet can settle it.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 10). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:55 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Connect a wallet to settle
+    
+    There is no wallet in this browser. Open this link in your wallet app's browser (MetaMask, Rabby, Coinbase Wallet…) or in a browser with a wallet extension.
+    
+    Copy link
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #1
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:55 UTC, block 8: confirmed, 3 blocks deep
+    0x9dde1b8fbfeb8e07004097026b0a224b1e6426fdd4d488c1ffdad29159571560
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 06-buyer-no-wallet-vesting (06-buyer-no-wallet-vesting-1440.jpg)
+    otc.fam
+    Local test chain
+    Deal #2 v2
+    Funded
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    A private deal for one buyer. Anyone can check its terms and its funding here; only the buyer's wallet can settle it.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 10). Settling moves this deal's allocation into the buyer's grant.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:56 UTC (in 24 hours)
+    VESTING STARTS
+    When the buyer settles, at that block's time
+    CLIFF
+    30 days after the start. Nothing can be claimed before it; then 333,333.333333333333333333 FAM unlock at once.
+    FULLY VESTED
+    90 days after the start. Until then it unlocks second by second.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Connect a wallet to settle
+    
+    There is no wallet in this browser. Open this link in your wallet app's browser (MetaMask, Rabby, Coinbase Wallet…) or in a browser with a wallet extension.
+    
+    Copy link
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 1 block deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+=== 1440 px · 5. The buyer connects and settles the immediate deal: each press, then the receipt
+    press 1: Connect wallet
+    press 2: Approve 124.074072 USDC
+    press 3: Settle: pay 124.074072 USDC
+    press 4: null
+
+--- 07-settled-immediate (07-settled-immediate-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #1 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 1,000,000 FAM now.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #1
+    
+    Settling the deal: confirmed in block 12, using 161,161 gas. Transaction
+    0x1c513f539c5dc8f35d9024a734964c5843d45ba234d4fc518c518967b1bf544a
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:55 UTC, block 8: confirmed, 5 blocks deep
+    0x9dde1b8fbfeb8e07004097026b0a224b1e6426fdd4d488c1ffdad29159571560
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Mon, 23 Nov 2026, 14:24:58 UTC, block 12: confirmed, 1 block deep
+    0x1c513f539c5dc8f35d9024a734964c5843d45ba234d4fc518c518967b1bf544a
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the immediate settlement (0.5% + 0.5% of 123.456789 USDC): buyer -124.074072 USDC, seller +122.839506 USDC, treasury +1.234566 USDC, buyer +1,000,000 FAM, deals -1,000,000 FAM. Nothing else moved.
+
+=== 1440 px · 6. The buyer declines once in the wallet, then settles the vesting deal: settled is not unlocked
+
+--- 08-declined-in-the-wallet (08-declined-in-the-wallet-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Funded
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    This deal is for you. Check the tokens, the price, both fees and the delivery, then settle it from your wallet.
+    
+    You pay
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You receive
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 1,000,000 FAM now (read at block 12). Settling moves this deal's allocation into the buyer's grant.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Tue, 24 Nov 2026, 14:24:56 UTC (in 24 hours)
+    VESTING STARTS
+    When the buyer settles, at that block's time
+    CLIFF
+    30 days after the start. Nothing can be claimed before it; then 333,333.333333333333333333 FAM unlock at once.
+    FULLY VESTED
+    90 days after the start. Until then it unlocks second by second.
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Approve 124.074072 USDC
+    
+    This lets the deal contract take exactly 124.074072 USDC from your wallet, the price and the buyer fee, and only when you settle. Nothing moves yet.
+    
+    You declined in your wallet. Nothing was sent.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 3 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 09-settled-vesting-day-0 (09-settled-vesting-day-0-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Before the cliff
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    0 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    1,000,000 FAM
+    
+    Nothing can be claimed yet. Claiming becomes possible at the cliff, Wed, 23 Dec 2026, 14:24:59 UTC (in 30 days). Then 333,333.333333333333333333 FAM unlock at once, what accrued since the start, and the rest unlocks second by second until Sun, 21 Feb 2027, 14:24:59 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:59 UTC (now)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:59 UTC (in 30 days)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:59 UTC (in 90 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 14, Mon, 23 Nov 2026, 14:24:59 UTC
+    Connect
+    Claim
+    Nothing to claim yet
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 5 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 1 block deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 1 block deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the vesting settlement: the whole allocation is in the grant's vault: buyer -124.074072 USDC, seller +122.839506 USDC, treasury +1.234566 USDC, deals -1,000,000 FAM, vault +1,000,000 FAM. Nothing else moved.
+
+=== 1440 px · 7. The grant on day 29, at the cliff, on day 45 with a claim, and on day 90 with the last claim
+
+--- 10-grant-day-29 (10-grant-day-29-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Before the cliff
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    0 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    1,000,000 FAM
+    
+    Nothing can be claimed yet. Claiming becomes possible at the cliff, Wed, 23 Dec 2026, 14:24:59 UTC (in 24 hours). Then 333,333.333333333333333333 FAM unlock at once, what accrued since the start, and the rest unlocks second by second until Sun, 21 Feb 2027, 14:24:59 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:59 UTC (29 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:59 UTC (in 24 hours)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:59 UTC (in 61 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 15, Tue, 22 Dec 2026, 14:24:59 UTC
+    Connect
+    Claim
+    Nothing to claim yet
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 6 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 2 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 2 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 11-grant-day-30-cliff (11-grant-day-30-cliff-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Vesting
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    333,333.333333333333333333 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    333,333.333333333333333333 FAM
+    LOCKED
+    666,666.666666666666666667 FAM
+    
+    333,333.333333333333333333 FAM can be claimed now. 666,666.666666666666666667 FAM are still locked and unlock second by second until Sun, 21 Feb 2027, 14:24:59 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:59 UTC (30 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:59 UTC (now)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:59 UTC (in 60 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 16, Wed, 23 Dec 2026, 14:24:59 UTC
+    Connect
+    Claim
+    Claim 333,333.333333333333333333 FAM
+    
+    The tokens go to your wallet, with no fee. The chain pays everything vested at the moment the transaction is confirmed, so it can be slightly more than shown.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 7 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 3 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 3 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 12-grant-day-45 (12-grant-day-45-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Vesting
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    500,000 FAM
+    CLAIMED
+    0 FAM
+    CLAIMABLE NOW
+    500,000 FAM
+    LOCKED
+    500,000 FAM
+    
+    500,000 FAM can be claimed now. 500,000 FAM are still locked and unlock second by second until Sun, 21 Feb 2027, 14:24:59 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:59 UTC (45 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:59 UTC (15 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:59 UTC (in 45 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 1,000,000 FAM, everything not claimed yet.
+    READ AT
+    block 17, Thu, 7 Jan 2027, 14:24:59 UTC
+    Connect
+    Claim
+    Claim 500,000 FAM
+    
+    The tokens go to your wallet, with no fee. The chain pays everything vested at the moment the transaction is confirmed, so it can be slightly more than shown.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Settling the deal: confirmed in block 14, using 500,167 gas. Transaction
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 8 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 4 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 4 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 13-grant-day-45-claimed (13-grant-day-45-claimed-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Vesting
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    500,000 FAM
+    CLAIMED
+    500,000 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    500,000 FAM
+    
+    Everything vested so far is claimed. 500,000 FAM are still locked and unlock second by second until Sun, 21 Feb 2027, 14:24:59 UTC.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:59 UTC (45 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:59 UTC (15 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:59 UTC (in 45 days)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,500,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 500,000 FAM, everything not claimed yet.
+    READ AT
+    block 18, Thu, 7 Jan 2027, 14:24:59 UTC
+    Connect
+    Claim
+    Nothing to claim yet
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Claiming: confirmed in block 18, using 77,490 gas. Transaction
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 9 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 5 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 5 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Thu, 7 Jan 2027, 14:24:59 UTC, block 18: confirmed, 1 block deep
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the claim (no fee): buyer +500,000 FAM, vault -500,000 FAM. Nothing else moved.
+
+--- 14-grant-day-90 (14-grant-day-90-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Fully vested
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    1,000,000 FAM
+    CLAIMED
+    500,000 FAM
+    CLAIMABLE NOW
+    500,000 FAM
+    LOCKED
+    0 FAM
+    
+    The grant is fully vested: the 500,000 FAM not claimed yet can be claimed at any time.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:59 UTC (90 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:59 UTC (60 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:59 UTC (now)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 1,500,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 500,000 FAM, everything not claimed yet.
+    READ AT
+    block 19, Sun, 21 Feb 2027, 14:24:59 UTC
+    Connect
+    Claim
+    Claim 500,000 FAM
+    
+    The tokens go to your wallet, with no fee. The chain pays everything vested at the moment the transaction is confirmed, so it can be slightly more than shown.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Claiming: confirmed in block 18, using 77,490 gas. Transaction
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 10 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 6 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 6 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Thu, 7 Jan 2027, 14:24:59 UTC, block 18: confirmed, 2 blocks deep
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 15-grant-day-90-claimed (15-grant-day-90-claimed-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #2 v2
+    Settled
+    
+    Vesting delivery: the buyer gets a new grant that unlocks over time. Settled does not mean unlocked.
+    
+    Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    Your grant holds
+    1,000,000
+    FAM
+    As a vesting grant, held in a vault of its own.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    The grant is funded with all 1,000,000 FAM. Its schedule, and what can be claimed, are in the grant's card on this page.
+    
+    Grant #2
+    Fully claimed
+    
+    1,000,000 FAM for you, unlocking from the start to the end of the schedule. Times are the chain's, shown in UTC.
+    
+    Start
+    Cliff
+    End
+    
+    claimed vested, not claimed yet locked
+    
+    ALLOCATION
+    1,000,000 FAM
+    VESTED
+    1,000,000 FAM
+    CLAIMED
+    1,000,000 FAM
+    CLAIMABLE NOW
+    0 FAM
+    LOCKED
+    0 FAM
+    
+    Everything has been claimed: this grant is complete.
+    
+    START
+    Mon, 23 Nov 2026, 14:24:59 UTC (90 days ago)
+    CLIFF
+    Wed, 23 Dec 2026, 14:24:59 UTC (60 days ago)
+    END, FULLY VESTED
+    Sun, 21 Feb 2027, 14:24:59 UTC (now)
+    BENEFICIARY, THE ONLY ADDRESS THE GRANT PAYS
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    This wallet holds 2,000,000 FAM now.
+    VAULT
+    0x529398a544ef89c33c7a06456fab12e8a9b5c5c4
+    Fully backed: it holds 0 FAM, everything not claimed yet.
+    READ AT
+    block 20, Sun, 21 Feb 2027, 14:24:59 UTC
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #2
+    
+    Claiming: confirmed in block 20, using 54,621 gas. Transaction
+    0x92e8e41652115700ffa9e170e5d59050a70a5f41aa1a2ab088c74d95e50604f9
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Mon, 23 Nov 2026, 14:24:56 UTC, block 10: confirmed, 11 blocks deep
+    0x8ef40fd8ea8d9fa30ded725478e14aed7f6bbd16a39b6a51b75c32cf58539140
+    Grant #2 created for the buyer, with its vault at 0x5293…c5c4.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 7 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM moved into the grant's vault.
+    Mon, 23 Nov 2026, 14:24:59 UTC, block 14: confirmed, 7 blocks deep
+    0x2f2cba0999a59ecf521bc1dc2d5b250320cf9c0496725b85840463049b95f33f
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Thu, 7 Jan 2027, 14:24:59 UTC, block 18: confirmed, 3 blocks deep
+    0xaceffdaf3f23cdf1d671fac83b6244919c702fbaf519beff85dc08854bf3603c
+    Claimed. The grant's vault paid 500,000 FAM to the beneficiary, 0x5e6f…7081. No fee.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 20: confirmed, 1 block deep
+    0x92e8e41652115700ffa9e170e5d59050a70a5f41aa1a2ab088c74d95e50604f9
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the claim (no fee): buyer +500,000 FAM, vault -500,000 FAM. Nothing else moved.
+
+=== 1440 px · 8. Ways back: a wallet on another network, a settlement that fails on the chain, one the wallet replaces, a reload
+
+--- 16-wallet-on-another-network (16-wallet-on-another-network-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #3 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    This deal is for you. Check the tokens, the price, both fees and the delivery, then settle it from your wallet.
+    
+    You pay
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You receive
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 6,000,000 FAM now (read at block 39). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:59 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Switch to Local test chain
+    
+    Your wallet is on Ethereum, and this deal is on Local test chain. Nothing can be sent until it is switched.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #3
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 23: confirmed, 17 blocks deep
+    0x18f95b23f457f7935926cd89d9c34ced6691c321fa202a8875b67f009a58c241
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 17-settlement-failed-on-the-chain (17-settlement-failed-on-the-chain-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #4 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    This deal is for you. Check the tokens, the price, both fees and the delivery, then settle it from your wallet.
+    
+    You pay
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You receive
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 5,000,000 FAM now (read at block 43). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:59 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    Connect
+    Approve USDC
+    Settle
+    Settle: pay 124.074072 USDC
+    
+    One transaction: you pay 124.074072 USDC, the seller receives 122.839506 USDC, the treasury receives 1.234566 USDC, and the 1,000,000 FAM come to your wallet. All of it happens, or nothing moves.
+    
+    The transaction failed on the chain, and nothing moved. Try again.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #4
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 26: confirmed, 18 blocks deep
+    0x309827fa5cb2bb2191f6ba182ce4488e3dcc1361fe42d484c8002d3c034e6ba8
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the settlement that failed on the chain: nothing. Nothing else moved.
+
+--- 18-transaction-replaced-in-the-wallet (18-transaction-replaced-in-the-wallet-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #5 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 5,000,000 FAM now.
+    
+    Your wallet replaced this transaction (it was sped up or cancelled), so this page cannot follow it. The page has read the chain again: what it shows now is what happened.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #5
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 29: confirmed, 18 blocks deep
+    0x1c02d9d36b8db30608d253910095091b0dbaf98c205d283a37167bb6371f5b73
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Sun, 21 Feb 2027, 14:25:01 UTC, block 46: confirmed, 1 block deep
+    0x0246be4f5163ba644b3358d94a386a75042c87df1d5291def2b29ab77cbdb829
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 19-reloaded-while-settling (19-reloaded-while-settling-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #6 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    This page was reloaded while transaction 0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409 was on its way. Waiting for the network to confirm it.
+    
+    Stop waiting for it
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 6,000,000 FAM now.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #6
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 32: confirmed, 17 blocks deep
+    0x707acc3f9e9504b761b1dd625584e1e74cff075f619664910b86cd9ce24e0f1f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Sun, 21 Feb 2027, 14:25:03 UTC, block 48: confirmed, 1 block deep
+    0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 20-reloaded-and-confirmed (20-reloaded-and-confirmed-1440.jpg)
+    otc.fam
+    Local test chain
+    0x5e6f…7081
+    Deal #6 v2
+    Settled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Settled: in one transaction the buyer paid, the seller and the treasury were paid, and the tokens went to the buyer. Nothing is left to do.
+    
+    You paid
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You received
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 (you)
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    
+    Delivered: all 1,000,000 FAM went to the buyer's wallet in the settlement transaction. That wallet holds 6,000,000 FAM now.
+    
+    The transaction sent before this page was reloaded is confirmed. What you see is the chain's state now.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #6
+    
+    Settling the deal: confirmed in block 48, using 107,649 gas. Transaction
+    0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 32: confirmed, 17 blocks deep
+    0x707acc3f9e9504b761b1dd625584e1e74cff075f619664910b86cd9ce24e0f1f
+    Settled. The buyer, 0x5e6f…7081, paid 124.074072 USDC: the price, 123.456789 USDC, and a buyer fee of 0.617283 USDC. The seller received 122.839506 USDC, after a seller fee of 0.617283 USDC. The treasury received 1.234566 USDC. All 1,000,000 FAM went to the buyer.
+    Sun, 21 Feb 2027, 14:25:03 UTC, block 48: confirmed, 1 block deep
+    0x44db333af40d1b19cdebcd23da7d34e2108b914ef6c9e68bf67a9d02cb334409
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+=== 1440 px · 9. Not for you, cancelled, and expired
+
+--- 21-not-the-buyer (21-not-the-buyer-1440.jpg)
+    otc.fam
+    Local test chain
+    0x9a8b…7c6d
+    Deal #7 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    A private deal for one buyer. Anyone can check its terms and its funding here; only the buyer's wallet can settle it.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 48). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:59 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    This deal is for another address: only 0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081 can settle it. Your wallet is connected as 0x9a8b…7c6d, so it cannot. If that other address is yours too, switch to it in your wallet.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #7
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 35: confirmed, 14 blocks deep
+    0x55d53eefae77461fb717321a3f93158614028d161b3d194aa0a44c7b152e8c17
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 22-seller-can-cancel (22-seller-can-cancel-1440.jpg)
+    otc.fam
+    Local test chain
+    0x1a2b…3c4d
+    Deal #8 v2
+    Funded
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    Your deal is funded and waits for its buyer. Send them this link: they settle it from their wallet.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You sell
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 2,000,000 FAM now (read at block 48). Settling sends this deal's allocation to the buyer.
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d (you)
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    CAN BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:59 UTC (in 24 hours)
+    
+    Anyone can make a token with any name. Compare both token contract addresses with the ones you agreed on before you approve anything.
+    
+    This is your own deal: only its buyer can settle it. Until then you can cancel it and take back your 1,000,000 FAM. Cancelling costs no fee.
+    
+    Cancel the deal and take back 1,000,000 FAM
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #8
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 38: confirmed, 11 blocks deep
+    0x44db5884f7b0d381cf9ded1b9424564cdebf3405ed83b8dff0cb3946ba945b5b
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+--- 23-cancelled (23-cancelled-1440.jpg)
+    otc.fam
+    Local test chain
+    0x1a2b…3c4d
+    Deal #8 v2
+    Cancelled
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    The seller cancelled this deal and took the allocation back. It can no longer be settled, and no fee was taken.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    You sell
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d (you)
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #8
+    
+    Cancelling: confirmed in block 49, using 68,176 gas. Transaction
+    0x3689e702fcc55344ad271224f9dfc726b2cdf7aed1c3f2bee36d99a0f6df1ceb
+    
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 38: confirmed, 12 blocks deep
+    0x44db5884f7b0d381cf9ded1b9424564cdebf3405ed83b8dff0cb3946ba945b5b
+    Cancelled. 1,000,000 FAM went back to the seller, 0x1a2b…3c4d. No fee.
+    Sun, 21 Feb 2027, 14:25:05 UTC, block 49: confirmed, 1 block deep
+    0x3689e702fcc55344ad271224f9dfc726b2cdf7aed1c3f2bee36d99a0f6df1ceb
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+    BALANCES, the cancellation (no fee): seller +1,000,000 FAM, deals -1,000,000 FAM. Nothing else moved.
+
+--- 24-expired (24-expired-1440.jpg)
+    otc.fam
+    Local test chain
+    Deal #7 v2
+    Expired
+    
+    Immediate delivery: the buyer gets the tokens in the settlement transaction.
+    
+    This deal expired in less than a minute. It can no longer be settled.
+    
+    The buyer pays
+    124.074072
+    USDC
+    Price 123.456789 USDC + 0.5% buyer fee 0.617283 USDC
+    Token contract
+    0x8246b2b8b128ab7744967f603359206c66e99e60
+    ↓
+    The buyer receives
+    1,000,000
+    FAM
+    To the buyer's wallet, at settlement.
+    Token contract
+    0x42c9458357f1fccd4cddcd1916d0857c1a62d2b7
+    
+    Funded on the chain: the deal contract took the seller's whole 1,000,000 FAM when this deal was made, and holds 1,000,000 FAM now (read at block 50).
+    
+    SELLER
+    0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+    BUYER, THE ONLY ADDRESS THAT CAN SETTLE
+    0x5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+    PRICE
+    123.456789 USDC
+    BUYER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    BUYER PAYS IN TOTAL
+    124.074072 USDC
+    SELLER FEE, 0.5% OF THE PRICE
+    0.617283 USDC
+    SELLER RECEIVES
+    122.839506 USDC
+    TREASURY RECEIVES BOTH FEES
+    1.234566 USDC
+    0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5
+    COULD BE SETTLED UNTIL
+    Mon, 22 Feb 2027, 14:24:59 UTC (in less than a minute)
+    
+    The seller's 1,000,000 FAM stay in the deal contract until the seller cancels the deal and takes them back.
+    
+    Receipts
+    NETWORK
+    Local test chain, chain 31337
+    DEAL CONTRACT, V2
+    0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    DEAL
+    #7
+    Funded. The seller, 0x1a2b…3c4d, put 1,000,000 FAM into the deal contract.
+    Sun, 21 Feb 2027, 14:24:59 UTC, block 35: confirmed, 16 blocks deep
+    0x55d53eefae77461fb717321a3f93158614028d161b3d194aa0a44c7b152e8c17
+    
+    v2 deal contract on Local test chain (0.5% fee each side, vesting): 0x89eb5891179fb8c2dbd1bb2d7167306aab3a7cd3
+    
+    v1 deal contract (no fee): 0xd07554f63fc661351b4976fcc9bf5401f6c388bf
+
+Every scene played at 390 px and 1440 px, and every balance was as the deal says. 48 screenshots are in evidence/round-2/
