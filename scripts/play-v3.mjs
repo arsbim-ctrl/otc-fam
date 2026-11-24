@@ -102,7 +102,8 @@ for (const size of sizes) {
       await id(page, "create").waitFor();
       if (fixedStart) {
         await page.getByText("Counterparties and signing terms", { exact: true }).click();
-        await waitText(id(page, "terms"), fixedStart.slice(11) + " UTC");
+        const cutoff = id(page, "terms").locator("div").filter({ has: page.getByText("Earlier deadline", { exact: true }) });
+        await waitText(cutoff, fixedStart.slice(11) + " UTC");
       }
       if (scene) await shot(page, scene);
       await id(page, "create").click();
@@ -265,6 +266,11 @@ for (const size of sizes) {
     const entries = await id(broker, "book-entry").evaluateAll((rows) => rows.map((r) => [r.dataset.role, r.dataset.status]));
     assert.deepEqual(entries.map(([role]) => role), Array(6).fill("broker"));
     assert.deepEqual(entries.map(([, state]) => state).sort(), ["awaiting", "expired", "funded", "refunded", "settled", "settled"]);
+    if (startInput) {
+      const vestingRow = id(broker, "book-entry").filter({ hasText: "New vesting grant" });
+      const deadline = vestingRow.locator("dl div").filter({ has: broker.getByText("Deadline", { exact: true }) });
+      await waitText(deadline, startInput.slice(11) + " UTC");
+    }
     assert.ok(brokerAsked.every((request) => !["eth_signTypedData_v4", "eth_sendTransaction"].includes(request)), "broker never signed or sent transactions");
     await shot(broker, "16-broker-deal-book");
     const freshBook = await tab("#/v3/deals", "broker");

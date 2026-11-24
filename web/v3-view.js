@@ -102,13 +102,20 @@ export function deliveryText(terms) {
   return `New fully funded grant to the buyer. Vesting starts at ${start}, has a ${span(terms.cliffSeconds)} cliff and ends after ${span(terms.durationSeconds)}. At the cliff, the accrued linear amount becomes claimable.`;
 }
 
+export function fundingAndSettlementDeadline(terms) {
+  return terms.fixedStart && terms.fixedStart < terms.expiry ? terms.fixedStart : terms.expiry;
+}
+
 export function canonicalTerms({ domain, id, terms, treasury, base, quote }) {
+  const deadline = fundingAndSettlementDeadline(terms);
   return [
     h("h2", { tabindex: "-1" }, "Terms to authorize"),
     h("dl", { class: "broker-facts", testid: "v3-terms" },
       fact("Seller", mono(terms.seller)), fact("Designated buyer", mono(terms.buyer)),
       fact("Broker recipient", mono(terms.broker)), fact("Treasury", mono(treasury)),
-      fact("Deadline", dateExact(terms.expiry)), fact("Delivery", deliveryText(terms)),
+      fact("Signed expiry", dateExact(terms.expiry)),
+      deadline !== terms.expiry && fact("Earlier deadline", "Fund before and settle by the fixed vesting start · ", dateExact(deadline)),
+      fact("Delivery", deliveryText(terms)),
       fact("Allocation", tokenAmount(terms.allocation, base), " · ", mono(`${terms.allocation} raw`)),
       fact("Quote", tokenAmount(terms.quote, quote), " · ", mono(`${terms.quote} raw`))),
     h("details", { class: "broker-details", "data-broker-detail": "terms" }, h("summary", {}, "Signing domain and exact fields"),

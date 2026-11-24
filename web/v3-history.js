@@ -1,6 +1,6 @@
 import { h, show, utc } from "./ui.js";
 import { brokerError, directory, effectiveStatus, feesFor, percent, readProposal, roleFor, STAGE, toHex } from "./v3-protocol.js";
-import { button, header, message, panel, share, shell, tokenAmount, v3Link } from "./v3-view.js";
+import { button, fundingAndSettlementDeadline, header, message, panel, share, shell, tokenAmount, v3Link } from "./v3-view.js";
 
 const titles = { seller: "Seller", buyer: "Buyer", broker: "Broker" };
 const statusList = ["awaiting", "funded", "settled", "expired", "refunded", "unavailable"];
@@ -89,7 +89,7 @@ export function brokerHistoryPage(app, protocol, duplicate) {
       h("dl", { class: "broker-facts broker-entry-facts" },
         h("div", {}, h("dt", {}, "Quote"), h("dd", {}, tokenAmount(terms.quote, quote))),
         h("div", {}, h("dt", {}, "Broker share"), h("dd", {}, `${percent(terms.brokerBps)} · ${tokenAmount(feesFor(terms).brokerFee, quote)}`)),
-        h("div", {}, h("dt", {}, "Deadline"), h("dd", {}, utc(terms.expiry)))),
+        h("div", {}, h("dt", {}, "Deadline"), h("dd", {}, utc(fundingAndSettlementDeadline(terms))))),
       h("div", { class: "broker-entry-actions" },
         h("a", { class: "button primary", href, testid: `v3-open-${id}` }, onchain ? "Open deal and receipt" : "Open proposal"),
         share(href, `v3-copy-${id}`),
