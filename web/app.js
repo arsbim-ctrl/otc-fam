@@ -1,13 +1,18 @@
-// otc.fam's page. #/d/<id> shows a deal to whoever opens its link and lets its taker fill it (deal-page.js); #/new
-// makes a deal (new-deal-page.js). This file reads config.json, finds the browser's wallet, and routes.
+// otc.fam's page. It reads config.json, finds the browser's wallet, and routes by the link:
+//   #/v2/new, #/v2/d/<id>   a deal of the v2 contract: 0.5% fee on each side, delivered at once or as a vesting grant
+//   #/new, #/d/<id>         a deal of the round 1 contract (v1): a plain swap with no fee, kept as it was
+// The two contracts are separate, and a link always says which one its deal lives in.
 import { dealPage } from "./deal-page.js";
 import { Chain, Wallet } from "./eth.js";
 import { newDealPage } from "./new-deal-page.js";
-import { card, h, networkName, short } from "./ui.js";
+import { card, explorerOf, h, networkName, short } from "./ui.js";
 import { isAddress } from "./units.js";
+import { dealPageV2 } from "./v2-deal-page.js";
+import { newDealPageV2 } from "./v2-new-page.js";
+import { DealsV2 } from "./v2.js";
 
-/** What every page works with: where it draws, the config, the chain it reads, and the wallet, if the browser has one. */
-const app = { main: document.getElementById("app"), config: null, chain: null, wallet: null };
+/** What every page works with: where it draws, the config, the chain it reads, the v2 contract if the site has one, and the wallet, if the browser has one. */
+const app = { main: document.getElementById("app"), config: null, chain: null, v2: null, wallet: null, explorer: null };
 let page;
 
 start();
@@ -23,7 +28,11 @@ async function start() {
     app.main.replaceChildren(card(h("h1", {}, "This site is not set up"), h("p", { class: "lead" }, `Its config.json could not be read (${e.message}).`)));
     return;
   }
-  app.chain = new Chain(new URL(app.config.rpcUrl, location.href).href, app.config.contract);
+  const { chainId, contract, contractV2, fromBlockV2 } = app.config;
+  app.chain = new Chain(new URL(app.config.rpcUrl, location.href).href, contract);
+  app.explorer = explorerOf(app.config); // where a receipt's transaction can be looked up, if the network has such a site
+  // The v2 contract is optional: a site without one (or with the zero address) serves v1 deals only.
+  if (isAddress(contractV2 ?? "") && !/^0x0{40}$/.test(contractV2)) app.v2 = new DealsV2(app.chain, contractV2, Number.isSafeInteger(fromBlockV2) ? fromBlockV2 : 0);
   if (window.ethereum) {
     app.wallet = new Wallet(window.ethereum, () => {
       showAccount();
@@ -31,8 +40,11 @@ async function start() {
     });
     await Promise.race([app.wallet.ready, new Promise((resolve) => setTimeout(resolve, 1000))]);
   }
-  document.getElementById("network").textContent = networkName(app.config.chainId);
-  document.getElementById("footer").replaceChildren(`Deals contract on ${networkName(app.config.chainId)}: `, h("span", { class: "mono" }, app.config.contract));
+  document.getElementById("network").textContent = networkName(chainId);
+  document.getElementById("footer").replaceChildren(...[
+    app.v2 && h("p", {}, `v2 deal contract on ${networkName(chainId)} (0.5% fee each side, vesting): `, h("span", { class: "mono" }, app.v2.contract)),
+    h("p", {}, `${app.v2 ? "v1 deal contract (no fee)" : `Deals contract on ${networkName(chainId)}`}: `, h("span", { class: "mono" }, contract)),
+  ].filter(Boolean));
   showAccount();
   addEventListener("hashchange", route);
   route();
@@ -40,24 +52,31 @@ async function start() {
 
 function route() {
   page?.stop();
-  const deal = /^#\/d\/(.*)$/.exec(location.hash);
-  page = deal ? dealPage(app, deal[1]) : location.hash === "#/new" ? newDealPage(app) : homePage();
+  const hash = location.hash;
+  const v2Deal = /^#\/v2\/d\/(.*)$/.exec(hash), deal = /^#\/d\/(.*)$/.exec(hash);
+  page = v2Deal ? dealPageV2(app, v2Deal[1]) : hash === "#/v2/new" ? newDealPageV2(app)
+    : deal ? dealPage(app, deal[1]) : hash === "#/new" ? newDealPage(app) : homePage();
   scrollTo(0, 0);
 }
 
 function homePage() {
-  const number = h("input", { id: "deal-number", inputmode: "numeric", placeholder: "Deal number", autocomplete: "off" });
+  const number = h("input", { id: "deal-number", inputmode: "numeric", placeholder: "Deal number", autocomplete: "off", "aria-label": "Deal number" });
+  const version = app.v2 && h("select", { id: "deal-version", "aria-label": "Which contract the deal is in" }, h("option", { value: "v2/" }, "v2"), h("option", { value: "" }, "v1"));
   const open = (e) => {
     e.preventDefault();
-    if (/^\d+$/.test(number.value.trim())) location.hash = `#/d/${number.value.trim()}`;
+    if (/^\d+$/.test(number.value.trim())) location.hash = `#/${version?.value ?? ""}d/${number.value.trim()}`;
   };
   document.title = "otc.fam: one deal, one link";
   app.main.replaceChildren(card(
     h("h1", {}, "One deal, one link"),
-    h("p", { class: "lead" }, "Offer tokens for other tokens and send the link to the other side. They see what they pay and what they get, "
-      + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
-    h("a", { class: "button primary", href: "#/new" }, "Make a deal"),
-    h("form", { class: "row", onsubmit: open }, number, h("button", { class: "secondary", type: "submit" }, "Open"))));
+    h("p", { class: "lead" }, app.v2
+      ? "Sell tokens to one buyer and send them the link. They see what they pay, both fees and what they get, at once or as a vesting grant, "
+        + "and settle from their wallet: everything happens in one transaction, or nothing moves."
+      : "Offer tokens for other tokens and send the link to the other side. They see what they pay and what they get, "
+        + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
+    h("a", { class: "button primary", href: app.v2 ? "#/v2/new" : "#/new" }, "Make a deal"),
+    app.v2 && h("a", { class: "button secondary", href: "#/new" }, "Make a v1 deal: a plain swap, no fee, no vesting"),
+    h("form", { class: "row", onsubmit: open }, number, version, h("button", { class: "secondary", type: "submit" }, "Open"))));
   return { update() {}, stop() {} };
 }
 

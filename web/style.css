@@ -104,3 +104,115 @@ input.mono { font-size: 13px; }
 .linkbox a { color: var(--accent); font-weight: 600; }
 .row { display: flex; gap: 8px; margin-top: 12px; }
 .row > * { flex: 1; }
+
+/* Round 2: the v2 pages. A version label, the two kinds of delivery, the money and the grant's timeline. */
+h2 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
+.version { margin-left: 4px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.02em; vertical-align: 3px; }
+.status.funded { background: var(--ok-bg); color: var(--ok); }
+.status.settled { background: var(--info-bg); color: var(--info); }
+.status.grant-not-started, .status.grant-cliff { background: var(--warn-bg); color: var(--warn); }
+.status.grant-vesting { background: var(--accent-soft); color: var(--accent); }
+.status.grant-vested, .status.grant-claimed { background: var(--ok-bg); color: var(--ok); }
+
+.delivery { margin: 12px 0 0; padding: 9px 12px; border-left: 4px solid var(--info); border-radius: 10px; background: var(--info-bg); color: var(--info); font-size: 14px; line-height: 1.4; }
+.delivery.vesting { border-left-color: var(--accent); background: var(--accent-soft); color: #4a25c4; }
+.leg-note { margin-bottom: 4px; color: var(--ink); font-size: 13px; line-height: 1.4; }
+.held.bad { color: var(--bad); font-weight: 600; }
+.warning { margin: 14px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn); font-size: 13px; line-height: 1.45; }
+.block { display: block; margin-top: 2px; }
+.block.ok { color: var(--ok); }
+.block.bad { color: var(--bad); font-weight: 600; }
+.facts.numbers dd { font-variant-numeric: tabular-nums; }
+.facts dd > span[data-testid] { font-weight: 600; }
+.facts dd > .mono { font-weight: 400; }
+
+/* The grant's schedule as a picture; the numbers and dates next to it say the same in text. */
+.timeline { margin: 14px 2px 4px; }
+.track { position: relative; height: 14px; border-radius: 999px; background: #e3e0ee; overflow: hidden; }
+.fill { position: absolute; inset: 0 auto 0 0; }
+.fill.vested { background: #b9a6ff; }
+.fill.claimed { background: var(--ok); }
+.mark { position: absolute; top: 0; width: 2px; height: 100%; margin-left: -1px; }
+.mark.cliff { background: var(--warn); }
+.mark.now { background: var(--ink); }
+.ticks { position: relative; display: flex; justify-content: space-between; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.tick-cliff { position: absolute; transform: translateX(-50%); color: var(--warn); }
+.legend { margin: 6px 2px 0; color: var(--muted); font-size: 12px; }
+.key { display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 10px; border-radius: 3px; background: #e3e0ee; }
+.key:first-child { margin-left: 0; }
+.key.claimed { background: var(--ok); }
+.key.vested { background: #b9a6ff; }
+
+.receipts { display: grid; gap: 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+.receipts li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 14px; }
+.receipts .when { color: var(--muted); font-size: 12px; }
+.success .mono { display: block; margin-top: 4px; font-weight: 400; }
+.card > h2 + .success { margin-top: 12px; }
+
+/* The v2 form: how the tokens are delivered, and the schedule of a vesting grant. */
+.choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 14px; padding: 0; border: 0; }
+.choices.two { grid-template-columns: repeat(2, 1fr); margin-top: 14px; }
+.choices legend { margin-bottom: 6px; padding: 0; color: var(--muted); font-size: 14px; font-weight: 600; }
+.choice { position: relative; display: block; cursor: pointer; }
+.choice input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; padding: 0; cursor: pointer; }
+.choice > span { display: grid; gap: 3px; height: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.choice strong { font-size: 14px; }
+.choice small { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.choice input:checked + span { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.choice input:focus-visible + span { outline: 3px solid #c6b5ff; outline-offset: 1px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.summary h2 { margin-top: 18px; }
+select { padding: 10px 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); font: inherit; }
+.row > select { flex: 0 0 auto; }
+footer p { margin: 0 0 4px; }
+
+/* Keyboard focus is always visible. */
+:is(button, .button, a):focus-visible { outline: 3px solid #c6b5ff; outline-offset: 2px; }
+.card .button + .button { margin-top: 8px; }
+
+/* A v2 deal's page holds up to three cards: one under the other on a phone, the deal next to its grant on a wide screen. */
+main.wide > .card { max-width: 456px; margin: 0 auto; }
+.board { display: grid; gap: 12px; max-width: 456px; margin: 0 auto; }
+@media (min-width: 1000px) {
+  main.wide { max-width: 1000px; }
+  .board { grid-template-columns: minmax(0, 456px) minmax(0, 1fr); gap: 16px; align-items: start; max-width: none; }
+  .board > .card:first-of-type { grid-row: span 2; }
+  .board .facts.numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* The v2 form: what the seller enters, next to what the deal will do. */
+.facts dd > .mono[data-testid] { font-weight: 400; }
+.board.form .summary .facts { margin-top: 12px; }
+@media (min-width: 1000px) {
+  .board.form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .board.form > .card:last-child { position: sticky; top: 16px; }
+}
+
+/* On a wide page the header and the footer line up with the cards. */
+@media (min-width: 1000px) {
+  body:has(main.wide) .top, body:has(main.wide) footer { max-width: 1000px; }
+}
+
+/* A notice above a v2 deal's cards (the chain could not be read) spans them all. */
+.board > .notice { grid-column: 1 / -1; }
+
+/* On a narrow screen a settled deal's grant comes first: it is what its buyer opens the link for. */
+@media (max-width: 999px) {
+  .board > .notice { order: -2; }
+  .board > .card.grant { order: -1; }
+}
+
+/* A receipt: what moved, when and how deep in the chain, and its transaction, a link where the network has an explorer. */
+.receipts .what { line-height: 1.45; }
+.receipts a.mono, .success a.mono { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.card > h2 + .facts { margin-top: 10px; }
+.facts + .success { margin-top: 12px; }
+
+/* A long label on the main button (an amount with eighteen decimals) stays on few lines. */
+.primary.long { padding: 14px 12px; font-size: 15px; overflow-wrap: anywhere; }
+
+/* On a phone a whole address fits its field, so that it can be compared with the one agreed on. */
+@media (max-width: 420px) {
+  input.mono { padding: 10px 6px; font-size: 11px; letter-spacing: -0.01em; }
+}

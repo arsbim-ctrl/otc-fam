@@ -1,8 +1,8 @@
 // #/new: the form that makes a deal (what you give, what you get, who may fill it, for how long), its one button
 // (connect, switch network, approve, create), then the link to send to the other side.
 import { approveExactly, createDealData, createdId, explain, same, transact, ZERO_ADDRESS } from "./eth.js";
-import { action, amount, card, copyButton, DATE, dot, fact, h, networkName, NO_WALLET, setNote, when } from "./ui.js";
-import { isAddress, parseAmount } from "./units.js";
+import { action, amount, card, copyButton, DATE, dot, fact, h, networkName, NO_WALLET, setNote, show, when } from "./ui.js";
+import { isAddress, openFor, parseAmount } from "./units.js";
 
 export function newDealPage(app) {
   const { config, chain, wallet } = app;
@@ -65,13 +65,12 @@ export function newDealPage(app) {
   function terms() {
     const sell = side(field.sellToken.value.trim(), field.sellAmount.value.trim(), "give");
     const buy = side(field.buyToken.value.trim(), field.buyAmount.value.trim(), "get");
-    const takerText = field.taker.value.trim(), hoursText = field.hours.value.trim(), hours = Number(hoursText);
+    const takerText = field.taker.value.trim(), hoursText = field.hours.value.trim();
     const taker = !takerText ? { address: ZERO_ADDRESS }
       : !isAddress(takerText) ? { problem: "Check the taker's address", note: "An address is 0x followed by 40 letters and digits. Leave it empty to let anyone fill." }
       : wallet?.account && same(takerText, wallet.account) ? { problem: "Check the taker's address", note: "This is your own address: put the other side's, or leave it empty." }
       : { address: takerText.toLowerCase() };
-    const expiry = /^\d+(\.\d+)?$/.test(hoursText) && hours > 0 && hours <= 8760 ? { hours }
-      : { problem: "Check the hours", note: "Write a number of hours, more than 0 and at most 8760 (a year), like 24 or 0.5." };
+    const expiry = openFor(hoursText);
     const distinct = sell.token && buy.token && sell.token.address === buy.token.address
       ? { problem: "Pick two different tokens", note: "The token you give and the token you get are the same." } : {};
     const problem = [sell, buy, distinct, taker, expiry].find((x) => x.problem)?.problem;
@@ -136,7 +135,7 @@ export function newDealPage(app) {
       h("p", {}, `You give ${give} and get ${amount(t.buy.units, t.buy.token)}.`),
       h("p", {}, `${anyone ? "Anyone with the link" : "Only the address you named"} can fill it, for ${t.expiry.hours} hour${t.expiry.hours === 1 ? "" : "s"}. `
         + `Until then your ${give} stay locked in the deal contract, and you can cancel to take them back.`)]));
-    actionArea.replaceChildren(actions(t));
+    show(actionArea, actions(t)); // changed in place: the button keeps the focus from one step to the next
   }
 
   /** The one button (connect, switch network, approve, create), or what the form still needs, and what the press does. */
