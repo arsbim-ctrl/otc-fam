@@ -3,8 +3,9 @@
 // Chromium at a phone's or a desktop's width, with a stand-in wallet as window.ethereum or with no wallet at all.
 // The tests (test/v2-page.test.mjs) and the scenes (scripts/play.mjs) both use it.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { extname, join, sep } from "node:path";
 import { chromium } from "playwright";
 import { CHAIN_ID } from "../../.launchpad/checks/round-1/chain.mjs";
@@ -16,11 +17,13 @@ export const PHONE = { width: 390, height: 844 }, DESKTOP = { width: 1440, heigh
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
 let built;
-/** dist/, made once by the build script. */
+/** Build once per test process, in its own directory so another browser suite can build concurrently. */
 function dist() {
   built ??= (() => {
-    execFileSync(process.execPath, ["scripts/build.mjs"], { cwd: ROOT, stdio: "ignore" });
-    return realpathSync(join(ROOT, "dist"));
+    const dir = mkdtempSync(join(tmpdir(), "otc-site-"));
+    process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
+    execFileSync(process.execPath, [join(ROOT, "scripts/build.mjs")], { cwd: dir, stdio: "ignore" });
+    return realpathSync(join(dir, "dist"));
   })();
   return built;
 }

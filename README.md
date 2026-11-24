@@ -1,7 +1,7 @@
 # otc.fam
 
-A link for one OTC token deal. The seller sends the link; the buyer opens it, checks what they pay and
-what they receive, and settles it. No person and no company holds the tokens: a small contract holds the
+A link for one OTC token deal. A seller or broker can share it. The buyer opens it, checks the price and
+delivery, and settles after the seller funds the allocation. No person and no company holds the tokens: a small contract holds the
 seller's tokens until the buyer pays, then delivers them at once or as a vesting grant, or gives them back
 to the seller.
 
@@ -12,8 +12,8 @@ brief in [.launchpad/project.md](.launchpad/project.md).
 
 **Where it stands.** Round 1: a deal contract for plain swaps (v1), its page and the deployment script.
 Round 2: a second contract (v2) with a 0.5% fee on each side and delivery at once or as a new vesting grant,
-and its pages. Nothing here has been reviewed for security, and nothing is deployed: local chains and test
-networks only.
+and its pages. Round 3 adds a separate broker deal contract (v3), a signed funding and settlement flow,
+and onchain receipts and history. Local chains and test networks only pending independent review.
 
 ## What is in the repository
 
@@ -21,10 +21,12 @@ networks only.
 | --- | --- |
 | `contracts/OtcDeals.sol`, `IOtcDeals.sol` | v1, round 1: plain swaps, no owner, no fee. Its interface is fixed. |
 | `contracts/OtcDealsV2.sol`, `IOtcDealsV2.sol` | v2, round 2: deals for one named buyer, with fees, delivered at once or as a vesting grant. The interface is the round's, unchanged. |
-| `contracts/GrantVault.sol`, `TokenMoves.sol` | The vault that holds one grant's tokens, and the three checked ways a token moves in v2. |
-| `web/` | The page, plain files and no dependency. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
+| `contracts/BrokerDeals.sol`, `IBrokerDeals.sol` | v3, round 3. Signed terms, broker fee splits, immediate delivery and funded grants. |
+| `contracts/GrantVault.sol`, `TokenMoves.sol` | The vault that holds one grant's tokens, and the three checked ways a token moves in v2 and v3. |
+| `web/` | The static page. v3 loads the locked ethers browser bundle for typed data hashing. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
 | `scripts/` | `build.mjs`, `deploy.mjs`, `play.mjs` (round 2's scenes), `dev.mjs` (a local stand to click through), and `lib/`, the local chain and site they and the tests stand on. |
 | `test/` | The entry's own tests: what the rounds' checks leave out. |
+| `evidence/round-3/` | Broker workflow at 390 px and 1440 px, including wallet recovery and reloaded receipts. |
 | `evidence/round-2/` | One run of `npm run play`: the text of every step, the balances that moved, 48 screenshots. |
 | `.launchpad/` | The pod's settings, each round's brief and each round's checks. |
 
@@ -35,17 +37,64 @@ Node.js 22 or later. After the two installs, everything below runs with no netwo
 ```sh
 npm ci
 npx playwright install chromium    # the browser the page checks, tests and scenes drive
-npm run check    # both rounds' checks: 16 for round 1, 7 for round 2
+npm run check    # 16 checks for round 1, 7 for round 2, 5 for round 3
 npm test         # the entry's own tests, contract and page
 npm run play     # round 2's scenes at 390 px and 1440 px: text on the terminal, screenshots in screens/
 npm run dev      # the page on a local chain, to click through: http://127.0.0.1:8787/
 npm run build    # dist/, the static site: serve it with any static server
 ```
 
-`npm run dev` deploys both contracts and two test tokens (FAM, 18 decimals; USDC, 6) on a chain inside the
+`npm run dev` deploys all three contracts and two test tokens (FAM, 18 decimals; USDC, 6) on a chain inside the
 process, and serves the page with a stand-in wallet. A bar at the bottom chooses whose wallet the browser
-has (the seller's, the buyer's, a stranger's, none), moves the chain's time on by 1, 14, 15 or 45 days, and
-copies the addresses to paste. Each tab keeps its own choice. In a container, add `HOST=0.0.0.0`.
+has (seller, buyer, broker, stranger or none), moves the chain's time by 1, 14, 15 or 45 days, and copies
+addresses to paste. Each tab keeps its own wallet choice. The bar can also reject the next signature or
+transaction and simulate a mismatched wallet network. In a container, add `HOST=0.0.0.0`.
+
+## v3 broker deals
+
+1. Open **Prepare a broker deal** from the home page. Copy the seller, buyer and broker addresses from the
+   local test bar, then enter FAM as the base token and USDC as the quote token. For example, enter
+   900.000000000000000001 FAM for 123.456789 USDC with a 20% broker share. Review the proposed split and
+   the exact terms, create the link, and copy it.
+2. Open the link as **No wallet** to check the proposal and funding status. Select the seller, connect,
+   and choose **Sign and fund**. The seller signs the terms and approves the allocation before submitting
+   funding. A funded deal can be refunded by the seller at any time before settlement.
+3. Open the same link in a fresh browser profile. Check that it shows the funded allocation, delivery,
+   expiry, quote and split before connecting. Select the buyer and choose **Sign and settle**. The buyer
+   signs the same terms and approves the quote plus the buyer fee before submitting. Reload to read the
+   settlement receipt from the contract logs, including the transaction hash and confirmation count.
+4. For a new grant, choose **New vesting grant** and keep the default 30-day cliff and 90-day duration.
+   Once settled, advance 45 days to see the vault balance and claimable amount. Claim with the buyer.
+5. Connect the broker and open **Deal history**. Created links are saved in the browser where they were
+   prepared. Once funded, deals can be recovered from chain events with the named broker, seller or
+   buyer account selected. Duplicate terms to prepare a new link with a fresh nonce and expiry.
+
+The URL fragment carries the versioned terms, chain and contract. The browser hashes the [EIP-712
+terms](https://eips.ethereum.org/EIPS/eip-712) locally. The link contains no authorization. Anyone with
+the link can read it, and funded terms and transfers are public onchain. Seller, buyer and broker use distinct addresses. A seller nonce is consumed on
+successful funding and stays used after refund. Funding and settlement each require both a matching
+sender and their 65-byte EOA signature. The wallet needs `eth_signTypedData_v4`. The current workflow
+supports externally owned accounts.
+
+The broker share is a proposal input from 0 to 10,000 bps of the fee pool. Each side's 50-bps fee is
+rounded down in raw units before the broker split. On settlement, the treasury receives the remainder
+after the broker's rounded-down share. All of the settlement's transfers, grant creation and logs
+revert together when delivery or payment fails. Token approvals are separate wallet transactions.
+Zero fees are paid on funding, refund, expiry or grant claims.
+
+| Quote (USDC) | Broker share | Buyer pays | Seller receives | Broker receives | Treasury receives |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 100,000 | 0% | 100,500 | 99,500 | 0 | 1,000 |
+| 100,000 | 20% | 100,500 | 99,500 | 200 | 800 |
+| 123.456789 | 0% | 124.074072 | 122.839506 | 0 | 1.234566 |
+| 123.456789 | 20% | 124.074072 | 122.839506 | 0.246913 | 0.987653 |
+
+The v3 contract uses the same funding and vesting boundaries as v2. A fixed start must be in the future
+at funding, and settlement can occur through that second if the deal is still unexpired. Each grant
+has a vault funded with the entire allocation and a beneficiary fixed to the designated buyer.
+The existing contracts, deployments and URL routes continue to serve their own deals.
+
+[Round 3 verification and browser demonstrations](evidence/round-3/README.md).
 
 ## v2: the deal contract of round 2
 
@@ -128,13 +177,14 @@ touch any other token.
 
 ## The pages
 
-`config.json` is `{ "chainId", "contract", "rpcUrl" }` as in round 1, with three optional values:
-`"contractV2"`, the v2 contract's address; `"fromBlockV2"`, the block it was deployed in; and
-`"explorerUrl"`, an https block explorer for a network the page does not know. Without `contractV2` the site
-serves v1 only.
+`config.json` requires `chainId`, `contract` and `rpcUrl` for the legacy route. Set `contractV2` and
+`fromBlockV2` to enable v2, and `contractV3` and `fromBlockV3` to enable the broker workflow. Each
+`fromBlock` is the deployment block for event queries. An optional HTTPS `explorerUrl` overrides
+the default explorer for receipt links.
 
 | Link | What it is |
 | --- | --- |
+| `#/v3/new`, `#/v3/d/<terms>`, `#/v3/history` | Broker proposal, wallet-free deal and receipt preview, and history scoped to the connected role. |
 | `#/v2/new` | The seller's form: delivery, tokens, buyer, how long the deal stays open, and for vesting the start (at settlement, or a date and time in UTC), the cliff and the length in days. Next to it, before anything is signed: the buyer, what the buyer receives, until when the deal can be settled, the price, both fees, what each side and the treasury get, and the schedule. Its button connects, approves exactly the allocation, and funds; then the page gives the link. |
 | `#/v2/d/<id>` | One link for a deal's whole life. Funded: the terms, the money, that the allocation is held on the chain, and for the named buyer the button that connects, approves exactly the price and the fee, and settles. Settled with vesting, which the page says is not unlocked: the grant, with start, cliff and end in UTC, what is vested, claimed, claimable and locked, a timeline and the same in words, when claiming becomes possible if it is not yet, and the button that claims. Receipts: every transaction of the deal with what moved, when, how deep in the chain it is, and its hash, a link to the block explorer where the network has one. |
 | `#/new`, `#/d/<id>` | v1's form and v1's deal page, as in round 1. |
@@ -142,8 +192,7 @@ serves v1 only.
 - Everything is read from `rpcUrl`, with or without a wallet. Times of a v2 deal are the chain's, in UTC;
   vested and claimable amounts are the contract's own answers at the latest block.
 - A transaction is run as a call before the wallet is asked to sign: one the chain would refuse is not
-  sent, and the reason is given in words. Whatever a wallet or a node says in its own words is said in a
-  plain sentence, never shown as it came.
+  sent, and the reason is given in words when recognised. An unknown RPC error shows its first line.
 - A press declined in the wallet, a wallet on another network, a transaction that fails or that the wallet
   replaces: each ends with the page saying what happened and showing the chain's state. A v2 transaction sent
   before a reload is taken up again after it. When the chain cannot be read, a v2 page says so.
@@ -205,6 +254,7 @@ The network and the key come from the environment, never from a file:
 ```sh
 RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy
 RPC_URL=<…> DEPLOYER_KEY=<…> TREASURY=<the address that receives the fees> npm run deploy:v2
+RPC_URL=<…> DEPLOYER_KEY=<…> TREASURY=<the address that receives the fees> npm run deploy:v3
 ```
 
 Each compiles its contract as the checks do, prints the contract's address (and nothing else) on stdout,

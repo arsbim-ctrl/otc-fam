@@ -465,3 +465,18 @@ test("the treasury is fixed at deployment, and besides createDeal, fill, cancel 
     assert.ok(!abi.some((f) => f.type === "fallback" || f.type === "receive" || f.stateMutability === "payable"), "nothing is payable, and there is no fallback");
   }
 });
+
+test("a transfer failure late in V2 fill rolls back payment, fees, grant and escrow", async () => {
+  for (const [kind, error] of [["False", "TransferFailed"], ["TransferFee", "InexactTransfer"]]) {
+    const w = await world();
+    const terms = await w.vesting();
+    const id = await w.fund(terms);
+    await w.ready(terms);
+    await w.fam.as(w.deployer).setKind(KIND[kind]);
+    const before = await w.holdings();
+    assert.equal(await revertsWith(w.deals.as(w.buyer).fill(id)), error);
+    assert.deepEqual(await w.holdings(), before);
+    assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Funded);
+    assert.equal((await w.deals.read.getGrant(id)).custodian.toLowerCase(), ZERO);
+  }
+});

@@ -1,4 +1,4 @@
-// npm run deploy and npm run deploy:v2, end to end: a local chain (the checks' EDR) served over HTTP, a fresh random
+// The deployment commands, end to end: a local chain (the checks' EDR) served over HTTP, a fresh random
 // key that it funds, then the script. It must print only the new contract's address on stdout, and that contract must
 // answer as the one it is.
 import assert from "node:assert/strict";
@@ -39,13 +39,14 @@ async function withNode(steps) {
 }
 
 /** The address the script printed, after checking that it printed nothing else, never the key, and that a contract is there. */
-async function deployed(chain, env, args = []) {
+async function deployed(chain, env, args = [], deploymentHint) {
   const { stdout, stderr } = await run(process.execPath, ["scripts/deploy.mjs", ...args], { env });
   const address = stdout.trim();
   assert.match(address, /^0x[0-9a-fA-F]{40}$/, `stdout is only the address; it was ${JSON.stringify(stdout)}`);
   assert.ok(!stderr.includes(env.DEPLOYER_KEY.slice(2)), "the key is never printed");
   assert.ok(!stderr.includes(env.RPC_URL), "the RPC URL is never printed");
   assert.notEqual(await chain.rpc("eth_getCode", [address, "latest"]), "0x", "there is a contract at the printed address");
+  if (deploymentHint) assert.match(stderr, deploymentHint);
   return address;
 }
 
@@ -61,6 +62,14 @@ test("npm run deploy:v2 deploys OtcDealsV2 with the treasury in TREASURY, and sa
   assert.equal(`0x${treasury.slice(-40)}`, TREASURY);
   const { stderr } = await run(process.execPath, ["scripts/deploy.mjs", "v2"], { env: { ...env, TREASURY } });
   assert.match(stderr, /"contractV2": "0x[0-9a-fA-F]{40}", "fromBlockV2": \d+/);
+}));
+
+test("npm run deploy:v3 deploys BrokerDeals and reports its event start block", () => withNode(async (chain, env) => {
+  const address = await deployed(chain, { ...env, TREASURY }, ["v3"], /"contractV3": "0x[0-9a-fA-F]{40}", "fromBlockV3": \d+/);
+  const treasury = await chain.rpc("eth_call", [{ to: address, data: "0x61d027b3" }, "latest"]); // treasury()
+  assert.equal(`0x${treasury.slice(-40)}`, TREASURY);
+  const fee = await chain.rpc("eth_call", [{ to: address, data: "0xbf333f2c" }, "latest"]); // FEE_BPS()
+  assert.equal(BigInt(fee), 50n);
 }));
 
 test("npm run deploy refuses to start without RPC_URL and DEPLOYER_KEY, or with a malformed key", async () => {

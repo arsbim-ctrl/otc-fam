@@ -44,6 +44,10 @@ test("whatever a wallet or a node says in its own words, the page says a plain s
   assert.match(explain(undefined), /refused this request/);
 });
 
+test("an unrecognised RPC reason keeps its first line", () => {
+  assert.equal(explain(new Error("The RPC provider exhausted its archive quota.\nDiagnostic details")), "The RPC provider exhausted its archive quota.");
+});
+
 test("a token's symbol is read as an ABI string or as bytes32 (as MKR's is), without characters that change the text's direction", async () => {
   const hex = (text) => Buffer.from(text, "utf8").toString("hex");
   const word = (n) => n.toString(16).padStart(64, "0");

@@ -80,8 +80,8 @@ export class Chain {
   }
 
   /** eth_call: what `to` answers to `data`, sent by `from`; throws the contract's reason if it would revert. */
-  call(to, data, from) {
-    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, "latest"]);
+  call(to, data, from, block = "latest") {
+    return this.rpc("eth_call", [{ to, data, ...(from && { from }) }, block]);
   }
 
   async deal(id) {
@@ -107,8 +107,8 @@ export class Chain {
     return this.tokens.get(key);
   }
 
-  async balanceOf(token, owner) {
-    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner)))[0] ?? "0");
+  async balanceOf(token, owner, block) {
+    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner), undefined, block))[0] ?? "0");
   }
 
   /** What `owner` lets `spender` (the round 1 deal contract unless given) take of `token`. */
@@ -272,6 +272,14 @@ const REASONS = {
   "0xa7e67778": () => "Only the seller of this deal can cancel it.", // NotSeller(uint256)
   "0xc8e7093a": () => "Only the grant's beneficiary can claim it.", // NotBeneficiary(uint256)
   "0xf9489585": () => "Nothing has vested since the last claim: there is nothing to claim yet.", // NothingToClaim(uint256)
+  "0x1f6d5aef": () => "This seller already used that nonce. Ask the broker for a new link.",
+  "0x8baa579f": () => "The signature does not match these terms, this wallet, or this deployment.",
+  "0x269fad92": () => "This deal has expired.",
+  "0x5ec82351": () => "Only the named seller can do this.",
+  "0x472e017e": () => "Only the designated buyer can settle this deal.",
+  "0xd5ef09ba": () => "This deal is no longer funded. Refresh the deal for its latest status.",
+  "0xccba83f2": () => "The fixed vesting start has passed. A funded deal can be refunded by the seller.",
+  "0x969bf728": () => "Nothing is available to claim yet.",
 };
 
 // What a wallet or a node says in its own words when it refuses, and the sentence the page says instead.
@@ -283,6 +291,7 @@ const REFUSALS = [
   [/revert/i, "The transaction would fail on the chain, so it was not sent."],
   [/timed? ?out|failed to fetch|fetch failed|network ?error|disconnect|unreachable|econn/i, "The network cannot be reached. Check your connection and try again."],
   [/unauthori[sz]ed|not connected|locked/i, "Your wallet is locked or not connected to this page. Unlock it, connect, then try again."],
+  [/^internal json-rpc error|^TypeError:/i, "Your wallet or the network refused this request, and nothing was sent. Try again in a moment."],
 ];
 
 /** Revert data in an error, wherever the node (geth: data; Hardhat: data.data) or the wallet put it. */
@@ -293,7 +302,7 @@ function revertData(error) {
 
 /**
  * What went wrong, for the person: always a plain sentence. A refusal in their wallet, a deal contract's reason, the
- * page's own words, or a known refusal of the wallet or the node; whatever else they say is not shown as it came.
+ * page's own words, or the first line of an unrecognised RPC response.
  */
 export function explain(error) {
   if (error?.plain) return error.message;
@@ -307,5 +316,5 @@ export function explain(error) {
     return "The transaction would fail on the chain, so it was not sent.";
   }
   const raw = String(error?.message ?? error ?? "");
-  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? "Your wallet or the network refused this request, and nothing was sent. Try again in a moment.";
+  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? (raw.split("\n")[0] || "The wallet or network refused this request. Try again in a moment.");
 }
