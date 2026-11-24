@@ -69,7 +69,7 @@ export class Chain {
   async rpc(method, params) {
     let response;
     try {
-      response = await fetch(this.rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      response = await fetch(this.rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(15_000) });
     } catch {
       throw say("The network cannot be reached. Check your connection and try again.");
     }
@@ -203,10 +203,11 @@ export class Wallet {
   }
 
   /** Sends `{ to, data }` from the connected account on chain `chainId`, and returns the transaction's hash. */
-  async send(tx, chainId) {
+  async send(tx, chainId, from = this.account) {
     await this.readChain();
     if (this.chainId !== chainId) throw say("Your wallet changed network. Switch it back, then try again.");
-    return this.provider.request({ method: "eth_sendTransaction", params: [{ from: this.account, ...tx }] });
+    if (!same(this.account, from)) throw say("Your wallet changed accounts. Connect the designated wallet, then try again.");
+    return this.provider.request({ method: "eth_sendTransaction", params: [{ ...tx, from }] });
   }
 
   /** The number (nonce) transaction `hash` was sent with, as the wallet's own node knows it; null if it does not say. */
@@ -223,26 +224,28 @@ const NO_FEE = "This wallet has too little of the network's own coin (ETH) to pa
  * wallet has sent it. A transaction the chain would refuse is never sent. Whether the wallet can pay the network
  * fee is the wallet's to say (some have it paid for them): its refusal is worded by explain().
  */
-export async function transact({ chain, wallet, config }, to, data, stage, what, sent) {
-  await chain.call(to, data, wallet.account);
-  const count = await chain.rpc("eth_getTransactionCount", [wallet.account, "latest"]).then(BigInt, () => null);
+export async function transact({ chain, wallet, config }, to, data, stage, what, sent, from = wallet.account) {
+  if (!same(wallet.account, from)) throw say("Your wallet changed accounts. Connect the designated wallet, then try again.");
+  await chain.call(to, data, from);
+  const count = await chain.rpc("eth_getTransactionCount", [from, "latest"]).then(BigInt, () => null);
   stage(`${what}. Confirm it in your wallet.`);
-  const hash = await wallet.send({ to, data }, config.chainId);
+  const hash = await wallet.send({ to, data }, config.chainId, from);
   // The wallet's node knows the number it gave the transaction; failing that, the account's count before it was sent.
   const nonce = (await wallet.nonceOf(hash)) ?? count;
   sent?.(hash, nonce);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
-  return chain.confirmed(hash, wallet.account, nonce);
+  return chain.confirmed(hash, from, nonce);
 }
 
 /** Approves `spender` (the round 1 deal contract unless given) for exactly `units` of `token`: one deal's amount, never more. */
-export async function approveExactly(app, token, units, allowance, stage, spender = app.config.contract) {
+export async function approveExactly(app, token, units, allowance, stage, spender = app.config.contract, from = app.wallet.account, sent) {
   const data = approveData(spender, units);
   // Some tokens (USDT among them) refuse to change an approval that is not zero: it is set to zero first.
-  if (allowance > 0n && (await app.chain.call(token.address, data, app.wallet.account).then(() => false, () => true))) {
-    await transact(app, token.address, approveData(spender, 0n), stage, `Setting your ${token.symbol} approval to zero first`);
+  if (allowance > 0n && (await app.chain.call(token.address, data, from).then(() => false, () => true))) {
+    await transact(app, token.address, approveData(spender, 0n), stage, `Setting your ${token.symbol} approval to zero first`, sent, from);
   }
-  await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`);
+  const exact = token.decimals == null ? `${units} raw units` : `${formatAmount(units, token.decimals)} ${token.symbol}`;
+  await transact(app, token.address, data, stage, `Approving ${exact}`, sent, from);
 }
 
 // Why a deal contract refused a call, in words: its errors by selector, with their arguments' words. The first eleven

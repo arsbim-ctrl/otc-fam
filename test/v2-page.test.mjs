@@ -16,6 +16,7 @@ const noticeSays = (page, text) => shows(page, "notice", (t) => t.includes(text)
 /** Makes the page read the chain now, as it does every few seconds and whenever its window gets the focus. */
 const refresh = (page) => page.evaluate(() => dispatchEvent(new Event("focus")));
 const statusOf = async (w, id) => (await w.deals.read.getDeal(id)).status;
+const pressNamed = (page, name) => page.getByTestId("primary-action").and(page.getByRole("button", { name, exact: true })).click();
 
 /** Runs `steps(site, w)` on a fresh v2 world `w` whose page is served at `site`. */
 async function onSite(steps) {
@@ -263,7 +264,9 @@ test("a press declined in the wallet, a transaction that fails on the chain and 
     return { error: { code: 4001, message: "User rejected the request." } };
   });
   await browse(site, `#/v2/d/${declinedId}`, { wallet: once }, async (page) => {
-    await pressUntil(page, async () => (await seen(page, "notice")) === "You declined in your wallet. Nothing was sent.", "the notice of the declined approval");
+    await pressNamed(page, "Connect wallet");
+    await pressNamed(page, "Approve 124.074072 USDC");
+    await noticeSays(page, "You declined in your wallet. Nothing was sent.");
     assert.equal(await seen(page, "primary-action"), "Approve 124.074072 USDC");
     await pressUntil(page, async () => (await statusOf(w, declinedId)) === STATUS.Settled, "the deal settled after all");
   });
@@ -276,7 +279,10 @@ test("a press declined in the wallet, a transaction that fails on the chain and 
     return answer({ ...request, params: [{ ...request.params[0], gas: "0x7530" }] });
   });
   await browse(site, `#/v2/d/${failedId}`, { wallet: starving }, async (page) => {
-    await pressUntil(page, async () => (await seen(page, "notice"))?.includes("failed on the chain"), "the notice of the failed settlement");
+    await pressNamed(page, "Connect wallet");
+    await pressNamed(page, "Approve 124.074072 USDC");
+    await pressNamed(page, "Settle: pay 124.074072 USDC");
+    await noticeSays(page, "failed on the chain");
     assert.equal(await statusOf(w, failedId), STATUS.Funded);
     assert.deepEqual(await w.moved(before), {}, "a settlement that failed moved nothing");
     await says(page, "deal-status", "funded", "data-status");
@@ -290,7 +296,10 @@ test("a press declined in the wallet, a transaction that fails on the chain and 
     return { result: `0x${"ab".repeat(32)}` };
   });
   await browse(site, `#/v2/d/${replacedId}`, { wallet: replacing }, async (page) => {
-    await pressUntil(page, async () => (await seen(page, "notice"))?.includes("Your wallet replaced this transaction"), "the notice of the replaced settlement");
+    await pressNamed(page, "Connect wallet");
+    await pressNamed(page, "Approve 124.074072 USDC");
+    await pressNamed(page, "Settle: pay 124.074072 USDC");
+    await noticeSays(page, "Your wallet replaced this transaction");
     await says(page, "deal-status", "settled", "data-status");
     assert.equal(await offered(page), false, "the page does not offer to settle a deal that the replacement settled");
   });
@@ -308,14 +317,20 @@ test("a page reloaded while its transaction is on its way takes it up again: a s
     return route.continue();
   });
 
+  const waitForHash = (page) => until(() => page.evaluate(() => Object.keys(localStorage)
+    .some(key => key.startsWith("otcfam:pending:"))), "the page saved the submitted transaction hash");
+
   await browse(site, `#/v2/d/${id}`, { wallet: walletFor(w, w.buyer) }, async (page) => {
     const held = { on: false };
     await hold(page, held);
-    await pressUntil(page, async () => (await seen(page, "primary-action")) === "Settle: pay 124.074072 USDC", "the settle button");
+    await pressNamed(page, "Connect wallet");
+    await pressNamed(page, "Approve 124.074072 USDC");
+    await says(page, "primary-action", "Settle: pay 124.074072 USDC");
     held.on = true;
-    await page.getByTestId("primary-action").click();
+    await pressNamed(page, "Settle: pay 124.074072 USDC");
     await until(async () => (await statusOf(w, id)) === STATUS.Settled, "the settlement mined");
     await says(page, "primary-action", "Settling the deal…");
+    await waitForHash(page);
     await page.reload();
     await until(async () => (await read(page)).includes("This page was reloaded while transaction 0x"), "the page waiting for its transaction again");
     assert.equal(await page.getByTestId("stop-waiting").count(), 1, "the person can stop waiting");
@@ -330,10 +345,13 @@ test("a page reloaded while its transaction is on its way takes it up again: a s
     const held = { on: false };
     await hold(page, held);
     await enter(page, w);
-    await pressUntil(page, async () => (await seen(page, "primary-action")) === "Fund the deal", "the fund button");
+    await pressNamed(page, "Connect wallet");
+    await pressNamed(page, "Approve 1,000,000 FAM");
+    await says(page, "primary-action", "Fund the deal");
     held.on = true;
-    await page.getByTestId("primary-action").click();
+    await pressNamed(page, "Fund the deal");
     await until(async () => (await statusOf(w, id + 1n)) === STATUS.Funded, "the funding mined");
+    await waitForHash(page);
     await page.reload();
     await until(async () => (await read(page)).includes("This page was reloaded while transaction 0x"), "the form waiting for its transaction again");
     assert.equal(await page.getByTestId("stop-waiting").count(), 1, "the person can stop waiting, and have the form back");

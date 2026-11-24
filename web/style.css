@@ -216,3 +216,66 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
 @media (max-width: 420px) {
   input.mono { padding: 10px 6px; font-size: 11px; letter-spacing: -0.01em; }
 }
+
+/* V3 shares the site's typography and action colors. Deal terms stay beside the fee summary on wide screens. */
+.broker-main { max-width: 1080px; }
+body:has(main.broker-main) .top, body:has(main.broker-main) footer { max-width: 1080px; }
+.broker-layout { display: grid; gap: 14px; max-width: 520px; margin: 0 auto; align-items: start; }
+.broker-layout > .card { min-width: 0; }
+.broker-layout .card-head { flex-wrap: wrap; }
+.broker-heading { font-size: clamp(23px, 4vw, 29px); }
+.broker-heading:focus { outline: none; }
+.broker-nav { display: flex; gap: 8px 20px; flex-wrap: wrap; padding: 4px 5px; font-size: 14px; font-weight: 680; }
+.broker-nav a, .broker-history-list h2 a { color: #5029c8; text-underline-offset: 3px; }
+.broker-layout .leg { min-width: 0; }
+.broker-layout .leg-row { flex-wrap: wrap; }
+.broker-layout .token { max-width: 100%; }
+.broker-legs { display: grid; gap: 8px; margin-top: 14px; }
+.broker-layout .warning { font-size: 14px; }
+.broker-layout .status.awaiting { background: var(--warn-bg); color: var(--warn); }
+.broker-layout .status.unavailable, .broker-layout .status.refunded { background: var(--soft); color: #4f4c63; }
+.broker-fees, .broker-scope { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.broker-fees > div:nth-child(-n+2) { padding: 9px 10px; border-radius: 12px; background: #ede8ff; }
+.broker-fees > div:nth-child(-n+2) dd { color: #3f2299; font-variant-numeric: tabular-nums; }
+.broker-fees > div:last-child:has(.mono), .broker-scope > div:has(.mono) { grid-column: 1 / -1; }
+.broker-disclosure { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.broker-disclosure summary { cursor: pointer; font-weight: 650; color: #5029c8; }
+.broker-disclosure summary:focus-visible, .broker-layout select:focus-visible { outline: 2px solid #6a3df5; outline-offset: 3px; }
+.broker-form fieldset { margin: 16px 0; padding: 0 0 12px; border: 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.broker-form legend { padding: 0; font-size: 16px; font-weight: 700; }
+.broker-form .field { margin-top: 10px; }
+.broker-form select { width: 100%; }
+.broker-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.broker-form .field button { width: auto; margin-top: 6px; padding: 6px 10px; font-size: 13px; }
+.broker-form .notice, .broker-message > * { margin-top: 8px; }
+.broker-preview { margin-top: 14px; }
+.broker-actions { margin-top: 16px; padding: 12px; border-radius: 14px; background: var(--soft); }
+.broker-actions .lead { margin: 0 0 7px; color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.broker-actions .action { margin-top: 8px; }
+.broker-actions .action:empty, .broker-message:empty { display: none; }
+.broker-layout .primary { font-size: 16px; overflow-wrap: anywhere; }
+.broker-link-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; align-items: start; }
+.broker-link-actions .button, .broker-link-actions button { width: auto; padding: 8px 10px; font-size: 13px; }
+.broker-copy:has(input) { flex: 1 1 100%; }
+.broker-copy input { margin-top: 4px; }
+.broker-copy .hint:not(:empty) { display: block; }
+.broker-layout .secondary { color: #5029c8; }
+.broker-layout .notice a, .broker-layout .hint a { color: inherit; }
+.broker-history-filter { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.history-wallet p { overflow-wrap: anywhere; }
+.broker-history-view, .broker-history-results { display: grid; gap: 12px; min-width: 0; }
+.broker-history-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.broker-history-list > li { min-width: 0; }
+.broker-history-list .card { height: 100%; }
+.broker-history-list .card-head h2 { overflow-wrap: anywhere; }
+.broker-history-list .facts { margin: 10px 0; }
+
+@media (min-width: 900px) {
+  .broker-layout { max-width: none; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); }
+  .broker-layout > nav { grid-column: 1 / -1; }
+  .broker-layout:not(.broker-history) > .card:nth-child(2) { grid-row: span 4; }
+  .broker-layout > .card { padding: 20px; }
+  .broker-layout > .card:first-of-type > .broker-legs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .broker-history { grid-template-columns: 1fr; }
+  .broker-history-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

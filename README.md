@@ -12,8 +12,8 @@ brief in [.launchpad/project.md](.launchpad/project.md).
 
 **Where it stands.** Round 1: a deal contract for plain swaps (v1), its page and the deployment script.
 Round 2: a second contract (v2) with a 0.5% fee on each side and delivery at once or as a new vesting grant,
-and its pages. Nothing here has been reviewed for security, and nothing is deployed: local chains and test
-networks only.
+and its pages. Round 3 adds versioned broker deals with signed terms, funding, settlement, receipts and
+history. Development and demos use local chains and test networks.
 
 ## What is in the repository
 
@@ -21,10 +21,12 @@ networks only.
 | --- | --- |
 | `contracts/OtcDeals.sol`, `IOtcDeals.sol` | v1, round 1: plain swaps, no owner, no fee. Its interface is fixed. |
 | `contracts/OtcDealsV2.sol`, `IOtcDealsV2.sol` | v2, round 2: deals for one named buyer, with fees, delivered at once or as a vesting grant. The interface is the round's, unchanged. |
-| `contracts/GrantVault.sol`, `TokenMoves.sol` | The vault that holds one grant's tokens, and the three checked ways a token moves in v2. |
-| `web/` | The page, plain files and no dependency. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
+| `contracts/BrokerDeals.sol`, `IBrokerDeals.sol` | V3 broker deals with seller and buyer authorizations, a signed fee split and funded vesting. |
+| `contracts/GrantVault.sol`, `TokenMoves.sol` | The vault that holds one grant's tokens, and the three checked ways a token moves in v2 and v3. |
+| `web/` | The static site. V3 uses the locked ethers browser bundle for ABI encoding and EIP-712. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
 | `scripts/` | `build.mjs`, `deploy.mjs`, `play.mjs` (round 2's scenes), `dev.mjs` (a local stand to click through), and `lib/`, the local chain and site they and the tests stand on. |
 | `test/` | The entry's own tests: what the rounds' checks leave out. |
+| `evidence/round-3/` | V3 browser test results and screenshots at 390 px and 1440 px. |
 | `evidence/round-2/` | One run of `npm run play`: the text of every step, the balances that moved, 48 screenshots. |
 | `.launchpad/` | The pod's settings, each round's brief and each round's checks. |
 
@@ -35,17 +37,43 @@ Node.js 22 or later. After the two installs, everything below runs with no netwo
 ```sh
 npm ci
 npx playwright install chromium    # the browser the page checks, tests and scenes drive
-npm run check    # both rounds' checks: 16 for round 1, 7 for round 2
-npm test         # the entry's own tests, contract and page
+npm run check    # all frozen checks: 16 for round 1, 7 for round 2, 5 for round 3
+npm test         # contract and browser tests, run serially to share the built site
 npm run play     # round 2's scenes at 390 px and 1440 px: text on the terminal, screenshots in screens/
 npm run dev      # the page on a local chain, to click through: http://127.0.0.1:8787/
 npm run build    # dist/, the static site: serve it with any static server
 ```
 
-`npm run dev` deploys both contracts and two test tokens (FAM, 18 decimals; USDC, 6) on a chain inside the
+`npm run dev` deploys all three contracts and two test tokens (FAM, 18 decimals; USDC, 6) on a chain inside the
 process, and serves the page with a stand-in wallet. A bar at the bottom chooses whose wallet the browser
-has (the seller's, the buyer's, a stranger's, none), moves the chain's time on by 1, 14, 15 or 45 days, and
+has (broker, seller, buyer, stranger or no wallet), moves the chain's time on by 1, 14, 15 or 45 days, and
 copies the addresses to paste. Each tab keeps its own choice. In a container, add `HOST=0.0.0.0`.
+
+## V3 broker deals
+
+| Route | Workflow |
+| --- | --- |
+| `#/v3/new` | Enter the seller, buyer, broker, both tokens and amounts, delivery, validity and the broker’s share. The quote preview uses the payment token’s decimals and shows the exact split. |
+| `#/v3/d/<terms>` | Preview, fund and settle the same immutable terms. The named seller can refund an escrowed allocation. An eligible buyer can claim a settled grant. |
+| `#/v3/history` | Connect and select Broker, Seller or Buyer. See your funded deals from indexed events, including expired, settled and refunded deals. This browser also shows links it created for the selected wallet. Use Copy link to share or Duplicate terms to get a fresh nonce and deadline. |
+
+### Try it on the local chain
+
+1. Run `npm run dev` and open `http://127.0.0.1:8787/#/v3/new`. Use the bar or terminal to copy the three wallet addresses and the FAM and USDC contracts.
+2. Set an allocation of 900.000000000000000001 FAM, a 123.456789 USDC quote and a 20% broker share. Choose immediate delivery or a funded grant. Create and copy the link. The broker can do this with the demo wallet set to **No wallet**.
+3. Open the link as **Seller**. Check the terms and token addresses, connect, approve the exact allocation, then use **Sign and fund deal**.
+4. Open the same link in a fresh browser tab. Choose **No wallet** to preview the funded terms, then switch to **Buyer** and connect. Approve the exact buyer total and use **Sign and settle deal**. Reload to confirm the receipt comes back from the chain.
+5. For a grant, use the time controls to reach the cliff and claim from the buyer wallet. For a funded unsettled deal, select **Seller** and use **Refund escrow**. In **Deal history**, connect as **Broker** to see the outcome.
+
+### What the contract signs and settles
+
+- The V3 link encodes the chain ID, verifying contract and all `BrokerTerms` in the URL fragment. The ID is the EIP-712 digest with domain name `OTC.fam Broker Deals` and version `3`. Both signatures cover the same terms. The UI compares the link's digest with the deployed contract and exposes the exact raw values before signing. Anyone with the link can read it. Funded terms are also visible onchain.
+- Only the signed seller can submit `fund`, and only the signed buyer can submit `settle`. A seller’s nonce is consumed by a successful fund and stays consumed after refund. An incorrect actor, altered signature, wrong domain or failed token transfer leaves escrow and balances as they were before that transaction. The browser requests EIP-712 signing from the injected wallet. The contract also accepts ERC-1271 proofs submitted by the contract wallet.
+- A seller can refund while escrow is funded, including after expiry or a missed fixed start. Fixed-start vesting follows V2’s schedule. It can settle through the start second if the deal has not expired. New grants are fully funded in separate vaults and claimable only by the fixed buyer. Status and vesting use chain time.
+- The contract rounds both 50 bps fees down in raw units. It pays the broker `floor((buyerFee + sellerFee) * brokerBps / 10000)` and treasury receives the difference. The signed share defaults to 0% in the form. The fixtures exercise 0% and 20%. Production broker eligibility and rates are open.
+- A confirmed receipt comes from the deployed contract's logs. It gives the signed addresses, deal ID, transaction hash, confirmation depth, exact fees and delivery or vault. A configured explorer links each transaction. The page checks the chain after wallet changes and restores an in-flight transaction hash after reload. Browser storage retains unfunded links locally. A fresh browser discovers onchain history through the configured RPC from the deployment block, with older blocks available through **Load older onchain deals**.
+
+The local demo uses fixture wallets and tokens. Reproducible browser scenarios, screenshots and the exact fee fixtures are in [Round 3 evidence](evidence/round-3/README.md).
 
 ## v2: the deal contract of round 2
 
@@ -128,10 +156,9 @@ touch any other token.
 
 ## The pages
 
-`config.json` is `{ "chainId", "contract", "rpcUrl" }` as in round 1, with three optional values:
-`"contractV2"`, the v2 contract's address; `"fromBlockV2"`, the block it was deployed in; and
-`"explorerUrl"`, an https block explorer for a network the page does not know. Without `contractV2` the site
-serves v1 only.
+`config.json` requires `chainId`, `contract` and `rpcUrl`. The optional pairs `contractV2` and `fromBlockV2`, or
+`contractV3` and `fromBlockV3`, enable those routes and set the earliest block for event lookups.
+Use `explorerUrl` to supply an HTTPS block explorer for a network the page does not know.
 
 | Link | What it is |
 | --- | --- |
@@ -205,11 +232,13 @@ The network and the key come from the environment, never from a file:
 ```sh
 RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> npm run deploy
 RPC_URL=<…> DEPLOYER_KEY=<…> TREASURY=<the address that receives the fees> npm run deploy:v2
+RPC_URL=<…> DEPLOYER_KEY=<…> TREASURY=<the address that receives the fees> npm run deploy:v3
 ```
 
 Each compiles its contract as the checks do, prints the contract's address (and nothing else) on stdout,
-and never prints `RPC_URL` or the key. Put the addresses in `web/config.json` as `contract` and
-`contractV2`, with the chain id, a public RPC URL, and as `fromBlockV2` the block `deploy:v2` names.
+and never prints `RPC_URL` or the key. Put the address and block printed by each command in `web/config.json`.
+V3 requires an EVM with Cancun transient storage, a public read RPC and `contractV3` and `fromBlockV3` for the
+deployed contract. The V3 browser bundle is copied from the locked dependencies by `npm run build`.
 
 ## Build it with your agent
 

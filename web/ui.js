@@ -118,7 +118,10 @@ function morph(from, to) {
     return from;
   }
   for (const { name, value } of [...to.attributes]) if (from.getAttribute(name) !== value) from.setAttribute(name, value);
-  for (const { name } of [...from.attributes]) if (!to.hasAttribute(name)) from.removeAttribute(name);
+  for (const { name } of [...from.attributes]) {
+    if (name === "open" && from.tagName === "DETAILS") continue;
+    if (!to.hasAttribute(name)) from.removeAttribute(name);
+  }
   listen(from, to.__on ?? {});
   const old = [...from.childNodes], next = [...to.childNodes];
   next.forEach((child, i) => (i < old.length ? morph(old[i], child) : from.append(child)));

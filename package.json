@@ -12,8 +12,9 @@
     "build": "node scripts/build.mjs",
     "deploy": "node scripts/deploy.mjs",
     "deploy:v2": "node scripts/deploy.mjs v2",
-    "test": "node --test test/*.test.mjs",
-    "check": "node .launchpad/checks/round-1/run.mjs && node .launchpad/checks/round-2/run.mjs",
+    "deploy:v3": "node scripts/deploy.mjs v3",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "check": "node .launchpad/checks/round-1/run.mjs && node .launchpad/checks/round-2/run.mjs && node .launchpad/checks/round-3/run.mjs",
     "play": "node scripts/play.mjs",
     "dev": "node scripts/dev.mjs"
   },
