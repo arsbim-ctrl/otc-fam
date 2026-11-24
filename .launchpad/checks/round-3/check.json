@@ -1,0 +1,12 @@
+{
+  "name": "round 3: broker authorization, fees and delivery",
+  "run": "node .launchpad/checks/round-3/run.mjs",
+  "timeoutSeconds": 300,
+  "tests": [
+    "R3-01: seller funds and designated buyer settles signed terms",
+    "R3-02: exact terms, domain, actor, nonce and expiry constrain authorization",
+    "R3-03: four quotes and broker shares conserve exact raw balances",
+    "R3-04: failed settlement and refund transfer no fees",
+    "R3-05: vesting receipts match the backed grant and beneficiary claims"
+  ]
+}
