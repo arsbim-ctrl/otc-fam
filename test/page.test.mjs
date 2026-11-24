@@ -3,12 +3,15 @@
 // token that wants its approval reset (as USDT), and the maker taking their tokens back. Like the checks' page tests,
 // they build the page, serve it with the checks' helpers and drive it in Chromium ("npx playwright install chromium").
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { deploy } from "../.launchpad/checks/round-1/chain.mjs";
 import { compile } from "../.launchpad/checks/round-1/compile.mjs";
 import { ROOT } from "../.launchpad/checks/round-1/lib/entry.mjs";
 import { offered, pressUntil, seen, serve, shows, until, wallet, withPage } from "../.launchpad/checks/round-1/page.mjs";
 import { STATUS, world } from "../.launchpad/checks/round-1/world.mjs";
+import { serve as serveSnapshot } from "../scripts/lib/site.mjs";
 
 const { EdgeToken } = compile(ROOT, "test/tokens/EdgeToken.sol");
 const FILL = "0x3fda5389"; // fill(uint256)
@@ -99,11 +102,32 @@ test("a transaction that fails on the chain is reported, nothing moves, and the 
     return answer({ ...request, params: [{ ...request.params[0], gas: "0x7530" }] });
   });
   await withPage(site, `#/d/${id}`, starving, async (page) => {
-    await pressUntil(page, async () => (await seen(page, "notice"))?.includes("failed on the chain"), "the notice of the failed fill");
+    const click = (name) => page.getByRole("button", { name, exact: true }).click();
+    for (const label of ["Connect wallet", "Approve 0.75 BRAVO", "Fill: pay 0.75 BRAVO"]) await click(label);
+    await shows(page, "notice", (text) => text.includes("failed on the chain"), "the notice of the failed fill");
+    assert.equal(starved, true);
     assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Open);
     await w.moved(before, {}, "after a fill that failed on the chain");
-    await pressUntil(page, filled(w, id), "the deal filled at the next press");
+    await click("Fill: pay 0.75 BRAVO");
+    await until(filled(w, id), "the deal filled at the next press");
   });
+}));
+
+test("a replay server leaves the v1 server's dist snapshot in place", () => onSite(async (site, w) => {
+  const marker = mkdtempSync(join(ROOT, "dist", ".v1-server-"));
+  try {
+    const replay = await serveSnapshot({ legacy: w.deals, deals: w.deals });
+    try {
+      assert.ok(existsSync(marker), "building another browser fixture must never remove the v1 server's files");
+      for (const server of [site, replay]) {
+        assert.equal((await fetch(`${server.url}/app.js`)).status, 200);
+      }
+    } finally {
+      await replay.close();
+    }
+  } finally {
+    rmSync(marker, { recursive: true, force: true });
+  }
 }));
 
 test("a deal the contract would refuse is not sent, and the page says why", () => onSite(async (site, w) => {

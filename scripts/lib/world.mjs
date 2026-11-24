@@ -3,7 +3,8 @@
 // approved anything: `fund` and `ready` give each side exactly what its step needs. The local stand (scripts/dev.mjs),
 // the scenes (scripts/play.mjs) and the tests (test/, through test/lib/v2-world.mjs) all stand on it. Built with the
 // checks' own helpers (.launchpad/checks/round-1), which it only uses.
-import { contractAt, deploy, startChain } from "../../.launchpad/checks/round-1/chain.mjs";
+import { Wallet, TypedDataEncoder } from "ethers";
+import { CHAIN_ID, contractAt, deploy, startChain } from "../../.launchpad/checks/round-1/chain.mjs";
 import { compile, compileTokens } from "../../.launchpad/checks/round-1/compile.mjs";
 import { ROOT } from "../../.launchpad/checks/round-1/lib/entry.mjs";
 
@@ -22,7 +23,7 @@ export const QUOTE = 123_456_789n; // 123.456789 USDC
 /** One side's fee on a quote, as the brief writes it. */
 export const feeOn = (quote) => (quote * 50n) / 10_000n;
 
-let compiled;
+let compiled, brokerArtifact;
 /** Both deal contracts, the vault and the checks' tokens (PlainToken, NoReturnToken, ReentrantToken), compiled once as the checks compile. */
 export function artifacts() {
   compiled ??= {
@@ -38,17 +39,27 @@ export function artifacts() {
 const plainToken = (chain, symbol, decimals) => deploy(chain, PEOPLE.deployer, artifacts().PlainToken, [symbol, decimals], { label: symbol });
 
 /** `makeToken(chain, symbol, decimals, kind)` deploys the world's tokens: plain ones unless the caller knows other kinds (the tests do). */
-export async function world({ makeToken = plainToken } = {}) {
+export async function world({ makeToken = plainToken, withBroker = false } = {}) {
   const a = artifacts();
-  const chain = await startChain(Object.values(PEOPLE));
-  const parties = { ...PEOPLE };
+  const people = { ...PEOPLE };
+  const signers = new Map();
+  if (withBroker) {
+    for (const role of ["broker", "seller", "buyer", "other"]) {
+      const signer = Wallet.createRandom();
+      people[role] = signer.address.toLowerCase();
+      signers.set(people[role], signer);
+    }
+  }
+  const chain = await startChain(Object.values(people));
+  const parties = { ...people };
   const tokens = {};
   const deals = await deploy(chain, PEOPLE.deployer, a.OtcDealsV2, [PEOPLE.treasury], { label: "OtcDealsV2" });
   parties.deals = deals.address;
+  const fromBlockV2 = Number(await chain.rpc("eth_blockNumber"));
   const tokenAt = (address) => Object.values(tokens).find((t) => t.address.toLowerCase() === address.toLowerCase());
 
   const w = {
-    chain, deals, tokens, parties, ...PEOPLE,
+    chain, deals, tokens, parties, fromBlockV2, ...people,
     /** Deploys a token of `kind` (as `makeToken` reads it), and watches who holds it. */
     async token(symbol, decimals, kind) {
       return (tokens[symbol] = Object.assign(await makeToken(chain, symbol, decimals, kind), { symbol, decimals }));
@@ -57,13 +68,13 @@ export async function world({ makeToken = plainToken } = {}) {
     watch: (name, address) => (parties[name] = address),
     /** Immediate-delivery terms (a million FAM to the buyer for 123.456789 USDC, for a day), with `changes`. */
     async terms(changes = {}) {
-      return { baseToken: w.fam.address, quoteToken: w.usdc.address, buyer: PEOPLE.buyer, allocation: ALLOCATION, quote: QUOTE,
+      return { baseToken: w.fam.address, quoteToken: w.usdc.address, buyer: people.buyer, allocation: ALLOCATION, quote: QUOTE,
         expiry: (await chain.now()) + DAY, delivery: 0, fixedStart: 0, cliffSeconds: 0, durationSeconds: 0, ...changes };
     },
     /** Vesting-delivery terms: the same deal, as a grant with a 30-day cliff over 90 days from its settlement. */
     vesting: (changes = {}) => w.terms({ delivery: 1, cliffSeconds: 30 * DAY, durationSeconds: 90 * DAY, ...changes }),
     /** The seller is given the allocation, approves it and creates the deal; returns the deal's id. */
-    async fund(t, seller = PEOPLE.seller) {
+    async fund(t, seller = people.seller) {
       const base = tokenAt(t.baseToken);
       await base.as(PEOPLE.deployer).mint(seller, t.allocation);
       await base.as(seller).approve(deals.address, t.allocation);
@@ -110,5 +121,30 @@ export async function world({ makeToken = plainToken } = {}) {
   w.usdc = await w.token("USDC", 6);
   /** The round 1 contract, deployed next to v2 as on a real site (the page's config names both). */
   w.legacy = await deploy(chain, PEOPLE.deployer, a.OtcDeals, [], { label: "OtcDeals" });
+  if (withBroker) {
+    brokerArtifact ??= compile(ROOT, "contracts/BrokerDeals.sol").BrokerDeals;
+    w.brokerDeals = await deploy(chain, w.deployer, brokerArtifact, [w.treasury], { label: "BrokerDeals" });
+    w.watch("escrow", w.brokerDeals.address);
+    const fromBlockBroker = Number(await chain.rpc("eth_blockNumber"));
+    w.brokerConfig = { contractBroker: w.brokerDeals.address, fromBlockBroker, treasuryBroker: w.treasury };
+    const fields = brokerArtifact.abi.find((entry) => entry.name === "fund").inputs[0].components;
+    const types = { BrokerTerms: fields.map(({ name, type }) => ({ name, type })) };
+    const domain = { name: "OTC.fam Broker Deals", version: "3", chainId: CHAIN_ID, verifyingContract: w.brokerDeals.address };
+    w.brokerId = (terms) => TypedDataEncoder.hash(domain, types, terms);
+    w.brokerSign = (person, terms, scope = domain) => signers.get(person.toLowerCase()).signTypedData(scope, types, terms);
+    w.brokerDomain = domain;
+    w.brokerTerms = async (nonce, changes = {}) => ({ ...await w.terms(), seller: w.seller, broker: w.broker, brokerBps: 2000, nonce, ...changes });
+    w.signAs = async (account, { params = [] }) => {
+      const refuse = (code, message) => ({ error: { code, message } });
+      try {
+        const [actor, raw] = params, { domain: scope, message, primaryType, types: requested } = JSON.parse(raw);
+        if (String(actor).toLowerCase() !== account || !signers.has(account)) return refuse(4100, "Switch to the named local wallet.");
+        if (primaryType !== "BrokerTerms" || JSON.stringify(requested.BrokerTerms) !== JSON.stringify(types.BrokerTerms)
+            || Number(scope.chainId) !== CHAIN_ID || scope.verifyingContract.toLowerCase() !== domain.verifyingContract.toLowerCase()
+            || scope.name !== domain.name || scope.version !== domain.version) return refuse(4200, "This demo wallet only signs local BrokerDeals terms.");
+        return { result: await w.brokerSign(account, message) };
+      } catch { return refuse(-32602, "The local broker signing request was invalid."); }
+    };
+  }
   return w;
 }

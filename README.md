@@ -111,16 +111,17 @@ Errors: `ZeroAmount`, `QuoteTooLarge`, `SameToken`, `NotAToken(token)`, `NoBuyer
 
 ## v1: the deal contract of round 1
 
-`OtcDeals` is as round 1 left it: its interface, its deals, its page, and no fee. One thing changed in its
-source, for contracts deployed from now on: **`fill` checks what each side received.** A token that keeps a
-fee on `transfer` only came into the contract whole and left it short, so the maker was paid less than the
-deal said while the deal was marked Filled. `fill` now reverts in that case (`InexactTransfer`), the deal
-stays open, and its maker can still cancel it. `cancel` is unchanged: it never checked what the maker
-receives, so a token's own fee cannot keep the maker's tokens locked.
+`OtcDeals` retains the Round 1 source, interface and fee-free swaps. Its funding and payment
+checks require exact incoming transfers. On an outgoing transfer, v1 checks how much leaves the
+contract. A token that keeps a recipient fee on `transfer` only can therefore short the maker
+and still mark the deal Filled. The regression test covers a 1,000-unit payment that delivers
+990 units to the maker. Cancellation uses the same outgoing balance rule to return the tokens
+to their maker.
 
-The rest is as before: a token that takes a fee from the amount or on top of it is refused on either side;
-`transfer` and `transferFrom` may answer nothing; each call writes the new status before it moves a token,
-behind a lock; a deal cannot be filled from its expiry on, and its maker can still cancel it.
+A token that takes a fee on `transferFrom`, or charges the sender on top, fails the exact balance
+checks. `transfer` and `transferFrom` may return no data. Each call writes the new status before
+moving a token, behind a lock. A deal cannot be filled from its expiry on and its maker can still
+cancel it.
 
 Not covered, in v1 and v2 alike: tokens whose balances change without a transfer (rebasing), and tokens
 that can freeze an address. They can leave a deal or a grant in that same token unpaid or stuck; they cannot
@@ -142,8 +143,8 @@ serves v1 only.
 - Everything is read from `rpcUrl`, with or without a wallet. Times of a v2 deal are the chain's, in UTC;
   vested and claimable amounts are the contract's own answers at the latest block.
 - A transaction is run as a call before the wallet is asked to sign: one the chain would refuse is not
-  sent, and the reason is given in words. Whatever a wallet or a node says in its own words is said in a
-  plain sentence, never shown as it came.
+  sent. `explain()` gives actionable messages for recognised wallet refusals and contract errors.
+  It preserves the node’s own message when it does not recognise the error.
 - A press declined in the wallet, a wallet on another network, a transaction that fails or that the wallet
   replaces: each ends with the page saying what happened and showing the chain's state. A v2 transaction sent
   before a reload is taken up again after it. When the chain cannot be read, a v2 page says so.
@@ -175,7 +176,7 @@ screens. [evidence/round-2/](evidence/round-2/) holds one run of it.
 | R2-06 fixed beneficiary, no replay | check R2-06; "only the beneficiary claims…", "fill is the named buyer's alone…" |
 | R2-07 wrong buyer, expiry, cancel, tokens, re-entry | check R2-07; "createDeal refuses…", "cancel is the seller's alone…", five tests on fee-keeping, false-answering and silent tokens, "while tokens move, every call back…" |
 | R2-08 refusal, fresh-browser flows, recovery | `v2-page.test.mjs`, at 390 px and 1440 px; scenes 3, 4 and 8 |
-| Round 1's fixes | `page.test.mjs`: the focus kept, a wallet with no ETH, a deal open at least a minute; `abi.test.mjs`: no words of a wallet or a node; `contract.test.mjs`: a fee on transfer only |
+| Round 1's fixes | `page.test.mjs`: the focus kept, a wallet with no ETH, a deal open at least a minute; `abi.test.mjs` and `eth.test.mjs`: legacy messages and unknown RPC text; `contract.test.mjs`: frozen v1 and its transfer-only fee limitation |
 
 Also in `test/`: `v2-abi.test.mjs` (the page's hand-written ABI and its fee and vesting arithmetic against
 the compiled contract), `deploy.test.mjs` and `dev.test.mjs` (the deployment and the local stand, end to
@@ -218,3 +219,88 @@ Anyone can enter otc.fam's rounds with their coding agent. Give it this prompt:
 ```text
 I want you to contribute to otc.fam on Hotpod. Download https://hotpod.io/skill/SKILL.md with curl, read all of it, and follow it: install the launchpad CLI and the skill. Run launchpad where before you clone, build or judge anything: it says whether you work in a place of your own. If it exits 1, you are on my own account: do what "Where you run" in SKILL.md says. One round may be built here as a watched build: tell me the risk in one or two plain sentences and wait for my yes (this prompt is not that yes). Never judge or run launchpad setup here. If I say no, or for later rounds, offer a place of its own (https://hotpod.io/docs/set-and-forget#a-place-of-its-own); on Windows, https://hotpod.io/install.ps1 makes one, the Hotpod WSL distribution. Find this repository's project with launchpad projects. First use launchpad projects and launchpad round to read the public brief, then clone, build and run the checks without a key, following roles/build.md. Only when ready to seal, use the key in ~/.launchpad/<agent>/env (if there is none on this computer yet, run launchpad login --url https://hotpod.io --start: it opens my browser for me to authorize it with one click, or, when it cannot, prints a page and a code for you to show me, apart, for me to type the code on that page; then run launchpad login --wait, which saves the key there itself; never ask me for the key itself), load that env file and run launchpad whoami: it must name the agent I authorize. Then seal the chosen round before its build deadline and follow roles/build.md for its reveal instructions.
 ```
+
+## Broker deals (v3)
+
+`npm run dev` serves all three versions on a local chain. Open **Prepare a broker deal**,
+select **Broker’s wallet** in the demo bar, and use **Fill broker example** for local
+token and wallet addresses. Create and copy the terms link. Open it as the seller to
+sign and fund, then in a fresh tab with **No wallet** to inspect funding and delivery.
+Switch the demo tab to the buyer’s wallet to settle. **Deal history** shows the
+connected wallet’s activity. The time controls advance deadlines and vesting.
+
+- `npm test` covers typed authorization, exact raw-unit fees and balances, refunds,
+  and vesting. `npm run check` also runs the five frozen Round 3 checks after Rounds 1
+  and 2. Run only the broker checks with `node .launchpad/checks/round-3/run.mjs`.
+- `npm run play -- screens/replay` replays both versions and saves the v3 captures in
+  `screens/replay/round-3/`. See the [broker replay and captures](evidence/round-3/README.md),
+  including funded deals in [seller and buyer history](evidence/round-3/README.md#seller-and-buyer-history).
+- `npm run evidence` regenerates the complete Round 3 play log and all 68 committed
+  screenshots from one replay.
+- `npm run deploy:broker` uses the same `RPC_URL`, `DEPLOYER_KEY` and `TREASURY`
+  environment variables as the fee-bearing deployment above. Set `chainId` and the
+  public `rpcUrl` in `web/config.json` for that network first. Deployment writes
+  `contractBroker`, `fromBlockBroker` and `treasuryBroker` to that config. Build the
+  updated site with `npm run build`. Set `fromBlockBroker` to the actual deployment
+  block when configuring an existing contract. Broker logs are read in bounded ranges
+  beginning at that block. The default zero address disables broker links on the home page.
+
+The broker contract accepts EOA typed signatures via `eth_signTypedData_v4`. It settles
+only with tokens that transfer the named raw amounts exactly. A token that later
+freezes transfers or changes its behavior can prevent settlement, refund or claims
+in that token. Existing external vesting positions are out of scope. Fixed-start
+deals must settle by that start and before expiry.
+
+Treat the terms link as private when sharing it. The fragment contains the complete
+terms and anyone holding it can preview them. Funded deals and receipts are public
+onchain. Prepared links and unfunded drafts live in the current browser profile.
+In a fresh profile, sellers, buyers and brokers can find funded, settled or refunded
+deals from chain history. The buyer can discover a funded deal before settlement
+without opening the terms link. History uses funding events and onchain terms to find the
+buyer because the funding event indexes the seller and broker. This browser stores the
+last scanned block number and hash, terms, and receipts under a key for the chain,
+contract, and connected account. Reloads and new tabs reuse a canonical cursor. An
+unchanged head needs no log scan. An advancing head reads only the new funding,
+settlement, and refund events. In an open tab, only new or changed deals are read again.
+
+After a reload, the app also reads each cached deal's current status from the chain
+and fetches any missing receipts before displaying the row. Expiry and vesting progress
+use the latest chain time. A missing or invalid cache or a reorganization triggers a
+bounded scan from `fromBlockBroker`. That scan can be slow on a large deployment. RPC
+errors leave the previous cursor intact for retry. When persistent storage is
+unavailable, history continues to work in memory for the current tab.
+
+The seller can refund a funded deal until settlement is mined, including while the
+buyer signs or approves payment. Both parties see this warning while the deal is open.
+The first transaction to execute wins. If the other action fails, the page reads the
+chain and reports the refund or delivery that actually happened. A buyer who needs
+another deal can ask the broker for a new link.
+
+During an RPC outage, the page keeps the link terms, deal ID, and any submitted
+transaction hash. It hides receipts, the payment split, and wallet actions until live
+status is available. Refreshing checks the existing transaction without resending it.
+Set `fromBlockV2` to the v2 deployment block for v2 receipts. A zero or missing value
+disables those receipt queries.
+
+### Round 3 gate checks
+
+The five IDs in [the frozen check list](.launchpad/checks/round-3/check.json) cover the
+contract requirements. The replay index contains each listed scene at both widths.
+
+| Check | Committed test | Replay capture |
+| --- | --- | --- |
+| R3-01 Seller funds and designated buyer settles signed terms | `npm run dev: the demo broker prepares a link, and its seller and buyer sign from their own wallets` in [dev.test.mjs](test/dev.test.mjs) | [Seller funding](evidence/round-3/04-seller-funded-390.jpg), [buyer settlement](evidence/round-3/08-immediate-receipt-1440.jpg) |
+| R3-02 Exact terms, domain, actor, nonce and expiry constrain authorization | `authorization failures preserve every holding, including after expiry and nonce reuse` in [broker-contract.test.mjs](test/broker-contract.test.mjs) | [Wrong wallet](evidence/round-3/11-wrong-wallet-390.jpg), [wrong network](evidence/round-3/12-wrong-network-1440.jpg), [expiry](evidence/round-3/17-expired-390.jpg) |
+| R3-03 Four quotes and broker shares conserve exact raw balances | `exact raw balances for quote 123456789 and 0 broker bps`, `exact raw balances for quote 123456789 and 2000 broker bps`, `exact raw balances for quote 100000000000 and 0 broker bps`, and `exact raw balances for quote 100000000000 and 2000 broker bps` in [broker-contract.test.mjs](test/broker-contract.test.mjs) | [123.456789 at 20%](evidence/round-3/08-immediate-receipt-390.jpg), [123.456789 at 0%](evidence/round-3/31-small-quote-zero-share-390.jpg), [100,000 at 0%](evidence/round-3/32-large-quote-zero-share-1440.jpg), [100,000 at 20%](evidence/round-3/33-large-quote-twenty-percent-1440.jpg) |
+| R3-04 Failed settlement and refund transfer no fees | `a delivery that fails after the payment reverts all fees, and refund restores the original balances` in [broker-contract.test.mjs](test/broker-contract.test.mjs) | [Wallet decline](evidence/round-3/07-wallet-request-declined-390.jpg), [refund receipt](evidence/round-3/16-refund-receipt-1440.jpg), [refund during signing](evidence/round-3/34-refund-during-signing-390.jpg) |
+| R3-05 Vesting receipts match the backed grant and beneficiary claims | `fully backed vesting and exact fee-free claims, starting at settlement` and `fully backed vesting and exact fee-free claims, starting at a fixed UTC time` in [broker-contract.test.mjs](test/broker-contract.test.mjs) | [Funded grant receipt](evidence/round-3/13-vesting-receipt-390.jpg), [beneficiary claim](evidence/round-3/15-vesting-claimed-1440.jpg) |
+
+### Round 3 brief and product evidence
+
+| Requirement | Committed test | Replay capture |
+| --- | --- | --- |
+| R3-01 Independent broker, seller, buyer and unrelated wallets complete immediate and vesting flows | `a fresh buyer discovers only their funded deals, while seller, broker and unrelated histories stay scoped` in [broker-page.test.mjs](test/broker-page.test.mjs), and `npm run dev: the demo broker prepares a link, and its seller and buyer sign from their own wallets` in [dev.test.mjs](test/dev.test.mjs) | [Broker](evidence/round-3/01-broker-enters-terms-390.jpg), [seller](evidence/round-3/04-seller-funded-1440.jpg), [immediate buyer](evidence/round-3/08-immediate-receipt-390.jpg), [vesting buyer](evidence/round-3/13-vesting-receipt-1440.jpg), [unrelated wallet](evidence/round-3/22-unrelated-wallet-history-390.jpg) |
+| R3-02 Wrong actor, modified terms, wrong chain or verifying contract, expiry and nonce reuse fail | `authorization failures preserve every holding, including after expiry and nonce reuse` in [broker-contract.test.mjs](test/broker-contract.test.mjs) | [Wrong wallet](evidence/round-3/11-wrong-wallet-1440.jpg), [wrong network](evidence/round-3/12-wrong-network-390.jpg), [expiry](evidence/round-3/17-expired-1440.jpg) |
+| R3-03 Exact balance deltas for both broker rates and quote fixtures, with zero fees on refunds or rejected settlements | The four exact raw-balance cases listed under gate R3-03 and `a delivery that fails after the payment reverts all fees, and refund restores the original balances` in [broker-contract.test.mjs](test/broker-contract.test.mjs) | [Four settled fee fixtures](evidence/round-3/README.md#settled-fee-fixtures) and [zero-fee refund](evidence/round-3/16-refund-receipt-390.jpg) |
+| R3-04 Received assets or grant funding reconcile with the receipt and prior-round invariants | `fully backed vesting and exact fee-free claims, starting at settlement` in [broker-contract.test.mjs](test/broker-contract.test.mjs) and `no fee is ever taken outside a settlement: not on funding, a refused fill, a cancel or a claim` in [v2-contract.test.mjs](test/v2-contract.test.mjs) | [Immediate delivery](evidence/round-3/08-immediate-receipt-1440.jpg), [grant funding](evidence/round-3/13-vesting-receipt-1440.jpg), [claim](evidence/round-3/15-vesting-claimed-390.jpg) |
+| R3-05 Role-scoped history, fresh-browser preview, receipts and recovery at both widths | `a fresh buyer discovers only their funded deals, while seller, broker and unrelated histories stay scoped`, `history reuses the same head, reads only changed deals at new blocks, and rebuilds after a reorg`, and `link terms and a submitted broker transaction survive an RPC outage and reload` in [broker-page.test.mjs](test/broker-page.test.mjs) | [Buyer preview](evidence/round-3/06-fresh-buyer-immediate-390.jpg), [seller and buyer history](evidence/round-3/README.md#seller-and-buyer-history), [outage](evidence/round-3/23-rpc-interruption-390.jpg), [recovered receipt](evidence/round-3/24-rpc-recovered-1440.jpg) |

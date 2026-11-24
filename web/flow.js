@@ -9,8 +9,9 @@ import { explain } from "./eth.js";
  * `render()` draws the page. `settle(result, label)` reads again whatever a press may have changed, with what the
  * press returned; the buttons come back once it is done.
  */
-export function flow({ app, s, key, render, settle }) {
+export function flow({ app, s, key, render, settle, trackSent = false }) {
   let presses = 0; // which press the page is following: a press that is no longer the current one changes nothing
+  let retryRecord;
   const forget = () => {
     try {
       localStorage.removeItem(key);
@@ -36,16 +37,11 @@ export function flow({ app, s, key, render, settle }) {
     }
   };
 
-  /**
-   * Runs one press. `work(stage, sent)` does what the press is for: `stage(text)` tells the person where it stands,
-   * and `sent(hash, nonce)` is for transact(), to remember the transaction as soon as the wallet has sent it. However
-   * the work ends, a transaction it remembered is forgotten again, since the page has then seen its end. `mine` says
-   * that the remembered transaction is this press's from the start (a wait taken up after a reload). A press that
-   * remembered nothing forgets nothing: the record may be another tab's, whose transaction is still on its way.
-   */
-  async function act(label, step, work, mine = false) {
+  /** Runs a wallet step. For broker deals, an uncertain confirmation can be retried without sending again. */
+  async function act(label, step, work, record) {
     const press = ++presses;
     let result;
+    retryRecord = null;
     s.notice = null;
     s.busy = { label, step, hint: "" };
     render();
@@ -54,42 +50,55 @@ export function flow({ app, s, key, render, settle }) {
         if (press !== presses) return;
         s.busy.hint = hint;
         render();
-      }, (hash, nonce) => {
-        mine = true;
-        remember({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: app.wallet.account });
+      }, (hash, nonce, account = app.wallet.account) => {
+        record = { hash, nonce: nonce === null ? null : String(nonce), label, step, account };
+        remember(record);
+        if (trackSent && press === presses) Object.assign(s.busy, { hash, waiting: true });
       });
     } catch (e) {
-      if (press === presses) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
+      if (press !== presses) return;
+      if (trackSent && record && !e.reverted && !e.replaced) {
+        retryRecord = record;
+        Object.assign(s.busy, { hint: "The transaction was sent. The network could not confirm it yet.", retry: true });
+        render();
+        return;
+      }
+      s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
     }
-    if (press !== presses) return; // the person stopped waiting for it, or left the page
-    if (mine) forget();
+    if (press !== presses) return;
+    if (record) forget();
     await settle(result, label);
+    if (press !== presses) return;
     s.busy = null;
     render();
   }
 
+  function follow(record, confirmed, text) {
+    act(record.label, record.step, async (stage) => {
+      const press = presses;
+      s.busy.waiting = true;
+      if (trackSent) s.busy.hash = record.hash;
+      stage(text);
+      const receipt = await app.chain.confirmed(record.hash, record.account, record.nonce === null ? null : BigInt(record.nonce));
+      if (press === presses) await confirmed(receipt, record.account);
+      return receipt;
+    }, record);
+  }
+
   return {
     act: (label, step, work) => act(label, step, work),
-    /**
-     * After a reload: takes up the transaction this browser sent before, and runs `confirmed(receipt, account)`
-     * once the network has confirmed it (`account` is the one that sent it). While it waits, `s.busy.waiting` is set:
-     * the page shows what is awaited, and a way to stop waiting.
-     */
+    /** After a reload, follow the hash this browser submitted. */
     resume(confirmed) {
-      const pending = recall();
-      if (!pending) return;
-      act(pending.label, pending.step, async (stage) => {
-        const press = presses;
-        s.busy.waiting = true;
-        stage(`This page was reloaded while transaction ${pending.hash} was on its way. Waiting for the network to confirm it.`);
-        const receipt = await app.chain.confirmed(pending.hash, pending.account, pending.nonce === null ? null : BigInt(pending.nonce));
-        if (press === presses) await confirmed(receipt, pending.account);
-        return receipt;
-      }, true);
+      const record = recall();
+      if (record) follow(record, confirmed, `This page was reloaded while transaction ${record.hash} was on its way. Waiting for the network to confirm it.`);
+    },
+    retry() {
+      if (retryRecord) follow(retryRecord, () => {}, "Checking the previously submitted transaction.");
     },
     /** Gives the page back while a transaction sent before a reload is still awaited, and says `text`. */
     async stopWaiting(text) {
       presses++;
+      retryRecord = null;
       forget();
       s.busy = null;
       s.notice = { kind: "info", text };

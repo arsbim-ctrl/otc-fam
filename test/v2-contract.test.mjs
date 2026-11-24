@@ -319,7 +319,8 @@ test("a token that takes a fee from the amount or on top of it is refused when t
     await fee.as(w.buyer).approve(w.deals.address, 2n * QUOTE);
     const before = await w.holdings();
     assert.equal(await revertsWith(w.deals.as(w.buyer).fill(id)), "InexactTransfer", `${kind}, paid`);
-    assert.deepEqual(await w.moved(before), {});
+    assert.deepEqual(await w.holdings(), before, "R2-03: a fee during fill preserves every holding");
+    assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Funded);
   }
 });
 
@@ -359,7 +360,7 @@ test("a token that answers false, or an address with no token behind it, cannot 
   await w.ready(t);
   const before = await w.holdings();
   assert.equal(await revertsWith(w.deals.as(w.buyer).fill(id)), "TransferFailed");
-  assert.deepEqual(await w.moved(before), {});
+  assert.deepEqual(await w.holdings(), before, "R2-03: false during fill preserves every holding");
   assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Funded);
 });
 

@@ -1,7 +1,7 @@
-// npm run build: makes dist/, the static site, from web/. The base copies the files as they are;
-// an entry may build any other way, as long as "npm run build" leaves dist/index.html.
-import { cpSync, rmSync } from "node:fs";
+// npm run build produces dist/ for static hosting and the frozen page checks.
+import { rmSync } from "node:fs";
+import { buildSite } from "./lib/build-site.mjs";
 
 rmSync("dist", { recursive: true, force: true });
-cpSync("web", "dist", { recursive: true });
+buildSite(process.cwd(), "dist");
 console.log("built dist/ from web/");

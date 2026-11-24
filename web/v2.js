@@ -116,6 +116,7 @@ export class DealsV2 {
 
   /** What the contract emitted about deal `id` and its grant, oldest first: the receipts of everything that happened to it. */
   async history(id) {
+    if (!Number.isSafeInteger(this.fromBlock) || this.fromBlock < 1) throw say("Set fromBlockV2 to the v2 deployment block to read receipts.");
     const logs = await this.chain.rpc("eth_getLogs", [{ address: this.contract, topics: [Object.values(TOPIC), `0x${word(id)}`], fromBlock: `0x${this.fromBlock.toString(16)}`, toBlock: "latest" }]);
     const kinds = Object.fromEntries(Object.entries(TOPIC).map(([kind, topic]) => [topic, kind]));
     return Promise.all(logs.map(async (log) => {

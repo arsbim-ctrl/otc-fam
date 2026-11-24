@@ -79,7 +79,7 @@ test("the page writes a deal's terms as the contract reads them, and reads a dea
   await w.settle(1n, t);
 
   const chain = { call: (to, callData) => w.chain.rpc("eth_call", [{ to, data: callData }, "latest"]), rpc: w.chain.rpc, balanceOf: (token, owner) => w.fam.read.balanceOf(owner) };
-  const page = new DealsV2(chain, w.deals.address);
+  const page = new DealsV2(chain, w.deals.address, w.fromBlockV2);
   assert.equal((await page.setup()).treasury, w.treasury);
   const deal = await page.deal(1n), onChain = await w.deals.read.getDeal(1n);
   assert.deepEqual([deal.seller, deal.baseToken, deal.quoteToken, deal.buyer], [w.seller, t.baseToken, t.quoteToken, t.buyer].map((a) => a.toLowerCase()));
@@ -89,6 +89,7 @@ test("the page writes a deal's terms as the contract reads them, and reads a dea
   const grant = await page.grant(1n), g = await w.deals.read.getGrant(1n);
   assert.deepEqual([grant.dealId, grant.token, grant.beneficiary, grant.custodian, grant.allocation, grant.start, grant.cliff, grant.end, grant.claimed, grant.vested, grant.claimable, grant.held],
     [1n, g.token.toLowerCase(), g.beneficiary.toLowerCase(), g.custodian.toLowerCase(), g.allocation, g.start, g.cliff, g.end, 0n, 0n, 0n, t.allocation]);
+  await assert.rejects(new DealsV2(chain, w.deals.address).history(1n), /Set fromBlockV2/);
   assert.deepEqual((await page.history(1n)).map((e) => e.kind), ["funded", "granted", "settled"]);
   await assert.rejects(new DealsV2(chain, w.legacy.address).setup(), /no v2 deal contract/, "the round 1 contract is not taken for a v2 one");
 });

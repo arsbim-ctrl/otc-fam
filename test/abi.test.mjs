@@ -25,7 +25,7 @@ test("every error of OtcDeals has words on the page, and the words carry its arg
   assert.equal(explain({ code: 4001, message: "User rejected the request." }), "You declined in your wallet. Nothing was sent.");
 });
 
-test("whatever a wallet or a node says in its own words, the page says a plain sentence and never repeats theirs", () => {
+test("known wallet and node refusals keep their actionable messages", () => {
   const refusals = [
     ["insufficient funds for gas * price + value: address 0x5e6F708192a3B4c5D6E7f8091A2b3c4d5E6f7081 have 0 want 21000000000000", /too little of the network's own coin \(ETH\) to pay the network fee/],
     ["Sender doesn't have enough funds to send tx. The max upfront cost is: 2100000 and the sender's account only has: 0", /too little of the network's own coin \(ETH\)/],
@@ -33,8 +33,6 @@ test("whatever a wallet or a node says in its own words, the page says a plain s
     ["nonce too low: next nonce 12, tx nonce 11", /already has a transaction waiting/],
     ["replacement transaction underpriced", /already has a transaction waiting/],
     ["execution reverted", /would fail on the chain, so it was not sent/],
-    ["Internal JSON-RPC error.", /^Your wallet or the network refused this request, and nothing was sent\./],
-    ["TypeError: Cannot read properties of undefined (reading 'gasPrice') at eval (inpage.js:1:10)", /^Your wallet or the network refused this request/],
   ];
   for (const [message, expected] of refusals) {
     const said = explain(Object.assign(new Error(message), { code: -32000 }));

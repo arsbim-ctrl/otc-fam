@@ -11,10 +11,12 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "deploy": "node scripts/deploy.mjs",
+    "deploy:broker": "node scripts/deploy.mjs broker",
     "deploy:v2": "node scripts/deploy.mjs v2",
     "test": "node --test test/*.test.mjs",
-    "check": "node .launchpad/checks/round-1/run.mjs && node .launchpad/checks/round-2/run.mjs",
+    "check": "node .launchpad/checks/round-1/run.mjs && node .launchpad/checks/round-2/run.mjs && node .launchpad/checks/round-3/run.mjs",
     "play": "node scripts/play.mjs",
+    "evidence": "node scripts/evidence.mjs",
     "dev": "node scripts/dev.mjs"
   },
   "devDependencies": {

@@ -69,7 +69,7 @@ export class Chain {
   async rpc(method, params) {
     let response;
     try {
-      response = await fetch(this.rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      response = await fetch(this.rpcUrl, { method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
     } catch {
       throw say("The network cannot be reached. Check your connection and try again.");
     }
@@ -107,8 +107,9 @@ export class Chain {
     return this.tokens.get(key);
   }
 
-  async balanceOf(token, owner) {
-    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner)))[0] ?? "0");
+  async balanceOf(token, owner, block = "latest") {
+    const data = encode(SELECTOR.balanceOf, owner);
+    return uint(words(await this.rpc("eth_call", [{ to: token, data }, block]))[0] ?? "0");
   }
 
   /** What `owner` lets `spender` (the round 1 deal contract unless given) take of `token`. */
@@ -116,10 +117,10 @@ export class Chain {
     return uint(words(await this.call(token, encode(SELECTOR.allowance, owner, spender)))[0] ?? "0");
   }
 
-  /** The latest block: its number and its time, in unix seconds. */
+  /** The latest block, including its hash and its time in unix seconds. */
   async block() {
-    const { number, timestamp } = await this.rpc("eth_getBlockByNumber", ["latest", false]);
-    return { number: Number(number), time: Number(timestamp) };
+    const { number, timestamp, hash } = await this.rpc("eth_getBlockByNumber", ["latest", false]);
+    return { number: Number(number), time: Number(timestamp), hash };
   }
 
   /** The time of the latest block, in unix seconds. */
@@ -162,7 +163,7 @@ export class Chain {
   /** The receipt of `hash` once it is in a block and succeeded; fails, in words, if it failed there or was replaced. */
   async confirmed(hash, from, nonce) {
     const receipt = await this.receipt(hash, from, nonce);
-    if (receipt.status !== "0x1") throw say("The transaction failed on the chain, and nothing moved. Try again.");
+    if (receipt.status !== "0x1") throw say("The transaction failed on the chain, and nothing moved. Try again.", { reverted: true });
     return receipt;
   }
 }
@@ -230,7 +231,7 @@ export async function transact({ chain, wallet, config }, to, data, stage, what,
   const hash = await wallet.send({ to, data }, config.chainId);
   // The wallet's node knows the number it gave the transaction; failing that, the account's count before it was sent.
   const nonce = (await wallet.nonceOf(hash)) ?? count;
-  sent?.(hash, nonce);
+  sent?.(hash, nonce, wallet.account);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
   return chain.confirmed(hash, wallet.account, nonce);
 }
@@ -280,7 +281,7 @@ const REFUSALS = [
   [/user (rejected|denied|cancel)|request rejected|rejected by user/i, "You declined in your wallet. Nothing was sent."],
   [/nonce too low|underpriced|already known|already (pending|imported)/i, "Your wallet already has a transaction waiting for the network. Let it finish, or cancel it in your wallet, then try again."],
   [/already processing|request of type .* already pending/i, "Your wallet already has a request open. Answer it there, then try again."],
-  [/revert/i, "The transaction would fail on the chain, so it was not sent."],
+  [/^(?:execution reverted|revert|transaction reverted)(?:[.!])?$/i, "The transaction would fail on the chain, so it was not sent."],
   [/timed? ?out|failed to fetch|fetch failed|network ?error|disconnect|unreachable|econn/i, "The network cannot be reached. Check your connection and try again."],
   [/unauthori[sz]ed|not connected|locked/i, "Your wallet is locked or not connected to this page. Unlock it, connect, then try again."],
 ];
@@ -293,7 +294,7 @@ function revertData(error) {
 
 /**
  * What went wrong, for the person: always a plain sentence. A refusal in their wallet, a deal contract's reason, the
- * page's own words, or a known refusal of the wallet or the node; whatever else they say is not shown as it came.
+ * page's own words, a known refusal, or the message returned by the node.
  */
 export function explain(error) {
   if (error?.plain) return error.message;
@@ -304,8 +305,7 @@ export function explain(error) {
     const reason = REASONS[data.slice(0, 10)];
     if (reason) return reason(words(`0x${data.slice(10)}`));
     if (data.startsWith("0x08c379a0")) return `The transaction would fail: ${decodeText(`0x${data.slice(10)}`)}.`; // Error(string)
-    return "The transaction would fail on the chain, so it was not sent.";
   }
   const raw = String(error?.message ?? error ?? "");
-  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? "Your wallet or the network refused this request, and nothing was sent. Try again in a moment.";
+  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? (raw || "The wallet or network refused this request. Try again in a moment.");
 }

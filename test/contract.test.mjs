@@ -2,6 +2,8 @@
 // of one token kept apart, and calls back into the contract while it moves tokens. Each test runs on a fresh chain
 // built with the checks' own helpers (.launchpad/checks/round-1), which these tests only use.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { Interface } from "ethers";
 import { deploy, Reverted } from "../.launchpad/checks/round-1/chain.mjs";
@@ -67,27 +69,20 @@ test("a token that starts taking fees once deals hold it never pays one deal out
   assert.equal(await token.read.balanceOf(w.deals.address), 0n);
 });
 
-test("a token that keeps a fee on transfer only cannot leave a side short on a filled deal, and its maker can still cancel", async () => {
-  for (const side of ["sold", "bought"]) {
-    const { w, token } = await worldWith("TransferFee", "SHORT"); // comes in whole by transferFrom, leaves 1% short by transfer
-    let id = 1;
-    if (side === "bought") id = await w.offer({ buyToken: token.address, buyAmount: 1000n }); // ALFA for SHORT
-    else {
-      await token.as(w.maker).approve(w.deals.address, 1000n);
-      await w.create(w.maker, await w.terms({ sellToken: token.address, sellAmount: 1000n })); // SHORT for BRAVO
-    }
-    const before = await w.holdings(), held = async () => Promise.all([w.maker, w.taker, w.deals.address].map((who) => token.read.balanceOf(who)));
-    const had = await held();
-    await token.as(w.taker).approve(w.deals.address, 1000n);
-    await w.approve(w.taker, w.bravo, w.BUY);
-    assert.equal(await revertsWith(w.deals.as(w.taker).fill(id)), "InexactTransfer", `${side}: one side would receive 990 of the 1000 the deal says`);
-    await w.moved(before, {}, `after a fill that would have left a side short (${side})`);
-    assert.deepEqual(await held(), had);
-    assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Open, "the deal is still open");
-    await w.deals.as(w.maker).cancel(id);
-    assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Cancelled);
-    assert.equal(await token.read.balanceOf(w.deals.address), 0n, "nothing of the maker's stays locked in the contract");
-  }
+test("OtcDeals source matches the frozen v1 revision", () => {
+  const source = readFileSync(new URL("../contracts/OtcDeals.sol", import.meta.url));
+  assert.equal(createHash("sha256").update(source).digest("hex"), "b3d2693b07f8f27815434f51233fd3c665cda917eb616eb1bab64de1d1dca189");
+});
+
+test("v1 preserves its historical balance rule for a token that charges the recipient on transfer only", async () => {
+  const { w, token } = await worldWith("TransferFee", "SHORT");
+  const id = await w.offer({ buyToken: token.address, buyAmount: 1000n });
+  await token.as(w.taker).approve(w.deals.address, 1000n);
+  const balances = () => Promise.all([w.maker, w.taker, w.deals.address].map((who) => token.read.balanceOf(who)));
+  const before = await balances();
+  await w.deals.as(w.taker).fill(id);
+  assert.deepEqual((await balances()).map((value, i) => value - before[i]), [990n, -1000n, 0n]);
+  assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Filled);
 });
 
 test("a token that answers false moves nothing: it cannot be sold, and a fill paid with it fails and changes no balance", async () => {

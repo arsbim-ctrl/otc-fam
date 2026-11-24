@@ -3,11 +3,13 @@
 // answer as the one it is.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { Wallet } from "ethers";
-import { startChain } from "../.launchpad/checks/round-1/chain.mjs";
+import { CHAIN_ID, startChain } from "../.launchpad/checks/round-1/chain.mjs";
 
 const run = promisify(execFile);
 const TREASURY = "0x7ea5007ea5007ea5007ea5007ea5007ea5007ea5";
@@ -39,8 +41,8 @@ async function withNode(steps) {
 }
 
 /** The address the script printed, after checking that it printed nothing else, never the key, and that a contract is there. */
-async function deployed(chain, env, args = []) {
-  const { stdout, stderr } = await run(process.execPath, ["scripts/deploy.mjs", ...args], { env });
+async function deployed(chain, env, args = [], cwd) {
+  const { stdout, stderr } = await run(process.execPath, [resolve("scripts/deploy.mjs"), ...args], { env, cwd });
   const address = stdout.trim();
   assert.match(address, /^0x[0-9a-fA-F]{40}$/, `stdout is only the address; it was ${JSON.stringify(stdout)}`);
   assert.ok(!stderr.includes(env.DEPLOYER_KEY.slice(2)), "the key is never printed");
@@ -61,6 +63,23 @@ test("npm run deploy:v2 deploys OtcDealsV2 with the treasury in TREASURY, and sa
   assert.equal(`0x${treasury.slice(-40)}`, TREASURY);
   const { stderr } = await run(process.execPath, ["scripts/deploy.mjs", "v2"], { env: { ...env, TREASURY } });
   assert.match(stderr, /"contractV2": "0x[0-9a-fA-F]{40}", "fromBlockV2": \d+/);
+}));
+
+test("deploy:broker writes its actual deployment block and keeps the older deployments in config", () => withNode(async (chain, env) => {
+  const cwd = mkdtempSync(resolve("node_modules/.broker-deploy-"));
+  try {
+    mkdirSync(join(cwd, "web"));
+    symlinkSync(resolve("contracts"), join(cwd, "contracts"));
+    const path = join(cwd, "web/config.json");
+    const config = { chainId: CHAIN_ID, contract: TREASURY, contractV2: TREASURY, fromBlockV2: 1, rpcUrl: "rpc" };
+    writeFileSync(path, JSON.stringify(config));
+    const contractBroker = await deployed(chain, { ...env, TREASURY }, ["broker"], cwd);
+    const fromBlockBroker = Number(await chain.rpc("eth_blockNumber"));
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), { ...config, contractBroker, fromBlockBroker, treasuryBroker: TREASURY });
+    assert.equal(await chain.rpc("eth_getCode", [contractBroker, `0x${(fromBlockBroker - 1).toString(16)}`]), "0x");
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 }));
 
 test("npm run deploy refuses to start without RPC_URL and DEPLOYER_KEY, or with a malformed key", async () => {

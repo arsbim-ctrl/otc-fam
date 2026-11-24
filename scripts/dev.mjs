@@ -1,7 +1,7 @@
 // npm run dev: the page on a local chain, for a person to click through with no wallet extension and no test
-// network. It starts a chain inside this process, deploys both deal contracts and two test tokens (FAM with 18
+// network. It starts a chain inside this process, deploys all three deal contracts and two test tokens (FAM with 18
 // decimals, USDC with 6), gives the seller FAM and the buyer USDC, and serves web/ at http://127.0.0.1:8787 with a
-// stand-in wallet in the page (scripts/dev-wallet.js): a bar at the bottom switches between the seller, the buyer and
+// stand-in wallet in the page (scripts/dev-wallet.js): a bar at the bottom switches between the seller, the buyer, the broker and
 // a stranger, and moves the chain's time forward, so a grant can be followed past its cliff and its end in a minute.
 // Nothing here is for a real network: the wallet holds no key, and the chain forgets everything when this stops.
 // PORT and HOST change where it listens (HOST=0.0.0.0 inside a container).
@@ -15,10 +15,10 @@ import { world } from "./lib/world.mjs";
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 const root = realpathSync(resolve("web")), port = Number(process.env.PORT ?? 8787), host = process.env.HOST ?? "127.0.0.1";
 
-const w = await world();
-const people = { Seller: w.seller, Buyer: w.buyer, Stranger: w.other };
+const w = await world({ withBroker: true });
+const people = { Seller: w.seller, Buyer: w.buyer, Broker: w.broker, Stranger: w.other };
 await w.fam.as(w.deployer).mint(w.seller, 10_000_000n * 10n ** 18n);
-for (const who of [w.buyer, w.other]) await w.usdc.as(w.deployer).mint(who, 10_000n * 10n ** 6n);
+for (const who of [w.buyer, w.other]) await w.usdc.as(w.deployer).mint(who, 250_000n * 10n ** 6n);
 const wallets = Object.fromEntries(Object.values(people).map((account) => [account, wallet(w, account)]));
 const setup = { people, tokens: { FAM: w.fam.address, USDC: w.usdc.address }, treasury: w.treasury };
 
@@ -31,10 +31,17 @@ const server = createServer(async (req, res) => {
   const send = (status, type, content) => res.writeHead(status, { "content-type": type, "cache-control": "no-store" }).end(content);
   const json = (value) => send(200, "application/json", JSON.stringify(value));
   try {
+    if (req.method === "POST" && req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) {
+      return send(403, "text/plain", "Open the local demo directly to use its wallets.");
+    }
     const path = decodeURIComponent(new URL(req.url, "http://dev").pathname);
     if (req.method === "POST" && path === "/rpc") return json(await w.chain.publicRpc(await body(req)));
     if (req.method === "POST" && path === "/dev/wallet") {
       const { account, request } = await body(req);
+      if (request?.method === "eth_signTypedData_v4" && wallets[account]) {
+        const { result } = await wallets[account]({ method: "eth_accounts" });
+        if (result.length) return json(await w.signAs(account, request));
+      }
       return json(wallets[account] ? await wallets[account](request) : { error: { code: 4100, message: "no such person" } });
     }
     if (req.method === "POST" && path === "/dev/time") {
@@ -44,7 +51,10 @@ const server = createServer(async (req, res) => {
       return json({ time: await w.chain.now() });
     }
     if (req.method !== "GET") return send(405, "text/plain", "GET, or POST /rpc");
-    if (path === "/config.json") return json({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: 0, rpcUrl: "rpc" });
+    if (path === "/config.json") return json({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: w.fromBlockV2, rpcUrl: "rpc", ...w.brokerConfig });
+    if (path === "/vendor/ethers.min.js") {
+      return send(200, TYPES[".js"], readFileSync(new URL("../node_modules/ethers/dist/ethers.min.js", import.meta.url)));
+    }
     if (path === "/dev/wallet.js") return send(200, TYPES[".js"], `window.__dev = ${JSON.stringify(setup)};\n${readFileSync(new URL("./dev-wallet.js", import.meta.url), "utf8")}`);
     const file = join(root, path.endsWith("/") ? `${path}index.html` : path);
     const real = existsSync(file) ? realpathSync(file) : null;
@@ -60,7 +70,7 @@ server.listen(port, host, () => {
   console.log(`otc.fam on a local chain: http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.address().port}/\n`);
   for (const [name, address] of Object.entries(people)) console.log(`${name.padEnd(9)} ${address}`);
   console.log(`FAM       ${setup.tokens.FAM}  (18 decimals; the seller holds 10,000,000)`);
-  console.log(`USDC      ${setup.tokens.USDC}  (6 decimals; the buyer and the stranger hold 10,000 each)`);
+  console.log(`USDC      ${setup.tokens.USDC}  (6 decimals; the buyer and the stranger hold 250,000 each)`);
   console.log(`Treasury  ${setup.treasury}\n`);
   console.log("The bar at the bottom of the page chooses whose wallet the browser has, and moves the chain's time. Ctrl-C stops it.");
 });

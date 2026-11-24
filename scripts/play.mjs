@@ -1,4 +1,4 @@
-// npm run play [folder]: plays round 2's scenes (the brief's "What users see") with the built page, on a local
+// npm run play [folder]: plays the v2 and v3 scenes (the brief's "What users see") with the built page, on a local
 // chain inside this process, with test tokens and a stand-in wallet: once at a phone's width (390 px) and once at a
 // desktop's (1440 px). At each step it prints the text a person reads, saves a screenshot (screens/ by default), and
 // where tokens moved it checks every party's balances against the deal's exact numbers and prints what moved.
@@ -9,6 +9,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { formatAmount } from "../web/units.js";
 import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, until, walletFor } from "./lib/site.mjs";
+import { playBroker } from "./lib/play-broker.mjs";
 import { ALLOCATION, DAY, feeOn, QUOTE, STATUS, world } from "./lib/world.mjs";
 
 const folder = resolve(process.argv[2] ?? "screens");
@@ -39,7 +40,7 @@ async function play(size) {
     assert.ok(await fits(page), `${name}: the page is wider than its ${size.width} px window`);
     await page.screenshot({ path: join(folder, file), fullPage: true, type: "jpeg", quality: 50 });
     shots++;
-    console.log(`\n--- ${name} (${file})\n${(await read(page)).split("\n").map((line) => `    ${line}`).join("\n")}`);
+    console.log(`\n--- ${name} (${file})\n${(await read(page)).split("\n").map((line) => line ? `    ${line}` : "").join("\n")}`);
     // What was typed or chosen in a form is not part of the page's text: it is listed after it.
     const typed = await page.evaluate(() => [...document.querySelectorAll("input[data-testid]")].filter((i) => i.offsetParent && (i.type === "radio" ? i.checked : i.value))
       .map((i) => (i.type === "radio" ? `${i.dataset.testid} chosen` : `${i.dataset.testid} = ${i.value}`)));
@@ -167,8 +168,11 @@ async function play(size) {
       return answer(request);
     });
     await browse(site, `#/v2/d/${elsewhereId}`, { wallet: elsewhere, size }, async (page) => {
-      await pressUntil(page, async () => (await seen(page, "primary-action")) === "Switch to Local test chain", "the offer to switch network");
+      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      const switchButton = page.getByRole("button", { name: "Switch to Local test chain", exact: true });
+      await switchButton.waitFor();
       await look(page, "16-wallet-on-another-network");
+      await switchButton.click();
       await pressUntil(page, settled(elsewhereId), "the deal settled once the wallet switched");
     });
 
@@ -204,10 +208,14 @@ async function play(size) {
         if (held && request.method === "eth_getTransactionReceipt") return route.fulfill({ json: { jsonrpc: "2.0", id: request.id, result: null } });
         return route.continue();
       });
-      await pressUntil(page, async () => (await seen(page, "primary-action")) === "Settle: pay 124.074072 USDC", "the settle button");
+      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      await page.getByRole("button", { name: "Approve 124.074072 USDC", exact: true }).click();
+      const settleButton = page.getByRole("button", { name: "Settle: pay 124.074072 USDC", exact: true });
+      await settleButton.waitFor();
       held = true;
-      await page.getByTestId("primary-action").click();
+      await settleButton.click();
       await until(settled(reloadedId), "the settlement mined");
+      await until(async () => page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith("otcfam:pending:"))), "the settlement was remembered");
       await page.reload();
       await until(async () => (await page.getByTestId("waiting").count()) === 1, "the page waiting for its transaction again");
       await look(page, "19-reloaded-while-settling");
@@ -242,6 +250,7 @@ async function play(size) {
 }
 
 for (const size of [PHONE, DESKTOP]) await play(size);
+for (const size of [PHONE, DESKTOP]) shots += await playBroker(size, join(folder, "round-3"));
 await closeBrowser();
 console.log(`\nEvery scene played at 390 px and 1440 px, and every balance was as the deal says. ${shots} screenshots are in ${process.argv[2] ?? "screens"}/`);
 process.exit(0);
