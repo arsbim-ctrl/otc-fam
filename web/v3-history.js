@@ -50,7 +50,7 @@ export function brokerHistoryPage(app, protocol, duplicate) {
         if (!deal.terms) [nonceUsed] = await protocol.read("usedNonce", [terms.seller, terms.nonce], at);
         const [base, quote] = await Promise.all([app.chain.token(terms.baseToken), app.chain.token(terms.quoteToken)]);
         const stage = effectiveStatus({ ...deal, terms, nonceUsed }, block.time);
-        return { id, path, terms, role, stage, created: saved?.created, base, quote };
+        return { id, path, terms, role, stage, onchain: Boolean(deal.terms), created: saved?.created, base, quote };
       }));
       if (run === revision) entries = items.filter(Boolean);
     } catch (e) {
@@ -79,9 +79,8 @@ export function brokerHistoryPage(app, protocol, duplicate) {
   }
 
   function entry(row) {
-    const { id, role, stage, terms, path, created, base, quote } = row;
+    const { id, role, stage, terms, path, onchain, created, base, quote } = row;
     const href = path;
-    const receipt = ["settled", "refunded", "funded"].includes(stage);
     return h("li", { class: "broker-entry-card", testid: "v3-book-entry", "data-role": role, "data-status": stage, "data-deal": id },
       h("div", { class: "broker-entry-top" },
         h("h2", {}, `${base.symbol || "Base token"} / ${quote.symbol || "Payment token"}`),
@@ -92,7 +91,7 @@ export function brokerHistoryPage(app, protocol, duplicate) {
         h("div", {}, h("dt", {}, "Broker share"), h("dd", {}, `${percent(terms.brokerBps)} · ${tokenAmount(feesFor(terms).brokerFee, quote)}`)),
         h("div", {}, h("dt", {}, "Deadline"), h("dd", {}, utc(terms.expiry)))),
       h("div", { class: "broker-entry-actions" },
-        h("a", { class: "button primary", href, testid: `v3-open-${id}` }, receipt ? "Open deal and receipt" : "Open proposal"),
+        h("a", { class: "button primary", href, testid: `v3-open-${id}` }, onchain ? "Open deal and receipt" : "Open proposal"),
         share(href, `v3-copy-${id}`),
         button("Duplicate terms", () => duplicate(row), { id: `v3-duplicate-${id}`, secondary: true })));
   }

@@ -5,6 +5,8 @@ import { compile } from "../.launchpad/checks/round-1/compile.mjs";
 import { deploy } from "../.launchpad/checks/round-1/chain.mjs";
 import { brokerWorld, signers, testWallet } from "./lib/broker-world.mjs";
 import { BrokerChain, dealId, proposalPath, readProposal, signTerms, termsFrom, txData, TYPES } from "../dist/v3-protocol.js";
+import { utc } from "../dist/ui.js";
+import { parseUtc } from "../dist/units.js";
 
 const out = process.env.BROKER_EVIDENCE_DIR ?? "evidence/round-3";
 const day = 86_400n;
@@ -21,12 +23,18 @@ async function setup(overrides = {}) {
   const protocol = new BrokerChain(w.chain, w.configV3);
   await protocol.checkNetwork();
   const time = BigInt(await w.chain.now());
+  const fixed = time + 2n * day;
+  const fixedUtc = new Date(Number(fixed) * 1000).toISOString().slice(0, 19).replace("T", " ");
   const terms = termsFrom({
     seller: w.seller, buyer: w.buyer, baseToken: base.address, quoteToken: w.usdc.address,
     allocation, quote: 123_456_789n, expiry: time + day, nonce: 71n, delivery: 0n,
     fixedStart: 0n, cliffSeconds: 0n, durationSeconds: 0n, broker: w.broker, brokerBps: 2000n,
-    ...overrides.terms, ...(overrides.fixed ? { fixedStart: time + 2n * day } : {}),
+    ...overrides.terms, ...(overrides.fixed ? { fixedStart: parseUtc(fixedUtc) } : {}),
   });
+  if (overrides.fixed) {
+    assert.equal(terms.fixedStart, fixed, "UTC input preserves exact unix seconds");
+    assert.ok(utc(terms.fixedStart).endsWith(fixedUtc.slice(11) + " UTC"), "display uses UTC in every system time zone");
+  }
   const id = dealId(protocol.domain, terms);
   assert.equal((await protocol.read("hashTerms", [terms]))[0], id, "browser and contract agree on EIP-712 digest");
   const link = proposalPath(protocol.domain, terms);
@@ -110,10 +118,12 @@ for (const [quote, bps, buyerTotal, sellerNet, broker, treasury] of [
     [event.buyerFee, event.sellerFee, event.brokerFee, event.treasuryFee, event.grantId],
     [buyerTotal - quote, quote - sellerNet, broker, treasury, 0n],
   );
+  const replay = await x.send("buyer", "settle", [x.id, await x.sig("buyer")], "0x0");
+  expectDelta(final, await x.snapshot());
   report.scenarios.push({ case: "immediate", id: x.id, terms: x.terms, accounts: x.accounts,
-    initial, escrowed, final, fundingDelta, settlementDelta, receipts: { funded, settled }, events });
+    initial, escrowed, final, fundingDelta, settlementDelta, receipts: { funded, settled, replay }, events });
 }
-report.assertions.push("Four exact raw balance fixtures, signed through the browser codec, passed. Deal book queries and receipt hashes matched chain data for all roles.");
+report.assertions.push("Four exact raw balance fixtures, signed through the browser codec, passed. Deal book queries and receipt hashes matched chain data for all roles. Replaying a successful settlement changed no balances.");
 
 {
   const x = await setup({ broken: true });
@@ -152,6 +162,8 @@ report.assertions.push("Blocked base delivery rolled back all payment and fees. 
   receipts.replayedNonce = await x.send("seller", "fund", [altered, await x.sig("seller", altered)], "0x0");
   receipts.unrelatedBuyer = await x.send("other", "settle", [x.id, await x.sig("buyer")], "0x0");
   receipts.alteredBuyerTerms = await x.send("buyer", "settle", [x.id, await x.sig("buyer", altered)], "0x0");
+  receipts.buyerWrongChain = await x.send("buyer", "settle", [x.id, await x.sig("buyer", x.terms, { ...domain, chainId: 1 })], "0x0");
+  receipts.buyerWrongContract = await x.send("buyer", "settle", [x.id, await x.sig("buyer", x.terms, { ...domain, verifyingContract: x.w.legacy.address })], "0x0");
   await x.w.at(x.terms.expiry);
   receipts.expired = await x.send("buyer", "settle", [x.id, await x.sig("buyer")], "0x0");
   const afterFundingDelta = expectDelta(escrowed, await x.snapshot());
@@ -202,7 +214,7 @@ for (const fixed of [false, true]) {
     accounts: x.accounts, grantAtSettlement: g, grantAfterClaims: grant, settlementDelta, cliffDelta, endDelta, events,
     receipts: { funded, settled, tooEarly, wrongBeneficiary, cliff, end } });
 }
-report.assertions.push("Both vesting start modes created backed vaults. Early and unrelated claims reverted. Cliff and final claims paid the exact base allocation and zero quote fees.");
+report.assertions.push("Both vesting start modes created backed vaults. Fixed start matched the UTC form input and displayed UTC. Early and unrelated claims reverted. Cliff and final claims paid the exact base allocation and zero quote fees.");
 
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, "contract-proof.json"), JSON.stringify(report, (_, value) => typeof value === "bigint" ? String(value) : value, 2) + "\n");

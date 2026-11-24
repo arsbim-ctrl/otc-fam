@@ -37,13 +37,16 @@ export function button(label, run, { id = "v3-action", secondary = false, disabl
 export function copyLink(path, testid = "v3-copy") {
   return button("Copy deal link", async (target) => {
     const url = absolute(path);
+    const parent = target.parentElement;
+    const field = parent.querySelector("input");
+    const status = parent.querySelector("[role=status]");
     const copied = await navigator.clipboard?.writeText(url).then(() => true, () => false);
-    const field = target.parentElement.querySelector("input");
-    const status = target.parentElement.querySelector("[role=status]");
+    if (!parent.isConnected) return;
     if (copied) {
       status.textContent = "Deal link copied.";
       return;
     }
+    field.value = url;
     field.hidden = false;
     field.focus();
     field.select();
@@ -150,7 +153,8 @@ export function receiptView(app, record, receipt) {
     ? (grant ? [`New grant #${grant.id} funded with `, tokenAmount(terms.allocation, base), " in ", mono(grant.custodian)]
       : [tokenAmount(terms.allocation, base), " transferred to buyer"])
     : kind === "funded" ? [tokenAmount(terms.allocation, base), " deposited in escrow"]
-      : kind === "refunded" ? "Seller withdrew the allocation from escrow" : [tokenAmount(receipt.amount, base), " withdrawn from the grant"];
+      : kind === "refunded" ? [tokenAmount(terms.allocation, base), " released from escrow to seller ", mono(terms.seller)]
+        : [tokenAmount(receipt.amount, base), " withdrawn from the grant"];
   return h("div", { class: "broker-receipt", testid: `v3-receipt-${kind}`, "data-tx": hash },
     h("h3", {}, titles[kind]),
     h("p", { class: "broker-muted" }, verified

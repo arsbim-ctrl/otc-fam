@@ -30,7 +30,7 @@ async function withNode(steps) {
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify(Array.isArray(request) ? await Promise.all(request.map(answer)) : await answer(request)));
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve, reject) => server.once("error", reject).listen(0, "127.0.0.1", resolve));
   try {
     await steps(chain, { ...process.env, RPC_URL: `http://127.0.0.1:${server.address().port}`, DEPLOYER_KEY: deployer.privateKey });
   } finally {
@@ -61,6 +61,19 @@ test("npm run deploy:v2 deploys OtcDealsV2 with the treasury in TREASURY, and sa
   assert.equal(`0x${treasury.slice(-40)}`, TREASURY);
   const { stderr } = await run(process.execPath, ["scripts/deploy.mjs", "v2"], { env: { ...env, TREASURY } });
   assert.match(stderr, /"contractV2": "0x[0-9a-fA-F]{40}", "fromBlockV2": \d+/);
+}));
+
+test("npm run deploy:v3 deploys BrokerDeals with the configured treasury and reports its deployment block", () => withNode(async (chain, env) => {
+  const { stdout, stderr } = await run(process.execPath, ["scripts/deploy.mjs", "v3"], { env: { ...env, TREASURY } });
+  const address = stdout.trim();
+  assert.match(address, /^0x[0-9a-fA-F]{40}$/);
+  assert.ok(!stderr.includes(env.DEPLOYER_KEY.slice(2)));
+  assert.ok(!stderr.includes(env.RPC_URL));
+  const [, configured, block] = /"contractV3": "(0x[0-9a-fA-F]{40})", "fromBlockV3": (\d+)/.exec(stderr);
+  assert.equal(configured, address);
+  assert.equal(Number(block), Number(await chain.rpc("eth_blockNumber")));
+  const treasury = await chain.rpc("eth_call", [{ to: address, data: "0x61d027b3" }, "latest"]); // treasury()
+  assert.equal(`0x${treasury.slice(-40)}`, TREASURY);
 }));
 
 test("npm run deploy refuses to start without RPC_URL and DEPLOYER_KEY, or with a malformed key", async () => {

@@ -210,7 +210,7 @@ export class BrokerChain {
         if (!receipts.has(log.transactionHash)) receipts.set(log.transactionHash,
           this.chain.rpc("eth_getTransactionReceipt", [log.transactionHash]).catch(() => null));
         const receipt = await receipts.get(log.transactionHash);
-        const confirmed = receipt?.status === "0x1" && receipt.blockHash === log.blockHash;
+        const confirmed = receipt?.status === "0x1" && receipt.transactionHash === log.transactionHash && receipt.blockHash === log.blockHash;
         return { kind: kindOf[parsed.name], hash: log.transactionHash, block: Number(log.blockNumber), confirmed, ...parsed.args.toObject() };
       }));
   }

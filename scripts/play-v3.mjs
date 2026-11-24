@@ -8,6 +8,7 @@ import { DESKTOP, PHONE, serve } from "./lib/site.mjs";
 
 const target = process.env.BROKER_EVIDENCE_DIR ?? "evidence/round-3";
 const out = join(target, "screens");
+const explorer = "https://explorer.example";
 mkdirSync(out, { recursive: true });
 const evidence = [];
 const sizes = process.env.BROKER_VIEWPORT ? [PHONE, DESKTOP].filter((size) => String(size.width) === process.env.BROKER_VIEWPORT) : [PHONE, DESKTOP];
@@ -37,16 +38,17 @@ const reject = { error: { code: 4001, message: "User rejected the request" } };
 
 for (const size of sizes) {
   const w = await brokerWorld();
-  const site = await serve(w, w.configV3);
+  const site = await serve(w, { ...w.configV3, explorerUrl: explorer });
   const contexts = [];
-  const recorded = { width: size.width, screenshots: [], receipts: {} };
+  const recorded = { width: size.width, screenshots: [], imageDimensions: {}, receipts: {} };
   const errors = [];
   let browser;
   try {
     browser = await chromium.launch();
     async function tab(path, role, options = {}) {
       const context = await browser.newContext({
-        locale: "en-US", timezoneId: "UTC", viewport: size, permissions: ["clipboard-read", "clipboard-write"],
+        locale: "en-US", timezoneId: size === PHONE ? "America/Los_Angeles" : "Europe/Berlin",
+        viewport: size, permissions: ["clipboard-read", "clipboard-write"],
       });
       contexts.push(context);
       if (role) {
@@ -63,8 +65,17 @@ for (const size of sizes) {
     async function shot(page, name) {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `Layout overflow at ${size.width}px · ${name}`);
       const file = `${name}-${size.width}.jpg`;
-      await page.screenshot({ path: join(out, file), fullPage: true, animations: "disabled", type: "jpeg", quality: 83 });
+      const jpeg = await page.screenshot({ path: join(out, file), fullPage: true, animations: "disabled", type: "jpeg", quality: 83 });
+      const dimensions = await page.evaluate(async (base64) => {
+        const image = new Image();
+        image.src = `data:image/jpeg;base64,${base64}`;
+        await image.decode();
+        return { width: image.naturalWidth, height: image.naturalHeight };
+      }, jpeg.toString("base64"));
+      assert.equal(dimensions.width, size.width, file);
+      assert.ok(dimensions.height >= size.height, file);
       recorded.screenshots.push(file);
+      recorded.imageDimensions[file] = dimensions;
     }
     async function capture(page, name, kind) {
       const receipt = id(page, `receipt-${kind}`).first();
@@ -72,19 +83,27 @@ for (const size of sizes) {
       assert.match(hash, /^0x[\da-f]{64}$/);
       const verified = await w.chain.rpc("eth_getTransactionReceipt", [hash]);
       assert.equal(verified.status, "0x1");
+      assert.equal(verified.transactionHash, hash);
       await waitText(receipt, "Confirmed");
+      await waitText(receipt, w.brokerDeals.address);
+      assert.equal(await receipt.getByRole("link", { name: hash, exact: true }).getAttribute("href"), `${explorer}/tx/${hash}`);
       recorded.receipts[name] = verified;
     }
-    async function create(page, { delivery = "0", quote = "100000", share = "20.00", hours = "24", scene } = {}) {
+    async function create(page, { delivery = "0", quote = "100000", share = "20.00", hours = "24", fixedStart, scene } = {}) {
       await page.goto(site.url + "/#/v3/new");
       for (const [name, value] of Object.entries({
         seller: w.seller, buyer: w.buyer, broker: w.broker, "base-token": w.fam.address,
         "quote-token": w.usdc.address, allocation: "900.000000000000000001", quote, share, hours,
       })) await id(page, name).fill(value);
       await id(page, "delivery").selectOption(delivery);
+      if (fixedStart) await id(page, "start").fill(fixedStart);
       await waitText(id(page, "fee-preview"), quote === "100000" ? "200 USDC" : "0.246913 USDC");
       await id(page, "review").click();
       await id(page, "create").waitFor();
+      if (fixedStart) {
+        await page.getByText("Counterparties and signing terms", { exact: true }).click();
+        await waitText(id(page, "terms"), fixedStart.slice(11) + " UTC");
+      }
       if (scene) await shot(page, scene);
       await id(page, "create").click();
       const link = await id(page, "open-link").getAttribute("href");
@@ -115,6 +134,8 @@ for (const size of sizes) {
     const plain = await tab(immediate);
     await status(plain, "awaiting");
     assert.equal(await id(plain, "action").count(), 0);
+    await waitText(plain.locator(".broker-warning"), "Compare both token contract addresses");
+    await waitText(id(plain, "terms"), "UTC");
     await shot(plain, "03-awaiting-funding-wallet-free");
     const seller = await tab(immediate, "seller");
     await fund(seller);
@@ -160,12 +181,19 @@ for (const size of sizes) {
     await sign.click();
     await status(buyer, "settled");
     await capture(buyer, "immediateSettlement", "settled");
+    const settlement = id(buyer, "receipt-settled");
+    for (const address of [w.seller, w.buyer, w.broker, w.treasury, w.fam.address, w.usdc.address]) await waitText(settlement, address);
+    for (const raw of ["100500000000", "99500000000", "200000000", "800000000"]) {
+      await waitText(id(buyer, "receipt-fees"), `(${raw} raw)`);
+    }
     await buyer.reload();
     await status(buyer, "settled");
     assert.equal(await id(buyer, "receipt-settled").getAttribute("data-tx"), recorded.receipts.immediateSettlement.transactionHash);
     await shot(buyer, "09-settlement-receipt-after-reload");
 
-    const vesting = await create(broker, { delivery: "1", quote: "123.456789", scene: "10-broker-review-vesting" });
+    const fixedStart = size === DESKTOP ? (await w.chain.now()) + 3600 : null;
+    const startInput = fixedStart ? new Date(fixedStart * 1000).toISOString().slice(0, 19).replace("T", " ") : undefined;
+    const vesting = await create(broker, { delivery: "1", quote: "123.456789", fixedStart: startInput, scene: "10-broker-review-vesting" });
     await fund(await tab(vesting, "seller"));
     const vestBuyer = await tab(vesting, "buyer");
     await status(vestBuyer, "funded");
@@ -178,9 +206,11 @@ for (const size of sizes) {
     const { grantId } = w.brokerDeals.interface.parseLog(recorded.receipts.vestingSettlement.logs
       .find((log) => log.topics[0] === w.brokerDeals.interface.getEvent("BrokerDealSettled").topicHash)).args;
     const grant = await w.brokerDeals.read.getGrant(grantId);
+    if (fixedStart) assert.equal(grant.start, BigInt(fixedStart), "UTC form input matches the onchain start");
+    recorded.schedule = { mode: fixedStart ? "fixed UTC" : "settlement-relative", start: String(grant.start) };
     await w.at(grant.cliff);
     await vestBuyer.reload();
-    await action(vestBuyer, "Connect wallet").click();
+    await waitText(id(vestBuyer, "role"), "Buyer connected");
     const wrong = await tab(vesting, "other");
     await action(wrong, "Connect wallet").click();
     await waitText(id(wrong, "wrong-wallet"), "Select the named beneficiary wallet");
@@ -196,9 +226,13 @@ for (const size of sizes) {
     await shot(vestBuyer, "13-beneficiary-claim");
     await w.at(grant.end);
     await vestBuyer.reload();
-    await action(vestBuyer, "Connect wallet").click();
+    await waitText(id(vestBuyer, "role"), "Buyer connected");
     await id(vestBuyer, "claim").click();
     await waitText(id(vestBuyer, "vault-balance"), /^0 FAM$/);
+    const claimReceipts = id(vestBuyer, "receipt-claimed");
+    await claimReceipts.first().locator("..").locator("summary").click();
+    await capture(vestBuyer, "finalClaim", "claimed");
+    assert.notEqual(recorded.receipts.finalClaim.transactionHash, recorded.receipts.cliffClaim.transactionHash);
     await shot(vestBuyer, "14-fully-claimed");
 
     const refundLink = await create(broker, { quote: "123.456789", hours: "0.02" });
@@ -207,8 +241,16 @@ for (const size of sizes) {
     const pending = await create(broker, { quote: "123.456789" });
     const expired = await create(broker, { quote: "123.456789", hours: "0.02" });
     await w.at((await w.chain.now()) + 85);
+    await refundSeller.bringToFront();
     await status(refundSeller, "expired");
     await shot(refundSeller, "15-expired-seller-refund");
+    await capture(refundSeller, "expiredFunding", "funded");
+    const freshSellerBook = await tab("#/v3/deals", "seller");
+    await action(freshSellerBook, "Connect wallet").click();
+    const expiredFunding = id(freshSellerBook, "book-entry").and(freshSellerBook.locator("[data-status=expired]"));
+    await expiredFunding.getByRole("link", { name: "Open deal and receipt" }).click();
+    await status(freshSellerBook, "expired");
+    assert.equal(await id(freshSellerBook, "receipt-funded").getAttribute("data-tx"), recorded.receipts.expiredFunding.transactionHash);
     await id(refundSeller, "refund").click();
     await status(refundSeller, "refunded");
     await capture(refundSeller, "refund", "refunded");
@@ -229,7 +271,19 @@ for (const size of sizes) {
     await action(freshBook, "Connect wallet").click();
     await waitText(id(freshBook, "book-status"), "4 deals");
     await shot(freshBook, "17-broker-onchain-history-fresh-profile");
+    const freshBuyerBook = await tab("#/v3/deals", "buyer");
+    await action(freshBuyerBook, "Connect wallet").click();
+    await waitText(id(freshBuyerBook, "book-status"), "4 deals");
+    assert.deepEqual(await id(freshBuyerBook, "book-entry").evaluateAll((rows) => rows.map((row) => row.dataset.role)), Array(4).fill("buyer"));
+    await id(broker, "stage-filter").selectOption("awaiting");
     const pendingRow = id(broker, "book-entry").filter({ hasText: "Awaiting funding" });
+    await broker.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, "writeText", { value: () => Promise.reject(new Error("Clipboard denied")) });
+    });
+    await pendingRow.getByRole("button", { name: "Copy deal link" }).click();
+    const copyFallback = pendingRow.getByRole("textbox", { name: "Full deal link" });
+    assert.equal(await copyFallback.inputValue(), site.url + "/" + pending);
+    assert.equal(await copyFallback.evaluate((node) => document.activeElement === node), true);
     await pendingRow.getByRole("button", { name: "Duplicate terms" }).click();
     assert.equal(await id(broker, "quote").inputValue(), "123.456789");
     assert.equal(await id(broker, "seller").inputValue(), w.seller);

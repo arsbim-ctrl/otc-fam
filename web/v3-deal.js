@@ -67,7 +67,7 @@ export function brokerDealPage(app, protocol, { payload, id: onchainId, duplicat
         : role === "buyer" && record.state === "funded" ? quote : null;
       const [receipts, balance, allowance] = await Promise.all([
         deal.status === "awaiting" ? []
-          : eventsKey === histories && s.record?.receipts?.length && s.record.receipts.every((r) => r.confirmed)
+          : !force && eventsKey === histories && s.record?.receipts?.length && s.record.receipts.every((r) => r.confirmed)
             ? s.record.receipts : protocol.receipts(id, deal.grantId, block.number),
         actionToken && chainId === domain.chainId ? app.chain.balanceOf(actionToken.address, account) : 0n,
         actionToken && chainId === domain.chainId ? app.chain.allowance(actionToken.address, account, protocol.contract) : 0n,

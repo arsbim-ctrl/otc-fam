@@ -3,13 +3,13 @@
 // on stdout (progress goes to stderr). npm run deploy:v2 and npm run deploy:v3 deploy fee-bearing contracts with
 // the treasury address from TREASURY. All values come from the environment only: nothing is written to a file,
 // and neither RPC_URL nor the key is ever printed (an RPC URL can hold an API key).
-import { readFileSync } from "node:fs";
+import { readFileSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
 import { ContractFactory, JsonRpcProvider, Wallet } from "ethers";
 
 const solc = createRequire(import.meta.url)("solc");
 const fail = (message) => {
-  console.error(message);
+  writeSync(2, message + "\n");
   process.exit(1);
 };
 

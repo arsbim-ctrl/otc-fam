@@ -4,16 +4,12 @@ The implementation starts from official base `9c00adeb195565c6ffdb928fe8a9056e73
 
 ## Run locally
 
-Use Node 22 or newer and a host that permits a loopback HTTP listener and Chromium.
+Use Node 22 or newer and a host that permits a loopback HTTP listener and Chromium. The validation script runs the build, every frozen suite independently, the regression suite, the in-process proof and both browser widths. It prints a fresh directory for the logs, JSON and screenshots.
 
 ```sh
 npm ci --ignore-scripts
 npx playwright install chromium
-npm run build
-npm run check
-npm test
-npm run prove:v3
-npm run play:v3
+bash scripts/validate-v3.sh
 npm run dev
 ```
 
@@ -31,13 +27,13 @@ The optional version 3 config fields are `contractV3` and `fromBlockV3` alongsid
 
 ## Judge criteria
 
-| Criterion | Implementation and evidence |
+| Official criterion | Implementation and evidence |
 | --- | --- |
-| **C1 · Authorization and settlement** | [BrokerDeals.sol](../../contracts/BrokerDeals.sol) binds a seller and buyer EIP-712 signature to the same terms and domain. Actor checks and a seller-scoped nonce guard execution. The authorization scenario in [contract-proof.json](contract-proof.json) contains actual reverted receipts for wrong actor, altered terms, wrong chain or verifying contract, nonce reuse and expiry. Raw balances and logs are checked after rejection. Frozen R3-01, R3-02 and R3-04 passed. |
-| **C2 · Fees and vesting** | [Contract proof](contract-proof.json) records exact before/after balances, raw deltas, transaction receipts, vault balances and claim amounts. It covers all four fee fixtures, blocked delivery, seller refund, settlement-relative and fixed starts, cliff and final claims, and an unrelated claimant. Frozen R3-03 and R3-05 passed. Round 2 and the Round 1 contract checks passed. |
-| **C3 · Broker to buyer workflow** | [Browser runner](../../scripts/play-v3.mjs) exercises proposal review and clipboard, independent seller funding, fresh no-wallet and buyer previews, immediate and vesting settlement, expiry and refunds, and beneficiary claims. It runs both widths with independent profiles and asserts the broker requested neither signatures nor transactions. Execution in this session was blocked before rendering. |
-| **C4 · Receipts and history** | [Browser routes and views](../../web/v3-page.js) show domain, roles, fees, canonical transaction hashes, confirmation status and a configured explorer link. The browser runner covers wrong wallet, wrong chain, wallet rejection, keyboard focus, reload, copy, duplication and role-scoped history. The in-process proof independently verifies the history event queries, receipt hashes and balance deltas. |
-| **C5 · Maintainability and proof** | Version 3 uses a separate contract and route namespace. Browser code shares existing wallet, token, transaction and amount helpers. The EIP-712 digest is verified against the deployed contract. This document contains the commands, run outcomes and limitations. |
+| **C1 · Authorization and settlement (counts double)**. Seller and buyer remain distinct from the broker, signed terms bind the exact deal and domain, and failed transactions preserve balances. | Frozen R3-01 and R3-02 passed. Real EDR receipts show that wrong actor, altered terms, wrong chain, wrong verifying contract, nonce reuse, settlement replay and expiry revert with zero token movement and no emitted logs. The browser codec's digest matched the deployed contract. [Contract](../../contracts/BrokerDeals.sol) · [chain proof](contract-proof.json) |
+| **C2 · Fees and vesting (counts double)**. Exact participant, broker and treasury deltas, no fees on failure or refund, fully funded grants, and all earlier checks pass. | Frozen R3-03 through R3-05 passed. The chain proof verified four raw-unit fee fixtures, atomic rollback, seller refunds, full vault backing, exact cliffs and claims for both start modes, and rejection of unrelated claims. UTC parsing and display passed with the process in America/Los_Angeles. Round 2 passed in full. Five Round 1 browser checks remain blocked. [Chain proof](contract-proof.json) |
+| **C3 · Broker to buyer workflow (counts double)**. The broker, seller and fresh buyer complete the immediate and vesting scenarios described in the brief, with correct permissions and status. | The local chain reproduced the two settlement flows with independent fixture wallets. The browser runner covers unsigned proposal review and clipboard, fresh wallet-free and buyer previews, seller funding, immediate and vesting settlement, expiry, refund and claims. Browser execution is pending at both widths. [Browser runner](../../scripts/play-v3.mjs) |
+| **C4 · Receipts and history**. Clear fee disclosure, role-scoped deal history, verifiable receipts, and accessible recovery on desktop and mobile. | The chain proof checked role-scoped log queries and canonical receipt hashes. The review corrected receipt access for expired funded deals, added exact allocation and seller to refund receipts, refreshed receipt verification on forced reads and fixed the copy fallback after history changes. Browser verification of the explorer link, receipt details, copy, duplication, wallet/network rejection, reload and keyboard focus is pending. [Deal view](../../web/v3-deal.js) · [History](../../web/v3-history.js) · [Browser runner](../../scripts/play-v3.mjs) |
+| **C5 · Maintainability and proof**. Explicit versioning, reproducible tests, and documented evidence and limitations. | A separate V3 contract and route namespace share the wallet, transaction, amount and UTC helpers. The frozen checks, workflow and existing Solidity sources match the official base byte for byte. The validation command runs all suites and saves their actual results. [Validation script](../../scripts/validate-v3.sh) |
 
 ### Exact USDC fixture deltas
 
@@ -54,22 +50,26 @@ Each party fee is independently floored before the broker share is calculated fr
 
 ### Browser artifacts
 
-`npm run play:v3` writes `screens/<scene>-390.jpg`, `screens/<scene>-1440.jpg` and `browser-proof.json` here. Set `BROKER_EVIDENCE_DIR` to use another output directory. Set `BROKER_VIEWPORT=390` or `BROKER_VIEWPORT=1440` to run a single viewport. Scene names and the matching screenshot and receipt assertions are in the runner. Screens 01–06 show proposal, sharing, seller funding and participant checks. Screens 07–09 show recovery and a receipt after reload. Screens 10–14 show vesting and beneficiary claims. Screens 15–17 show refunds and local and fresh-profile deal books.
+`npm run play:v3` writes `screens/<scene>-390.jpg`, `screens/<scene>-1440.jpg` and `browser-proof.json` here. Set `BROKER_EVIDENCE_DIR` to use another output directory. Set `BROKER_VIEWPORT=390` or `BROKER_VIEWPORT=1440` to run a single viewport. A full run expects 17 JPEGs and seven verified chain receipts per width. The runner decodes each JPEG and checks pixel dimensions and page overflow. Screens 01–06 cover proposal, sharing, seller funding and participant checks. Screens 07–09 cover recovery and a reloaded receipt. Screens 10–14 cover vesting and beneficiary claims, with a fixed UTC start at 1440px. Screens 15–17 cover refunds and deal books.
+
+This session produced zero V3 screenshots and no browser proof JSON. Visual inspection, mobile and desktop layout, accessibility and wallet integration remain unverified.
 
 ### Results on this VPS
 
 | Command or suite | Result |
 | --- | --- |
-| `npm run build` | Passed. |
+| `npm run build` | Passed with Node 24.15.0. |
 | [Round 1 frozen](frozen-round-1.json) | 11 contract checks passed. Five browser checks were blocked by `listen EPERM` for 127.0.0.1. |
 | [Round 2 frozen](frozen-round-2.json) | 7/7 passed. |
 | [Round 3 frozen](frozen-round-3.json) | 5/5 passed. |
-| Previous-round ABI, units and contract regressions | 38/38 assertions passed across five test files. |
-| Full `npm test` | Deploy, dev and the two legacy browser suites failed in this session. Local HTTP listens are denied and direct Chromium startup aborts on a sandbox-denied `shutdown` syscall. |
-| `npm run prove:v3` | Eight in-process scenarios passed. [Machine-readable evidence](contract-proof.json) includes settlement, refund and claim receipts and failed-transaction receipts. |
-| `npm run play:v3` | Blocked by the denied loopback listen before either viewport rendered. Screenshot and browser receipt files still require a browser-capable run. |
+| `npm test` | Five files passed. Four files reported failure under the sandbox across deploy, dev and the two legacy browser suites. |
+| Detailed regression run | 39/69 passed with test isolation disabled for individual results. Thirty were blocked, comprising three deployment integrations, the dev-browser integration and 26 legacy browser tests. The negative deploy CLI test passed after changing the CLI to write its error before exiting. |
+| `TZ=America/Los_Angeles npm run prove:v3` | Eight in-process scenarios passed. The machine-readable evidence contains 20 successful and 20 reverted transaction receipts. [Chain proof](contract-proof.json) |
+| `npm run play:v3` | Exited 1 at `listen EPERM` on 127.0.0.1 before rendering. A direct launch of installed Chromium also exited at `shutdown: Operation not permitted`. The installed Chromium binary had zero unresolved shared libraries. |
 
-Tests used Node 24.15.0 and the existing locked tool versions on the VPS. An offline clean install could not fetch an uncached registry package. The installed packages were reused.
+The first browser attempt used the default Node 20.19.2. The validation script used Node 24.15.0 and the installed locked dependencies, including Playwright 1.63.0. The execution profile offers no host escalation for the listener or Chromium.
+
+The official base already differs from the historical Round 1 commit `545cdb7b37` in `OtcDeals.sol`. That inherited change adds exact recipient-balance enforcement on fills. The Round 3 checkout preserves the official base contract and the frozen Round 1 checks.
 
 ## Operational boundaries
 
