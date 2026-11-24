@@ -48,8 +48,9 @@ main:has(.broker-workspace), main:has(.broker-workspace) + footer { max-width: 1
 .broker-field label { font-weight: 650; font-size: 14px; }
 .broker-field input, .broker-field select { min-height: 44px; min-width: 0; width: 100%; border-color: var(--broker-edge); }
 .broker-workspace .primary { background: var(--broker-primary); font-size: 15px; padding: 12px 14px; min-height: 44px; }
-.broker-workspace .primary:disabled { background: #e8e2ef; color: #665772; }
+.broker-workspace .primary:is(:disabled, [aria-disabled="true"]) { background: #e8e2ef; color: #665772; cursor: default; }
 .broker-workspace .secondary { color: #49279b; background: #f0eafb; min-height: 44px; }
+.broker-workspace .secondary[aria-disabled="true"] { opacity: 0.6; cursor: default; }
 .broker-callout { background: #f0eafb; border-radius: 12px; padding: 11px 13px; margin: 0; color: #47277e; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .broker-legs { display: grid; gap: 10px; }
 .broker-leg {

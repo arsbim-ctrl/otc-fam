@@ -97,7 +97,10 @@ export function brokerDealPage(app, protocol, { payload, id: onchainId, duplicat
   }
 
   function walletAction(label, work, options) {
-    return button(label, runAction(label, work), { ...options, disabled: Boolean(s.busy || s.checking || s.error) });
+    const control = button(label, runAction(label, work), options);
+    // Keep keyboard focus on the action while runAction blocks presses during a wallet request or refresh.
+    if (s.busy || s.checking || s.error) control.setAttribute("aria-disabled", "true");
+    return control;
   }
 
   function walletFor(account) {
@@ -218,7 +221,7 @@ export function brokerDealPage(app, protocol, { payload, id: onchainId, duplicat
       s.error && message(s.error, true),
       s.busy && h("p", { class: "broker-callout", role: "status" }, s.busy.hint || s.busy.label),
       s.busy?.waiting && button("Stop waiting", () => presses.stopWaiting("Stopped waiting. The latest onchain status will update when the transaction confirms."), { secondary: true, id: "v3-stop-waiting" }),
-      s.notice && !s.error && message(s.notice.text, s.notice.kind === "error"),
+      s.notice && !s.busy && !s.error && message(s.notice.text, s.notice.kind === "error"),
       s.error && button("Retry", () => load(true), { secondary: true, id: "v3-retry" }));
     const receiptPanel = final && section("Onchain activity",
       receiptView(app, record, final),
