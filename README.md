@@ -216,9 +216,20 @@ know. A site serves the versions its config names.
 - A press declined in the wallet, a wallet on another network, a transaction that fails or that the wallet
   replaces: each ends with the page saying what happened and showing the chain's state. A v2 or v3
   transaction sent before a reload is taken up again after it. When the chain cannot be read, the page says so.
-- A v3 signature is asked for once per deal and wallet while the page is open, and kept nowhere.
+- A v3 signature is asked for once per deal and wallet while the page is open, and kept nowhere; one the
+  contract refuses is dropped and asked for again.
+- When the wallet turns to another account or another network, a v3 deal's page reads the chain again and
+  says what that wallet can do: what it said to the wallet as it was is gone. A seller's wallet on another
+  network is offered the switch before a refund.
+- The v3 history lists terms that can never be funded (a rule of the contract broken, or the seller's nonce
+  already used) as "Cannot be funded", not as awaiting funding; the form gives such terms no link. A deal a
+  broker created is "Awaiting funding" until its seller deposits, and its row says it was created here.
+- In the v3 form each field is tied to the note under it (`aria-describedby`) and marked when the note finds
+  fault with it (`aria-invalid`); while a press runs, where it stands is announced (`role="status"`).
 - A view is changed in place, not rebuilt: the focus and selected text stay, and a button disabled during a
-  step has the focus again for the next, so a deal can be made, settled and claimed from the keyboard.
+  step has the focus again for the next, so a deal can be made, settled and claimed from the keyboard. When
+  a v3 deal has moved on and the pressed button is gone, the focus goes to the line that says whose turn it
+  is now (`next-actor`, `role="status"`), not back to the top of the page.
 - Amounts are typed with a dot (`1500.25`) and shown with every digit (`1,500.25`), never rounded. A deal
   stays open at least one minute.
 
@@ -226,11 +237,11 @@ The handles of the v3 pages (`data-testid`):
 
 | Page | Handles |
 | --- | --- |
-| The deal | `deal-status` (`data-status`: `awaiting`, `funded`, `settled`, `refunded`, `expired`, `void`, `not-found`), `version`, `delivery`, `next-actor` (`data-actor`: `seller`, `buyer`, `none`), `pay-amount`, `receive-amount`, `funding` (`data-funded`), `price`, `buyer-fee`, `buyer-total`, `seller-fee`, `seller-net`, `broker-fee`, `broker`, `treasury-fee`, `treasury`, `expires`, `token-warning`, `primary-action`, `refund-action`, `connect-action`, `notice`, `refusal`, `stale`, `waiting`, `stop-waiting`, `duplicate`; the grant's handles are v2's |
+| The deal | `deal-status` (`data-status`: `awaiting`, `funded`, `settled`, `refunded`, `expired`, `void`, `not-found`), `version`, `delivery`, `next-actor` (`data-actor`: `seller`, `buyer`, `none`), `pay-amount`, `receive-amount`, `funding` (`data-funded`), `price`, `buyer-fee`, `buyer-total`, `seller-fee`, `seller-net`, `broker-fee`, `broker`, `treasury-fee`, `treasury`, `expires`, `token-warning`, `primary-action`, `refund-action`, `connect-action`, `copy-link`, `notice`, `refusal`, `stale`, `waiting`, `stop-waiting`, `duplicate`; the grant's handles are v2's |
 | The terms | `terms`, `terms-<field>` for each field of the terms (`terms-seller` … `terms-brokerBps`), `terms-domain`, `terms-network`, `terms-contract`, `deal-id`, `duplicate-terms` |
 | The receipt | `receipt-network`, `receipt-contract`, `receipt-deal`, `last-receipt` (`data-tx`), `settlement` (`data-tx`), `receipt-tx`, `receipt-status`, `receipt-paid`, `receipt-seller-net`, `receipt-buyer-fee`, `receipt-seller-fee`, `receipt-broker-fee`, `receipt-treasury-fee`, `receipt-delivery` (`data-grant`), `receipt-vault`, `receipts` (one `li` per event: `data-kind` `funded`, `settled`, `refunded`, `claimed`; `data-tx`), `no-receipts` |
-| The form | `delivery-immediate`, `delivery-vesting`, `base-token`, `allocation`, `quote-token`, `quote`, `seller`, `buyer`, `broker`, `use-wallet`, `broker-share`, `expiry-hours`, `start-settlement`, `start-fixed`, `start-utc`, `cliff-days`, `duration-days`, `summary`, `summary-delivery`, `summary-seller`, `summary-buyer`, `summary-deadline`, `summary-schedule`, `fee-pool` and the money handles above, `primary-action`, `copied`, `deal-link`, `created-id`, `created-broker-fee`, `to-history`, `another` |
-| The history | `who`, `history-who`, `connect-action`, `role-all`, `role-broker`, `role-seller`, `role-buyer`, `role-here` (`aria-pressed`), `history-count`, `no-deals`, `deal-list`, `deal-row` (`data-id`, `data-status`, `data-role`) with `row-pair`, `row-status`, `row-role`, `row-quote`, `row-share`, `row-deadline`, `row-receipt` (`data-kind`), `row-open`, `row-duplicate` |
+| The form | `delivery-immediate`, `delivery-vesting`, `base-token`, `allocation`, `quote-token`, `quote`, `seller`, `buyer`, `broker`, `use-wallet`, `broker-share`, `expiry-hours`, `start-settlement`, `start-fixed`, `start-utc`, `cliff-days`, `duration-days`, `summary`, `summary-delivery`, `summary-seller`, `summary-buyer`, `summary-deadline`, `summary-schedule`, `fee-pool` and the money handles above, `primary-action`, `copied`, `deal-link`, `copy-link`, `created-id`, `created-broker-fee`, `to-history`, `another` |
+| The history | `who`, `history-who`, `connect-action`, `role-all`, `role-broker`, `role-seller`, `role-buyer`, `role-here` (`aria-pressed`), `history-count`, `no-deals`, `deal-list`, `deal-row` (`data-id`, `data-status`: the deal page's states, `data-role`) with `row-pair`, `row-status`, `row-role`, `row-quote`, `row-share`, `row-deadline`, `row-receipt` (`data-kind`), `row-open`, `copy-link`, `row-duplicate` |
 
 The handles of the v2 pages; round 1's are unchanged:
 
@@ -245,16 +256,17 @@ The handles of the v2 pages; round 1's are unchanged:
 Every test of round 3 is named by the acceptance point it shows, and compares what every party holds before
 and after (`holdings()`), to the smallest unit. `npm run play:v3` plays the brief's scenes at 390 px and
 1440 px with a broker, a seller, a buyer and a stranger, each in a browser of their own; it prints what a
-person reads, the balances that moved, and saves the screens. [evidence/round-3/](evidence/round-3/) holds
-one run of the checks, the tests and the scenes, with its 34 screenshots.
+person reads, the balances that moved, and saves the screens; its last lines list every balance check of
+the run in one place. [evidence/round-3/](evidence/round-3/) holds one run of the checks, the tests and the
+scenes, with its 34 screenshots.
 
 | | Shown by |
 | --- | --- |
 | R3-01 independent broker, seller, buyer and unrelated wallets; immediate and vesting flows | checks R3-01, R3-05; `v3-contract.test.mjs`, tests "R3-01: …"; `v3-page.test.mjs` "R3-01, R3-05 at … width" and "R3-01, R3-04, R3-05 at … width", each at both widths; scenes 1 to 4 |
-| R3-02 wrong actor, modified terms, wrong chain or contract, expiry, nonce reuse | check R3-02; `v3-contract.test.mjs` "R3-02: …" (every one of the 14 fields changed, both domains, every wrong sender and signer, malformed signatures); `v3-abi.test.mjs` "R3-02: what the page asks a wallet to sign…"; `v3-page.test.mjs` "R3-02: …", three tests; scenes 4 to 6 |
+| R3-02 wrong actor, modified terms, wrong chain or contract, expiry, nonce reuse | check R3-02; `v3-contract.test.mjs` "R3-02: …" (every one of the 14 fields changed, both domains, every wrong sender and signer, malformed signatures); `v3-abi.test.mjs` "R3-02: what the page asks a wallet to sign…"; `v3-page.test.mjs` "R3-02: …", four tests (one of them: a signature made with another key is refused before anything is sent, and is asked for again); scenes 4 to 6 |
 | R3-03 exact deltas for both broker rates and both fixtures; refunds and rejected settlements pay zero | check R3-03; `v3-contract.test.mjs` "R3-03: …"; `v3-abi.test.mjs` "R3-03: the page's fee arithmetic…"; scene 9 and every `BALANCES` line of the scenes |
 | R3-04 received assets or grant funding reconcile with the receipt and earlier rounds' rules | checks R3-04, R3-05; `v3-contract.test.mjs` "R3-04: …" (a settlement that fails for any of five kinds of token on either side moves nothing and pays no fee; refunds; re-entry) and "R3-05: …" (the vault holds the whole allocation, the schedule, the beneficiary, one grant never pays for another); `v3-page.test.mjs` "R3-01, R3-04, R3-05" (the receipt's vault holds the allocation; a claim pays the buyer only) and "R3-02, R3-04" (refund); scenes 3, 4, 5 and 8 |
-| R3-05 role-scoped history, fresh-browser preview, receipts and recovery at both widths | `v3-page.test.mjs` "R3-05: …", five tests, and the two flows at both widths; `dev.test.mjs` (the same on the local stand); scenes 1 to 8 and the screenshots |
+| R3-05 role-scoped history, fresh-browser preview, receipts and recovery at both widths | `v3-page.test.mjs` "R3-05: …", nine tests (among them: the wallet turning to another account or network while the page is open; a seller's wallet on another network; the seller's funding and, at each width, the buyer's settlement from the keyboard alone; a link copied from the history), and the two flows at both widths; `dev.test.mjs` (the same on the local stand); scenes 1 to 8 and the screenshots. The scenes' `COPIED`, `READABLE`, `KEYBOARD`, `RELOAD` and `WALLET CHANGED` lines show, at each width: the link on the clipboard, the token warning in full and the status as a screen reader gets it, the settlement made with Enter alone and where the focus is afterwards, the receipt after a reload, and the page after the wallet changed account |
 | Round 2's known defect 1: the frozen v1 contract was edited | `contracts/OtcDeals.sol` is round 1's file again; `v3-abi.test.mjs` "frozen: …" compares the git blob ids of all six earlier contract files; the round 1 checks pass |
 | Round 2's known defect 2: an unrecognised error lost the node's message | `explain()` falls back to the node's message as round 1 did; `abi.test.mjs` "a refusal the page recognises…"; the round 1 checks pass, 16 of 16 |
 | Round 2's known defect 3: a contract-level test for R2-03 | `v2-contract.test.mjs` "R2-03: a token that returns false or charges a fee during fill() reverts everything, and holdings() are equal before and after" |

@@ -10,7 +10,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { formatAmount } from "../web/units.js";
 import { packTerms } from "../web/v3.js";
-import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, signerFor, until } from "./lib/site.mjs";
+import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, signerFor, until, walletSays } from "./lib/site.mjs";
 import { ALLOCATION, feesOf, QUOTE, STATUS3, world3 } from "./lib/world3.mjs";
 
 const folder = resolve(process.argv[2] ?? "screens");
@@ -19,6 +19,7 @@ const USDC = 10n ** 6n, LARGE = 100_000n * USDC; // the brief's 100,000 USDC; QU
 const DECIMALS = { FAM: 18, USDC: 6 };
 // The stand names a block explorer so that receipts show their links; on a real network it is that network's own.
 const EXPLORER = "https://explorer.invalid";
+const ledger = []; // every balance check of the run, to list them in one place at the end
 let shots = 0;
 
 /** "buyer -100,500 USDC, seller +99,500 USDC…" for what moved. */
@@ -58,8 +59,44 @@ async function play(size) {
   async function moved(before, expected, what) {
     assert.deepEqual(await w.moved(before), expected, what);
     console.log(`\n    BALANCES, ${what}: ${told(expected)}. Nothing else moved.`);
+    ledger.push(`${size.width} px · ${what}: ${told(expected)}`);
   }
-  const scene = (title) => console.log(`\n=== ${size.width} px · ${title}`);
+  /**
+   * Takes a deal on from the keyboard alone: Enter on the page's main button until `done`. Before every press that
+   * button has the focus, and after the last one the focus is on the line that says whose turn it is now.
+   */
+  async function keyboard(page, done, what) {
+    await page.getByTestId("primary-action").focus();
+    const focusOn = (id) => page.evaluate((handle) => document.activeElement?.dataset.testid === handle && !document.activeElement.disabled, id);
+    for (let presses = 0; ; presses++) {
+      const next = await until(async () => ((await done()) ? "done" : (await focusOn("primary-action")) ? "press" : null), `${what}: not done, and the main button is not focused and ready`);
+      if (next === "done") break;
+      assert.ok(presses < 4, `${what}: not done after four presses of Enter`);
+      console.log(`    Enter ${presses + 1}, on the focused button: ${await seen(page, "primary-action")}`);
+      await page.keyboard.press("Enter");
+    }
+    await until(() => focusOn("next-actor"), `${what}: the focus on the line that says whose turn it is`);
+    console.log(`\n    KEYBOARD at ${size.width} px, ${what}: every press was Enter on the button that had the focus. The focus is now on the status line: ${JSON.stringify(await seen(page, "next-actor"))}`);
+  }
+  /** What stays readable at this width before anything is signed: the token warning, whole, and the status, in words and announced. */
+  async function readable(page) {
+    const warning = page.getByTestId("token-warning"), turn = page.getByTestId("next-actor");
+    assert.ok(await warning.isVisible(), "the token warning is shown");
+    assert.ok(await warning.evaluate((el) => el.scrollWidth <= el.clientWidth && el.getBoundingClientRect().right <= innerWidth), "none of the token warning is cut off");
+    assert.equal(await turn.getAttribute("role"), "status", "the line that says whose turn it is is announced to a screen reader");
+    console.log(`\n    READABLE at ${size.width} px. The token warning, whole: ${JSON.stringify(await warning.innerText())} The state, in words: ${JSON.stringify(await seen(page, "deal-status"))}. `
+      + `Announced to a screen reader (role="status"): ${JSON.stringify(await turn.innerText())}`);
+  }
+  /** A scene's heading: its title, and the brief's acceptance points it shows. */
+  const scene = (title, shows) => console.log(`\n=== ${size.width} px · ${title} [${shows}]`);
+  /** Presses a "Copy link" button and checks that the clipboard then holds exactly `expected`. */
+  async function copies(page, button, expected, what) {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: site.url });
+    await button.click();
+    await until(async () => (await button.innerText()) === "Link copied", `${what}: the button saying that the link is copied`);
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), expected, `${what}: the clipboard holds the link`);
+    console.log(`\n    COPIED at ${size.width} px, ${what}: "Copy link" put the whole link on the clipboard, ${expected.length} characters, the same as the link on the page.`);
+  }
   /** The broker's form, filled: a million FAM from the seller to the buyer for `quote` USDC, the broker taking 20% of the fees. */
   async function form(page, quote, vesting) {
     if (vesting) await page.getByTestId("delivery-vesting").check();
@@ -74,7 +111,7 @@ async function play(size) {
   }
 
   try {
-    scene("1. A broker, with no wallet, enters the terms, sees the exact fee share and gets one link");
+    scene("1. A broker, with no wallet, enters the terms, sees the exact fee share, gets one link and copies it", "R3-01, R3-05");
     const start = await w.holdings();
     const a = await browse(site, "#/v3/new", { size }, async (page) => {
       await form(page, "100000", false);
@@ -82,12 +119,13 @@ async function play(size) {
       await look(page, "01-broker-form");
       const made = await link(page);
       await look(page, "02-broker-link");
+      await copies(page, page.getByTestId("copy-link"), `${site.url}/${made.hash}`, "the broker's new link");
       return made;
     });
     assert.equal((await w.v3.read.getDeal(a.id)).status, STATUS3.Unfunded);
     await moved(start, {}, "preparing the link (it is not on the chain, and gives nobody any right)");
 
-    scene("2. The seller inspects the deal, declines the signature once, then signs and funds");
+    scene("2. The seller inspects the deal, declines the signature once, then signs and funds", "R3-01, R3-05");
     let declined = false;
     const hesitant = signerFor(w, "seller", (request) => {
       if (request.method !== "eth_signTypedData_v4" || declined) return null;
@@ -108,16 +146,17 @@ async function play(size) {
       await moved(start, { "seller.FAM": -ALLOCATION, "brokerDeals.FAM": ALLOCATION }, "funding the deal (no fee, nothing for the broker)");
     });
 
-    scene("3. The buyer, in a fresh browser with no wallet, inspects the funding and the delivery; then connects, signs and settles, and sees the receipt");
+    scene("3. The buyer, in a fresh browser with no wallet, inspects the funding and the delivery; then connects, signs and settles from the keyboard, sees the receipt, and reloads", "R3-01, R3-03, R3-05");
     await browse(site, a.hash, { size }, async (page) => {
       await says(page, "funding", "true", "data-funded");
       await says(page, "next-actor", "buyer", "data-actor");
       assert.equal(await offered(page), false);
       await look(page, "05-buyer-no-wallet");
+      await readable(page);
     });
     await browse(site, a.hash, { wallet: signerFor(w, "buyer"), size }, async (page) => {
       const before = await w.holdings();
-      await pressUntil(page, is(a.id, STATUS3.Settled), "the deal settled", pressed(page));
+      await keyboard(page, is(a.id, STATUS3.Settled), "the buyer's settlement");
       await state(page, "settled");
       await says(page, "receipt-broker-fee", "200");
       const tx = await seen(page, "settlement", "data-tx");
@@ -129,10 +168,11 @@ async function play(size) {
       await state(page, "settled");
       await says(page, "settlement", tx, "data-tx");
       await says(page, "receipt-paid", "100,500");
-      console.log("\n    RELOAD: after a reload the page shows the same settlement receipt, read from the chain again.");
+      console.log("\n    RELOAD: after a reload the page shows the same settlement receipt, read from the chain again. Its text follows.");
+      await look(page, "the buyer's page after the reload");
     });
 
-    scene("4. A vesting deal: the buyer cannot settle before it is funded; a wallet on another network switches first; settled is not unlocked");
+    scene("4. A vesting deal: the buyer cannot settle before it is funded; a wallet on another network switches first; settled is not unlocked", "R3-01, R3-04, R3-05");
     const fees = feesOf(QUOTE, 2_000);
     const b = await browse(site, "#/v3/new", { size }, async (page) => {
       await form(page, "123.456789", true);
@@ -169,12 +209,24 @@ async function play(size) {
       return custodian;
     });
 
-    scene("5. A stranger's wallet, the broker's wallet, and the seller's refund");
+    scene("5. A stranger's wallet, which then turns to the buyer's account; the broker's wallet; and the seller's refund", "R3-02, R3-03, R3-05");
     const c = await w.terms3({ brokerBps: 0 });
     const cId = await w.fund3(c);
-    await browse(site, linkOf(c), { wallet: signerFor(w, "other"), size }, async (page) => {
+    // One wallet with two accounts: the stranger's first, the buyer's once its owner turns to it.
+    const turning = { account: w.other };
+    const twoAccounts = signerFor(w, "buyer", async (request, answer) => {
+      if (request.method !== "eth_requestAccounts") return null;
+      await answer(request);
+      return { result: [turning.account] };
+    });
+    await browse(site, linkOf(c), { wallet: twoAccounts, size }, async (page) => {
       await pressUntil(page, async () => (await seen(page, "notice"))?.includes(w.buyer) && !(await offered(page)), "a notice naming the buyer", pressed(page));
       await look(page, "11-not-a-party");
+      turning.account = w.buyer;
+      await walletSays(page, "accountsChanged", [w.buyer]);
+      await says(page, "primary-action", "Not enough USDC"); // the buyer's USDC went into the two deals settled above
+      console.log(`\n    WALLET CHANGED at ${size.width} px: the wallet turned from the stranger's account to the buyer's. The page read the chain again; what it said to the stranger is gone, and it says: `
+        + JSON.stringify(await seen(page, "notice")));
     });
     await browse(site, linkOf(c), { wallet: signerFor(w, "broker"), size }, async (page) => {
       await pressUntil(page, async () => (await seen(page, "notice"))?.includes("You are this deal's broker") && !(await offered(page)), "what the broker can and cannot do", pressed(page));
@@ -191,7 +243,7 @@ async function play(size) {
       await moved(before, { "seller.FAM": ALLOCATION, "brokerDeals.FAM": -ALLOCATION }, "the refund (no fee, nothing for the broker)");
     });
 
-    scene("6. Expired: a deal that was never funded, and a funded one that only its seller can still act on");
+    scene("6. Expired: a deal that was never funded, and a funded one that only its seller can still act on", "R3-02");
     const soon = (await w.chain.now()) + 300;
     const d = await w.terms3({ expiry: soon }), e = await w.terms3({ expiry: soon }), f = await w.terms3(), g = await w.terms3({ quote: LARGE });
     const eId = await w.fund3(e), gId = await w.fund3(g);
@@ -211,7 +263,7 @@ async function play(size) {
     });
     await moved(beforeExpired, {}, "expiry (no fee, nothing for the broker)");
 
-    scene("7. The broker's history: awaiting funding, funded, settled, expired and refunded deals, each with its pair, price, share, deadline and receipt");
+    scene("7. The broker's history: created and awaiting funding, funded, settled, expired and refunded deals, each with its pair, price, share, deadline and receipt; a link copied, and terms duplicated", "R3-05");
     await browse(site, a.hash, { wallet: signerFor(w, "broker"), size }, async (page) => {
       // The broker's own browser has had every one of these deals open: that is where it knows the unfunded ones from.
       for (const hash of [a.hash, b.hash, linkOf(c), linkOf(d), linkOf(e), linkOf(f), linkOf(g)]) {
@@ -225,6 +277,7 @@ async function play(size) {
       assert.deepEqual(statuses, ["awaiting", "expired", "expired", "funded", "refunded", "settled", "settled"]);
       assert.deepEqual(await page.getByTestId("deal-row").evaluateAll((rows) => [...new Set(rows.map((row) => row.dataset.role))]), ["broker"]);
       await look(page, "16-broker-history");
+      await copies(page, page.locator(`[data-testid="deal-row"][data-id="${gId}"] [data-testid="copy-link"]`), `${site.url}/${linkOf(g)}`, "a deal's link from the broker's history");
       await page.locator(`[data-testid="deal-row"][data-id="${gId}"] [data-testid="row-duplicate"]`).click();
       await says(page, "broker-fee", "200");
       await shows(page, "copied", (text) => text.includes("another deal with another ID"), "the note that these are copied terms");
@@ -242,7 +295,7 @@ async function play(size) {
     assert.equal((await w.v3.read.getDeal(eId)).status, STATUS3.Funded);
     assert.equal((await w.v3.read.getDeal(cId)).status, STATUS3.Refunded);
 
-    scene("8. The grant at its cliff and at its end: the buyer claims, with no fee and nothing for the broker");
+    scene("8. The grant at its cliff and at its end: the buyer claims, with no fee and nothing for the broker", "R3-04");
     await browse(site, b.hash, { wallet: signerFor(w, "buyer"), size }, async (page) => {
       const { cliff, end } = await w.v3.read.getGrant(1);
       await pressUntil(page, async () => (await seen(page, "primary-action")) === "Nothing to claim yet", "the grant before its cliff", pressed(page));
@@ -264,7 +317,7 @@ async function play(size) {
       assert.equal(await w.fam.read.balanceOf(vault), 0n, "the vault paid everything out");
     });
 
-    scene("9. The brief's four fee fixtures, settled on the chain: 100,000 USDC and 123.456789 USDC, with a broker share of 0% and of 20%");
+    scene("9. The brief's four fee fixtures, settled on the chain: 100,000 USDC and 123.456789 USDC, with a broker share of 0% and of 20%", "R3-03");
     for (const quote of [LARGE, QUOTE]) {
       for (const brokerBps of [0, 2_000]) {
         const t = await w.terms3({ quote, brokerBps }), m = feesOf(quote, brokerBps);
@@ -283,5 +336,6 @@ async function play(size) {
 
 for (const size of [PHONE, DESKTOP]) await play(size);
 await closeBrowser();
+console.log(`\n=== Every balance check of this run in one place: what moved, compared with every party's holdings before it was printed\n${ledger.map((line) => `    ${line}`).join("\n")}`);
 console.log(`\nEvery scene played at 390 px and 1440 px, and every balance was as the deal says. ${shots} screenshots are in ${process.argv[2] ?? "screens"}/`);
 process.exit(0);
