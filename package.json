@@ -12,9 +12,12 @@
     "build": "node scripts/build.mjs",
     "deploy": "node scripts/deploy.mjs",
     "deploy:v2": "node scripts/deploy.mjs v2",
+    "deploy:v3": "node scripts/deploy.mjs v3",
     "test": "node --test test/*.test.mjs",
-    "check": "node .launchpad/checks/round-1/run.mjs && node .launchpad/checks/round-2/run.mjs",
+    "check": "node .launchpad/checks/round-1/run.mjs && node .launchpad/checks/round-2/run.mjs && node .launchpad/checks/round-3/run.mjs",
     "play": "node scripts/play.mjs",
+    "prove:v3": "npm run build && node scripts/prove-v3.mjs",
+    "play:v3": "node scripts/play-v3.mjs",
     "dev": "node scripts/dev.mjs"
   },
   "devDependencies": {

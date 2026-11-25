@@ -9,7 +9,7 @@ import { explain } from "./eth.js";
  * `render()` draws the page. `settle(result, label)` reads again whatever a press may have changed, with what the
  * press returned; the buttons come back once it is done.
  */
-export function flow({ app, s, key, render, settle }) {
+export function flow({ app, s, key, render, settle, explainError = explain }) {
   let presses = 0; // which press the page is following: a press that is no longer the current one changes nothing
   const forget = () => {
     try {
@@ -54,12 +54,12 @@ export function flow({ app, s, key, render, settle }) {
         if (press !== presses) return;
         s.busy.hint = hint;
         render();
-      }, (hash, nonce) => {
+      }, (hash, nonce, sender = app.wallet.account) => {
         mine = true;
-        remember({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: app.wallet.account });
+        remember({ hash, nonce: nonce === null ? null : String(nonce), label, step, account: sender });
       });
     } catch (e) {
-      if (press === presses) s.notice = { kind: e.replaced ? "info" : "error", text: explain(e) };
+      if (press === presses) s.notice = { kind: e.replaced ? "info" : "error", text: explainError(e) };
     }
     if (press !== presses) return; // the person stopped waiting for it, or left the page
     if (mine) forget();

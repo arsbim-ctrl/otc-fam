@@ -10,10 +10,7 @@ every entry must pass, and judges who rank the entries that pass. The winner is 
 in [ARCHITECTURE.md](ARCHITECTURE.md), what is known of the market in [MARKET.md](MARKET.md), and round 1's
 brief in [.launchpad/project.md](.launchpad/project.md).
 
-**Where it stands.** Round 1: a deal contract for plain swaps (v1), its page and the deployment script.
-Round 2: a second contract (v2) with a 0.5% fee on each side and delivery at once or as a new vesting grant,
-and its pages. Nothing here has been reviewed for security, and nothing is deployed: local chains and test
-networks only.
+**Where it stands.** Round 1 supports plain swaps. Round 2 adds fees and immediate or new vesting delivery. Round 3 adds broker proposals with seller and buyer signatures, seller funding, buyer settlement, beneficiary claims and a wallet-scoped deal book. See [Round 3 setup, tests and evidence](evidence/round-3/README.md). Deployment is for local and test networks pending security review.
 
 ## What is in the repository
 
@@ -22,7 +19,7 @@ networks only.
 | `contracts/OtcDeals.sol`, `IOtcDeals.sol` | v1, round 1: plain swaps, no owner, no fee. Its interface is fixed. |
 | `contracts/OtcDealsV2.sol`, `IOtcDealsV2.sol` | v2, round 2: deals for one named buyer, with fees, delivered at once or as a vesting grant. The interface is the round's, unchanged. |
 | `contracts/GrantVault.sol`, `TokenMoves.sol` | The vault that holds one grant's tokens, and the three checked ways a token moves in v2. |
-| `web/` | The page, plain files and no dependency. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
+| `web/` | The static pages. The build bundles ethers locally for the v3 ABI and typed data. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
 | `scripts/` | `build.mjs`, `deploy.mjs`, `play.mjs` (round 2's scenes), `dev.mjs` (a local stand to click through), and `lib/`, the local chain and site they and the tests stand on. |
 | `test/` | The entry's own tests: what the rounds' checks leave out. |
 | `evidence/round-2/` | One run of `npm run play`: the text of every step, the balances that moved, 48 screenshots. |
@@ -35,7 +32,7 @@ Node.js 22 or later. After the two installs, everything below runs with no netwo
 ```sh
 npm ci
 npx playwright install chromium    # the browser the page checks, tests and scenes drive
-npm run check    # both rounds' checks: 16 for round 1, 7 for round 2
+npm run check    # frozen checks: 16 for round 1, 7 for round 2, 5 for round 3
 npm test         # the entry's own tests, contract and page
 npm run play     # round 2's scenes at 390 px and 1440 px: text on the terminal, screenshots in screens/
 npm run dev      # the page on a local chain, to click through: http://127.0.0.1:8787/

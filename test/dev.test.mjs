@@ -8,8 +8,9 @@ import { pressUntil, seen, shows, until } from "../.launchpad/checks/round-1/pag
 
 test("npm run dev: the seller funds a vesting deal, the buyer settles it, 45 days pass and the buyer claims half", async () => {
   const dev = spawn(process.execPath, ["scripts/dev.mjs"], { env: { ...process.env, PORT: "0" }, stdio: ["ignore", "pipe", "inherit"] });
-  const browser = await chromium.launch();
+  let browser;
   try {
+    browser = await chromium.launch();
     const said = await new Promise((resolve, reject) => {
       let text = "";
       dev.stdout.on("data", (chunk) => (text += chunk).includes("Ctrl-C") && resolve(text));
@@ -37,7 +38,7 @@ test("npm run dev: the seller funds a vesting deal, the buyer settles it, 45 day
     await until(async () => (await seen(page, "grant-claimed"))?.startsWith("500,00") && (await seen(page, "grant-claimable")) === "0", "half claimed");
     assert.match(await seen(page, "last-receipt", "data-tx"), /^0x[0-9a-f]{64}$/);
   } finally {
-    await browser.close();
     dev.kill();
+    await browser?.close();
   }
 });

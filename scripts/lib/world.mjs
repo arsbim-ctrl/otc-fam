@@ -38,17 +38,17 @@ export function artifacts() {
 const plainToken = (chain, symbol, decimals) => deploy(chain, PEOPLE.deployer, artifacts().PlainToken, [symbol, decimals], { label: symbol });
 
 /** `makeToken(chain, symbol, decimals, kind)` deploys the world's tokens: plain ones unless the caller knows other kinds (the tests do). */
-export async function world({ makeToken = plainToken } = {}) {
+export async function world({ makeToken = plainToken, people = PEOPLE } = {}) {
   const a = artifacts();
-  const chain = await startChain(Object.values(PEOPLE));
-  const parties = { ...PEOPLE };
+  const chain = await startChain(Object.values(people));
+  const parties = { ...people };
   const tokens = {};
-  const deals = await deploy(chain, PEOPLE.deployer, a.OtcDealsV2, [PEOPLE.treasury], { label: "OtcDealsV2" });
+  const deals = await deploy(chain, people.deployer, a.OtcDealsV2, [people.treasury], { label: "OtcDealsV2" });
   parties.deals = deals.address;
   const tokenAt = (address) => Object.values(tokens).find((t) => t.address.toLowerCase() === address.toLowerCase());
 
   const w = {
-    chain, deals, tokens, parties, ...PEOPLE,
+    chain, deals, tokens, parties, ...people,
     /** Deploys a token of `kind` (as `makeToken` reads it), and watches who holds it. */
     async token(symbol, decimals, kind) {
       return (tokens[symbol] = Object.assign(await makeToken(chain, symbol, decimals, kind), { symbol, decimals }));
@@ -57,15 +57,15 @@ export async function world({ makeToken = plainToken } = {}) {
     watch: (name, address) => (parties[name] = address),
     /** Immediate-delivery terms (a million FAM to the buyer for 123.456789 USDC, for a day), with `changes`. */
     async terms(changes = {}) {
-      return { baseToken: w.fam.address, quoteToken: w.usdc.address, buyer: PEOPLE.buyer, allocation: ALLOCATION, quote: QUOTE,
+      return { baseToken: w.fam.address, quoteToken: w.usdc.address, buyer: people.buyer, allocation: ALLOCATION, quote: QUOTE,
         expiry: (await chain.now()) + DAY, delivery: 0, fixedStart: 0, cliffSeconds: 0, durationSeconds: 0, ...changes };
     },
     /** Vesting-delivery terms: the same deal, as a grant with a 30-day cliff over 90 days from its settlement. */
     vesting: (changes = {}) => w.terms({ delivery: 1, cliffSeconds: 30 * DAY, durationSeconds: 90 * DAY, ...changes }),
     /** The seller is given the allocation, approves it and creates the deal; returns the deal's id. */
-    async fund(t, seller = PEOPLE.seller) {
+    async fund(t, seller = people.seller) {
       const base = tokenAt(t.baseToken);
-      await base.as(PEOPLE.deployer).mint(seller, t.allocation);
+      await base.as(people.deployer).mint(seller, t.allocation);
       await base.as(seller).approve(deals.address, t.allocation);
       const [funded] = (await deals.as(seller).createDeal(t)).filter((e) => e.name === "DealFunded");
       return funded.args.dealId;
@@ -73,7 +73,7 @@ export async function world({ makeToken = plainToken } = {}) {
     /** The buyer is given the quote and the buyer fee, and approves them. Nothing is sent to the deal contract. */
     async ready(t, buyer = t.buyer) {
       const quote = tokenAt(t.quoteToken), total = t.quote + feeOn(t.quote);
-      await quote.as(PEOPLE.deployer).mint(buyer, total);
+      await quote.as(people.deployer).mint(buyer, total);
       await quote.as(buyer).approve(deals.address, 0);
       await quote.as(buyer).approve(deals.address, total);
     },
@@ -109,6 +109,6 @@ export async function world({ makeToken = plainToken } = {}) {
   w.fam = await w.token("FAM", 18);
   w.usdc = await w.token("USDC", 6);
   /** The round 1 contract, deployed next to v2 as on a real site (the page's config names both). */
-  w.legacy = await deploy(chain, PEOPLE.deployer, a.OtcDeals, [], { label: "OtcDeals" });
+  w.legacy = await deploy(chain, people.deployer, a.OtcDeals, [], { label: "OtcDeals" });
   return w;
 }

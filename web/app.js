@@ -13,7 +13,7 @@ import { DealsV2 } from "./v2.js";
 
 /** What every page works with: where it draws, the config, the chain it reads, the v2 contract if the site has one, and the wallet, if the browser has one. */
 const app = { main: document.getElementById("app"), config: null, chain: null, v2: null, wallet: null, explorer: null };
-let page;
+let page, routeNumber = 0;
 
 start();
 
@@ -45,14 +45,31 @@ async function start() {
     app.v2 && h("p", {}, `v2 deal contract on ${networkName(chainId)} (0.5% fee each side, vesting): `, h("span", { class: "mono" }, app.v2.contract)),
     h("p", {}, `${app.v2 ? "v1 deal contract (no fee)" : `Deals contract on ${networkName(chainId)}`}: `, h("span", { class: "mono" }, contract)),
   ].filter(Boolean));
+  if (isAddress(app.config.contractV3 ?? "") && !/^0x0{40}$/.test(app.config.contractV3)) {
+    app.hasV3 = true;
+    document.getElementById("network").before(h("a", { class: "chip broker-entry", href: "#/v3/new" }, "Broker deals"));
+  }
   showAccount();
   addEventListener("hashchange", route);
   route();
 }
 
-function route() {
+async function route() {
   page?.stop();
+  page = null;
+  const visit = ++routeNumber;
   const hash = location.hash;
+  if (hash.startsWith("#/v3/")) {
+    app.main.replaceChildren(h("p", { class: "loading", role: "status" }, "Opening broker deals…"));
+    try {
+      const { brokerPage } = await import("./v3-page.js");
+      if (visit === routeNumber) page = brokerPage(app, hash);
+    } catch {
+      if (visit === routeNumber) app.main.replaceChildren(card(h("h1", {}, "Broker deals could not load"), h("p", {}, "Reload the page to try again.")));
+    }
+    if (visit === routeNumber) scrollTo(0, 0);
+    return;
+  }
   const v2Deal = /^#\/v2\/d\/(.*)$/.exec(hash), deal = /^#\/d\/(.*)$/.exec(hash);
   page = v2Deal ? dealPageV2(app, v2Deal[1]) : hash === "#/v2/new" ? newDealPageV2(app)
     : deal ? dealPage(app, deal[1]) : hash === "#/new" ? newDealPage(app) : homePage();
@@ -76,6 +93,7 @@ function homePage() {
         + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
     h("a", { class: "button primary", href: app.v2 ? "#/v2/new" : "#/new" }, "Make a deal"),
     app.v2 && h("a", { class: "button secondary", href: "#/new" }, "Make a v1 deal: a plain swap, no fee, no vesting"),
+    app.hasV3 && h("a", { class: "button secondary", href: "#/v3/new" }, "Prepare a broker deal"),
     h("form", { class: "row", onsubmit: open }, number, version, h("button", { class: "secondary", type: "submit" }, "Open"))));
   return { update() {}, stop() {} };
 }

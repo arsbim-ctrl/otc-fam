@@ -1,0 +1,96 @@
+/* Round 3 workspace. The legacy pages use their existing layout. */
+.broker-entry { color: #502bb1; text-decoration: none; font-weight: 700; }
+.top:has(.broker-entry) { max-width: 1120px; flex-wrap: wrap; }
+main:has(.broker-workspace), main:has(.broker-workspace) + footer { max-width: 1120px; }
+.broker-workspace {
+  --broker-ink: #201637;
+  --broker-muted: #5e5372;
+  --broker-edge: #ded7ec;
+  --broker-primary: #5230a9;
+  display: grid;
+  gap: 18px;
+  color: var(--broker-ink);
+}
+.broker-workspace :focus-visible { outline: 3px solid #6944c9; outline-offset: 3px; }
+.broker-workspace input:focus-visible { outline-offset: 1px; }
+.broker-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.broker-nav a {
+  text-decoration: none; font-size: 14px; font-weight: 700; color: var(--broker-primary);
+  background: #fff; border: 1px solid var(--broker-edge); border-radius: 10px; padding: 10px 14px;
+}
+.broker-nav a[aria-current] { background: var(--broker-primary); border-color: var(--broker-primary); color: #fff; }
+.broker-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 16px; }
+.broker-heading h1 { margin: 0; font-size: clamp(22px, 4vw, 37px); line-height: 1.1; letter-spacing: -0.04em; }
+.broker-intro { grid-column: 1 / -1; margin: 0; font-size: 15px; line-height: 1.5; color: var(--broker-muted); }
+.broker-kicker { margin: 0 0 6px; color: var(--broker-primary); font-size: 13px; font-weight: 750; }
+.broker-stage {
+  display: inline-block; width: fit-content; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px;
+  background: #f0ebfb; color: #512ea7; font-size: 13px; font-weight: 750;
+}
+.broker-stage.funded { background: #e3f4ec; color: #115936; }
+.broker-stage.settled { background: #e7edfa; color: #233d7e; }
+.broker-stage.expired, .broker-stage.unavailable { background: #fff1d7; color: #6d4000; }
+.broker-stage.refunded { background: #eeeaf3; color: #483b5e; }
+.broker-columns { display: grid; gap: 16px; align-items: start; }
+.broker-stack { display: grid; gap: 16px; min-width: 0; }
+.broker-preview:empty, .broker-feedback:empty { display: none; }
+.broker-panel {
+  min-width: 0; padding: clamp(15px, 2.4vw, 24px); display: grid; gap: 14px;
+  border: 1px solid var(--broker-edge); border-radius: 20px; background: #fff; box-shadow: 0 5px 16px #3a215008;
+}
+.broker-panel h2, .broker-panel h3 { margin: 0; }
+.broker-panel h3 { font-size: 16px; }
+.broker-muted { margin: 0; color: var(--broker-muted); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.broker-warning { margin: 0; color: #674200; }
+.broker-grid, .broker-form { display: grid; gap: 14px; }
+.broker-grid { grid-template-columns: minmax(0, 1fr); }
+.broker-field { display: grid; align-content: start; gap: 5px; min-width: 0; }
+.broker-field label { font-weight: 650; font-size: 14px; }
+.broker-field input, .broker-field select { min-height: 44px; min-width: 0; width: 100%; border-color: var(--broker-edge); }
+.broker-workspace .primary { background: var(--broker-primary); font-size: 15px; padding: 12px 14px; min-height: 44px; }
+.broker-workspace .primary:is(:disabled, [aria-disabled="true"]) { background: #e8e2ef; color: #665772; cursor: default; }
+.broker-workspace .secondary { color: #49279b; background: #f0eafb; min-height: 44px; }
+.broker-workspace .secondary[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+.broker-callout { background: #f0eafb; border-radius: 12px; padding: 11px 13px; margin: 0; color: #47277e; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.broker-legs { display: grid; gap: 10px; }
+.broker-leg {
+  display: grid; gap: 6px; min-width: 0; border: 1px solid #e5def0; border-radius: 14px; padding: 13px;
+  background: #f6f3fc; overflow-wrap: anywhere;
+}
+.broker-leg > span:first-child { font-size: 13px; font-weight: 700; color: var(--broker-muted); }
+.broker-leg strong { font-size: clamp(19px, 3vw, 29px); line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
+.broker-leg .mono { font-size: 11.5px; }
+.broker-facts {
+  display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin: 0; overflow-wrap: anywhere;
+}
+.broker-facts dt { color: var(--broker-muted); font-size: 12px; font-weight: 650; line-height: 1.4; }
+.broker-facts dd { margin: 3px 0 0; font-size: 14px; line-height: 1.4; }
+.broker-fees { font-variant-numeric: tabular-nums; }
+.broker-raw { display: block; color: var(--broker-muted); font-size: 11px; }
+.broker-details { padding: 11px 0 0; border-top: 1px solid var(--broker-edge); }
+.broker-details summary { width: fit-content; font-size: 14px; font-weight: 700; color: var(--broker-primary); cursor: pointer; }
+.broker-details[open] summary { margin-bottom: 12px; }
+.broker-receipt { display: grid; gap: 10px; min-width: 0; padding: 13px; border-radius: 13px; background: #f7f6fc; }
+.broker-receipt a { color: var(--broker-primary); }
+.broker-panel progress { width: 100%; height: 12px; accent-color: var(--broker-primary); }
+.broker-share { min-width: 0; display: grid; gap: 6px; }
+.broker-share-status { margin: 0; font-size: 13px; color: #175e3b; }
+.broker-share-status:empty { margin: 0; }
+.broker-entry-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.broker-entry-card { display: grid; gap: 10px; border: 1px solid var(--broker-edge); padding: 14px; border-radius: 14px; min-width: 0; }
+.broker-entry-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.broker-book-tools, .broker-entry-actions { display: grid; gap: 8px; align-items: end; }
+.broker-entry-actions { align-items: start; }
+@media (min-width: 660px) {
+  .broker-grid, .broker-legs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .broker-entry-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .broker-book-tools { grid-template-columns: 1fr 1fr minmax(160px, .7fr); }
+}
+@media (min-width: 900px) {
+  .broker-columns { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+  .broker-entry-actions { grid-template-columns: 1.3fr 1fr 1fr; }
+}
+@media (max-width: 465px) {
+  .broker-heading { grid-template-columns: 1fr; }
+  .broker-stage { grid-row: 2; }
+}
