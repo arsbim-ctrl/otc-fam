@@ -7,8 +7,8 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { TypedDataEncoder } from "ethers";
-import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, signerFor, until } from "../scripts/lib/site.mjs";
-import { ALLOCATION, DAY, feesOf, QUOTE, STATUS3, world3 } from "../scripts/lib/world3.mjs";
+import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, signerFor, until, walletSays } from "../scripts/lib/site.mjs";
+import { ALLOCATION, DAY, feesOf, QUOTE, signing, STATUS3, world3 } from "../scripts/lib/world3.mjs";
 import { packTerms } from "../web/v3.js";
 
 after(closeBrowser);
@@ -312,6 +312,11 @@ test("R3-02, R3-04: an expired deal can be neither funded nor settled and the pa
     await state(page, "void");
     assert.match(await seen(page, "next-actor"), /^This deal cannot be funded\. The seller has already funded another deal with nonce/);
     assert.equal(await offered(page), false);
+    // The history of the browser that opened them does not list such terms as awaiting funding either.
+    await page.goto(`${site.url}/#/v3/deals`);
+    const row = page.locator(`[data-testid="deal-row"][data-id="${w.idOf(again)}"]`);
+    await until(async () => (await row.count()) === 1 && (await row.getAttribute("data-status")) === "void", "the history calling terms that can never be funded what they are");
+    assert.equal(await row.locator('[data-testid="row-status"]').innerText(), "Cannot be funded");
   });
 }));
 
@@ -350,6 +355,100 @@ test("R3-05: a signature declined in the wallet, a transaction declined after si
     assert.match(await read(page), /Your wallet is on Ethereum, and this deal is on Local test chain\. Nothing can be signed or sent until it is switched\./);
     await pressUntil(page, async () => (await seen(page, "deal-status", "data-status")) === "settled", "the deal settled once the wallet switched");
   });
+  assert.equal(await statusOf(w, id), STATUS3.Settled);
+}));
+
+test("R3-05: when the wallet turns to another account or another network while the page is open, the page reads the chain again and says what the wallet can do now", () => onSite(async (site, w) => {
+  const t = await w.terms3(), id = await w.fund3(t);
+  await w.usdc.as(w.deployer).mint(w.buyer, TOTAL);
+  const before = await w.holdings(), now = { account: w.buyer, chainId: null, declines: 1 };
+  const wallet = signerFor(w, "buyer", async (request, answer) => {
+    if (request.method === "eth_requestAccounts") {
+      await answer(request); // the stand-in wallet is connected, and names the account its owner has chosen now
+      return { result: [now.account] };
+    }
+    if (request.method === "eth_chainId" && now.chainId) return { result: now.chainId };
+    if (request.method === "eth_sendTransaction" && now.declines-- > 0) return DECLINED;
+    if (request.method !== "wallet_switchEthereumChain") return null;
+    now.chainId = request.params[0].chainId;
+    return answer(request);
+  });
+  await browse(site, linkTo(w, t), { wallet }, async (page) => {
+    await pressUntil(page, async () => (await seen(page, "notice")) === "You declined in your wallet. Nothing was sent.", "the notice of the declined approval");
+    // Another account: what was said to the buyer is gone, and the page says why this account cannot settle.
+    now.account = w.other;
+    await walletSays(page, "accountsChanged", [w.other]);
+    await noticeSays(page, `Only the buyer, ${w.buyer}, can settle this deal.`);
+    await says(page, "next-actor", "buyer", "data-actor");
+    assert.equal(await offered(page), false, "another account is offered nothing to press");
+    // No account: the page asks for the buyer's wallet again.
+    await walletSays(page, "accountsChanged", []);
+    await says(page, "primary-action", "Connect wallet");
+    // The buyer's account again: the same step as before, with no notice left from the other account.
+    now.account = w.buyer;
+    await walletSays(page, "accountsChanged", [w.buyer]);
+    await says(page, "primary-action", "Approve 124.074072 USDC");
+    assert.equal(await page.getByTestId("notice").count(), 0, "the other account's notice is gone");
+    // Another network: nothing can be signed or sent until the wallet is switched back.
+    now.chainId = "0x1";
+    await walletSays(page, "chainChanged", "0x1");
+    await says(page, "primary-action", "Switch to Local test chain");
+    assert.deepEqual(await w.moved(before), {}, "nothing moved while the wallet changed");
+    await pressUntil(page, async () => (await seen(page, "deal-status", "data-status")) === "settled", "the deal settled once the wallet was the buyer's on the right network");
+  });
+  assert.equal(await statusOf(w, id), STATUS3.Settled);
+}));
+
+test("R3-05: a seller whose wallet is on another network is offered the switch, not a refund that could not be sent, on a funded deal and on an expired one", () => onSite(async (site, w) => {
+  const soon = (await w.chain.now()) + 300;
+  const funded = await w.terms3(), expired = await w.terms3({ expiry: soon });
+  const ids = [await w.fund3(funded), await w.fund3(expired)];
+  const elsewhere = () => {
+    let chainId = "0x1";
+    return signerFor(w, "seller", async (request, answer) => {
+      if (request.method === "eth_chainId") return { result: chainId };
+      if (request.method !== "wallet_switchEthereumChain") return null;
+      chainId = request.params[0].chainId;
+      return answer(request);
+    });
+  };
+  const refundsAfterSwitching = async (page) => {
+    await says(page, "primary-action", "Switch to Local test chain");
+    assert.equal(await page.getByTestId("refund-action").count(), 0, "no refund is offered while the wallet is on another network");
+    assert.match(await read(page), /Your wallet is on Ethereum, and this deal is on Local test chain\. Nothing can be signed or sent until it is switched\./);
+    await page.getByTestId("primary-action").click();
+    await until(async () => (await page.getByTestId("refund-action").count()) === 1 && (await page.getByTestId("refund-action").isEnabled()), "the refund button once the wallet has switched");
+    await page.getByTestId("refund-action").click();
+    await state(page, "refunded");
+  };
+  await browse(site, linkTo(w, funded), { wallet: elsewhere() }, async (page) => {
+    await page.getByTestId("primary-action").click(); // connects
+    await refundsAfterSwitching(page);
+  });
+  await w.at(soon);
+  await browse(site, linkTo(w, expired), { wallet: elsewhere() }, async (page) => {
+    await state(page, "expired");
+    await page.getByTestId("connect-action").click();
+    await refundsAfterSwitching(page);
+  });
+  for (const id of ids) assert.equal(await statusOf(w, id), STATUS3.Refunded);
+}));
+
+test("R3-02: a signature of the terms made with another key is refused before anything is sent, and the next press asks the wallet to sign again", () => onSite(async (site, w) => {
+  const t = await w.terms3(), id = await w.fund3(t);
+  await w.usdc.as(w.deployer).mint(w.buyer, TOTAL);
+  const asked = [];
+  let wrong = 1;
+  // The first time, the wallet answers with the stranger's signature of the very same terms.
+  const wallet = signerFor(w, "buyer", (request) => (request.method === "eth_signTypedData_v4" && wrong-- > 0 ? signing("other", { ...request, params: [w.other, request.params[1]] }) : null), asked);
+  await browse(site, linkTo(w, t), { wallet }, async (page) => {
+    await pressUntil(page, async () => (await seen(page, "notice"))?.includes("Sign again with that wallet."), "the notice that this is not the buyer's signature");
+    assert.match(await seen(page, "notice"), new RegExp(`^That is not ${w.buyer}'s signature of these exact terms`, "i"));
+    assert.equal(await statusOf(w, id), STATUS3.Funded, "the refused signature settled nothing");
+    assert.equal(asked.filter((method) => method === "eth_sendTransaction").length, 1, "only the approval was sent: the settlement was refused before the wallet was asked to send it");
+    await pressUntil(page, async () => (await seen(page, "deal-status", "data-status")) === "settled", "the deal settled with the buyer's own signature");
+  });
+  assert.equal(asked.filter((method) => method === "eth_signTypedData_v4").length, 2, "the refused signature was not kept: the wallet was asked again");
   assert.equal(await statusOf(w, id), STATUS3.Settled);
 }));
 
@@ -448,6 +547,11 @@ test("R3-05: the history lists a person's deals by role, from this browser and f
     await page.getByTestId("role-broker").click();
     await listed(page, all, "the six deals as broker");
 
+    // Copy link: the clipboard gets the deal's whole link, the one its row opens.
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: site.url });
+    await cell(page, ids.settled, "copy-link").click();
+    await until(async () => (await page.evaluate(() => navigator.clipboard.readText())) === `${site.url}/${linkTo(w, settled)}`, "the settled deal's link on the clipboard");
+
     // Duplicate terms: the form starts from them, and what it makes is another deal. The old one is unchanged.
     await cell(page, ids.settled, "row-duplicate").click();
     for (const [handle, text] of Object.entries({ "buyer-total": "100,500", "broker-fee": "200", "treasury-fee": "800" })) await says(page, handle, text);
@@ -473,8 +577,33 @@ test("R3-05: the seller's funding can be done from the keyboard alone: the butto
     await until(async () => (await statusOf(w, id)) === STATUS3.Funded, "the deal funded with three presses of Enter");
     await state(page, "funded");
     assert.equal(await seen(page, "deal-status"), "Funded", "the status is said in words, not only in colour");
+    // The pressed button is gone now: the focus is on the line that says whose turn it is, not back at the top of the page.
+    await until(() => page.evaluate(() => document.activeElement?.dataset.testid === "next-actor"), "the focus on the line that says whose turn it is");
+    assert.equal(await seen(page, "next-actor", "role"), "status", "a screen reader reads that line out");
+    assert.match(await seen(page, "next-actor"), /^Waiting for the buyer to settle\./);
   });
 }));
+
+for (const [width, size] of SIZES) {
+  test(`R3-05: at ${width} width the buyer settles from the keyboard alone, and the focus then rests on the line that says the deal is settled`, () => onSite(async (site, w) => {
+    const t = await w.terms3(), id = await w.fund3(t);
+    await w.usdc.as(w.deployer).mint(w.buyer, TOTAL);
+    await browse(site, linkTo(w, t), { wallet: signerFor(w, "buyer"), size }, async (page) => {
+      await page.getByTestId("primary-action").focus();
+      const focused = () => page.evaluate(() => document.activeElement?.dataset.testid === "primary-action" && !document.activeElement.disabled);
+      for (const label of ["Connect wallet", "Approve 124.074072 USDC", "Sign and settle: pay 124.074072 USDC"]) {
+        await until(async () => (await focused()) && (await seen(page, "primary-action")) === label, `"${label}" focused and ready`);
+        await page.keyboard.press("Enter");
+      }
+      await until(async () => (await statusOf(w, id)) === STATUS3.Settled, "the deal settled with three presses of Enter");
+      await state(page, "settled");
+      await until(() => page.evaluate(() => document.activeElement?.dataset.testid === "next-actor"), "the focus on the line that says the deal is settled");
+      assert.match(await seen(page, "next-actor"), /^Settled\. Nobody has to act/);
+      assert.ok(await page.getByTestId("token-warning").count() === 0, "a settled deal asks for no approval, so it carries no token warning");
+      assert.ok(await fits(page), "the settled deal and its receipt fit the window");
+    });
+  }));
+}
 
 test("R3-05: the broker's form shows the broker's exact share for any rate before a link exists, and refuses terms the contract would refuse", () => onSite(async (site, w) => {
   await browse(site, "#/v3/new", {}, async (page) => {
@@ -501,6 +630,19 @@ test("R3-05: the broker's form shows the broker's exact share for any rate befor
     await page.getByTestId("quote-token").fill(w.usdc.address);
     await says(page, "primary-action", "Create the deal link");
     assert.equal(await offered(page), true, "with no wallet in the browser at all");
+    // A field with a fault is marked for a screen reader and tied to the note that says what is wrong.
+    await page.getByTestId("broker-share").fill("100.01");
+    await until(async () => (await page.getByTestId("broker-share").getAttribute("aria-invalid")) === "true", "the share marked as wrong");
+    assert.match(await page.locator(`#${await page.getByTestId("broker-share").getAttribute("aria-describedby")}`).innerText(), /^Write a percentage from 0 to 100/);
+    await page.getByTestId("broker-share").fill("20");
+    await until(async () => (await page.getByTestId("broker-share").getAttribute("aria-invalid")) === null, "the mark gone once the share is right");
+    // A schedule the contract could not hold passes every single field, and still gets no link.
+    await page.getByTestId("delivery-vesting").check();
+    await page.getByTestId("duration-days").fill("213503982334601");
+    await says(page, "primary-action", "Create the deal link");
+    await page.getByTestId("primary-action").click();
+    await noticeSays(page, "That vesting schedule ends too far in the future to be written on the chain.");
+    assert.equal(await page.getByTestId("deal-link").count(), 0, "terms the contract would refuse get no link");
   });
 }));
 

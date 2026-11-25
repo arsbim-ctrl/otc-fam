@@ -223,6 +223,7 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
 .status.void { background: var(--bad-bg); color: var(--bad); }
 .turn { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 14px; line-height: 1.45; }
 .turn.seller, .turn.buyer { background: var(--accent-soft); color: #3a1ea3; }
+.turn:focus-visible { outline: 3px solid #c6b5ff; outline-offset: 2px; }
 .held.wait { color: var(--warn); }
 .facts.terms dt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; text-transform: none; }
 .facts.settlement { margin-top: 14px; padding: 12px; border-radius: 14px; background: var(--ok-bg); }

@@ -9,12 +9,12 @@
 import { explain, same } from "./eth.js";
 import { amount, card, copyButton, fact, fromNow, h, networkName, notice, secondary, short, show, transaction, utc } from "./ui.js";
 import { isAddress } from "./units.js";
-import { book, linkOf, money, packTerms, percent, settleBy, stateOf, VESTING } from "./v3.js";
+import { book, flawOf, linkOf, money, packTerms, percent, settleBy, stateOf, VESTING } from "./v3.js";
 
 const ROLES = { all: "All", broker: "As broker", seller: "As seller", buyer: "As buyer", here: "Others in this browser" };
 const ROLE_WORDS = { broker: "Broker: you receive the share", seller: "Seller: you fund", buyer: "Buyer: you settle", here: "None: this browser prepared or opened the deal, which names other addresses" };
-const WORDS = { awaiting: "Awaiting funding", funded: "Funded", settled: "Settled", refunded: "Refunded", expired: "Expired" };
-const DEADLINE = { awaiting: "Can be funded and settled until", funded: "Can be settled until", expired: "Expired", settled: "Was open until", refunded: "Was open until" };
+const WORDS = { awaiting: "Awaiting funding", funded: "Funded", settled: "Settled", refunded: "Refunded", expired: "Expired", void: "Cannot be funded" };
+const DEADLINE = { awaiting: "Can be funded and settled until", funded: "Can be settled until", expired: "Expired", settled: "Was open until", refunded: "Was open until", void: "Would have been open until" };
 
 export function historyPageV3(app) {
   const { config, chain, wallet, v3, explorer } = app;
@@ -55,8 +55,10 @@ export function historyPageV3(app) {
       const receipts = await v3.receiptsOf(ids).catch(() => new Map());
       const rows = (await Promise.all(ids.map(async (id) => {
         const deal = await v3.deal(id), t = deal.terms ?? known.get(id).terms;
-        const [base, quote] = await Promise.all([chain.token(t.baseToken), chain.token(t.quoteToken)]);
-        return { id, t, base, quote, status: deal.status, state: stateOf(t, deal.status, Math.max(block.time, Date.now() / 1000)), role: roleOf(address, t, known.get(id)?.how),
+        // Terms that can never be funded await nothing: they break a rule of the contract, or their seller's nonce is spent.
+        const flawed = deal.status === "unfunded" && Boolean(flawOf(t, v3.contract));
+        const [base, quote, spent] = await Promise.all([chain.token(t.baseToken), chain.token(t.quoteToken), deal.status === "unfunded" && !flawed ? v3.nonceUsed(t.seller, t.nonce) : false]);
+        return { id, t, base, quote, status: deal.status, state: flawed || spent ? "void" : stateOf(t, deal.status, Math.max(block.time, Date.now() / 1000)), role: roleOf(address, t, known.get(id)?.how),
           how: known.get(id)?.how ?? null, at: known.get(id)?.at ?? 0, receipt: receipts.get(id) ?? null };
       }).map((row) => row.catch(() => null)))).filter(Boolean); // a deal whose tokens do not answer cannot be shown, or funded
       if (read !== reads) return; // a later read is on its way
@@ -80,8 +82,8 @@ export function historyPageV3(app) {
     return h("div", { class: "history" },
       card(
         h("div", { class: "card-head" }, h("h1", {}, "Broker deals", " ", h("span", { class: "version", testid: "version" }, "v3"))),
-        h("p", { class: "lead" }, "The deals you broker, sell and buy, each with its state on the chain now and its receipt. Deals that are not funded yet are known only "
-          + "to the browser they were prepared or opened in."),
+        h("p", { class: "lead" }, "The deals you broker, sell and buy, each with its state on the chain now and its receipt. A deal you created here awaits funding until its "
+          + "seller deposits; deals that are not funded yet are known only to the browser they were created or opened in."),
         identity(address),
         h("div", { class: "tabs", role: "group", "aria-label": "Show deals by your role" }, Object.entries(ROLES).filter(([role]) => role !== "here" || counts.here).map(([role, label]) =>
           h("button", { class: "tab", type: "button", testid: `role-${role}`, "aria-pressed": String(s.role === role), onclick: () => {
@@ -127,7 +129,7 @@ export function historyPageV3(app) {
     const open = state === "awaiting" || state === "funded";
     const left = state === "expired" ? Math.min(-1, settleBy(t) - now) : settleBy(t) - now; // an expired deal's deadline is behind it, even by a second
     const noReceipt = status === "funded" ? (open ? "Funded; not settled yet. Its page lists the funding transaction." : "Funded, then expired before it was settled: the seller can take the tokens back.")
-      : "None yet: nothing was deposited or paid.";
+      : state === "void" ? "None: these terms can never be funded. The deal's page says why." : "None yet: nothing was deposited or paid.";
     return h("li", { class: "card deal-row", testid: "deal-row", "data-id": id, "data-status": state, "data-role": role },
       h("div", { class: "card-head" }, h("h2", { testid: "row-pair" }, `${base.symbol} / ${quote.symbol}`),
         h("span", { class: `status ${state}`, testid: "row-status", "data-status": state }, WORDS[state])),
@@ -141,10 +143,10 @@ export function historyPageV3(app) {
         fact("Seller and buyer", h("span", { class: "mono" }, `${short(t.seller)} → ${short(t.buyer)}`)),
         fact("Receipt", h("span", { testid: "row-receipt", "data-kind": receipt?.kind ?? "none" }, receipt ? `${receipt.kind === "settled" ? "Settled" : "Refunded"} in block ${receipt.block}: ` : noReceipt),
           receipt && transaction(receipt.hash, explorer)),
-        fact("Deal ID", h("span", { class: "mono" }, short(id)), how === "prepared" ? " · prepared in this browser" : how === "opened" ? " · opened in this browser" : " · found on the chain")),
+        fact("Deal ID", h("span", { class: "mono" }, short(id)), how === "prepared" ? " · created in this browser" : how === "opened" ? " · opened in this browser" : " · found on the chain")),
       h("div", { class: "row wrap" },
         h("a", { class: "button secondary", testid: "row-open", href: link }, receipt ? "Open the receipt" : "Open the deal"),
-        copyButton(`${location.href.split("#")[0]}${link}`),
+        copyButton(`${location.href.split("#")[0]}${link}`, "Copying failed: open the deal and copy its address"),
         h("a", { class: "button secondary", testid: "row-duplicate", href: `#/v3/new/${payload}` }, "Duplicate terms")));
   }
 

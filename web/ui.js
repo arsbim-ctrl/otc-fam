@@ -138,14 +138,20 @@ if (typeof document !== "undefined") {
 /**
  * Shows `view` in `container`: the first time by putting it there, afterwards by changing what is there in place.
  * If the element the person had focused could not keep the focus (it was disabled for a moment, or replaced), the
- * element with the same handle gets it back as soon as it can take it.
+ * element with the same handle gets it back as soon as it can take it. `otherwise`, if given, is the handle of the
+ * element that takes the focus, and comes into view, when that one is gone, or when what the person was doing is
+ * `over`: the focus then neither falls back to the top of the page nor lands on another button with the old handle.
  */
-export function show(container, view) {
+export function show(container, view, otherwise, over = false) {
   const current = container.firstElementChild;
   if (current && container.childNodes.length === 1) morph(current, view);
   else container.replaceChildren(view);
   if (!keep || container.contains(document.activeElement)) return;
-  const wanted = container.querySelector(`[data-testid="${CSS.escape(keep)}"]`);
+  const at = (handle) => container.querySelector(`[data-testid="${CSS.escape(handle)}"]`);
+  const wanted = at(keep), instead = otherwise ? at(otherwise) : null;
+  // Only a focus that is nowhere is sent elsewhere: one the person put outside the container stays where it is.
+  const nowhere = !document.activeElement || document.activeElement === document.body;
+  if (instead && nowhere && (over || !wanted)) return instead.focus();
   if (wanted && !wanted.disabled) wanted.focus({ preventScroll: true });
 }
 
@@ -183,22 +189,26 @@ export function press(event, run) {
 export const secondary = (testid, label, run) =>
   h("button", { class: "secondary", type: "button", testid, disabled: !run, onclick: run && ((e) => press(e, run)) }, label);
 
-/** The block under a deal or the form: the steps, the one button (`run` makes it pressable), what it does, a notice. */
-export function action({ steps, step, button, hint, notice: message, extra }) {
+/**
+ * The block under a deal or the form: the steps, the one button (`run` makes it pressable), what it does, a notice.
+ * `announce` has the hint read out to a screen reader as it changes: where a press stands while it runs.
+ */
+export function action({ steps, step, button, hint, notice: message, extra, announce }) {
   return h("div", { class: "action" },
     steps && h("ol", { class: "steps" }, steps.map((name, i) => h("li", { class: i < step ? "done" : i === step ? "now" : "" }, name))),
     button && h("button", { class: `primary${button.label.length > 28 ? " long" : ""}`, type: "button", testid: "primary-action", disabled: !button.run,
       onclick: button.run && ((e) => press(e, button.run)) }, button.label),
-    hint && h("p", { class: "hint" }, hint),
+    hint && h("p", { class: "hint", role: announce ? "status" : null }, hint),
     message && notice(message),
     extra);
 }
 
-export function copyButton(text) {
-  return h("button", { class: "secondary", type: "button", onclick: async (e) => {
+/** A button that copies the link `text`. `failed` is what it says when the browser gives no clipboard: where to copy the link from by hand. */
+export function copyButton(text, failed = "Copying failed: copy the link from the address bar") {
+  return h("button", { class: "secondary", type: "button", testid: "copy-link", onclick: async (e) => {
     const button = e.currentTarget;
     const copied = navigator.clipboard ? await navigator.clipboard.writeText(text).then(() => true, () => false) : false;
-    button.textContent = copied ? "Link copied" : "Copying failed: copy the link from the address bar";
+    button.textContent = copied ? "Link copied" : failed;
     setTimeout(() => (button.textContent = "Copy link"), 2500);
   } }, "Copy link");
 }

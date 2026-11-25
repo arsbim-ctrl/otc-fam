@@ -104,7 +104,18 @@ function injectWallet() {
       return this;
     },
   };
+  // What a wallet tells the page when its owner changes the account or the network in it (walletSays below).
+  window.__standWalletSays = (event, value) => {
+    for (const listener of listeners[event] ?? []) listener(value);
+  };
 }
+
+/**
+ * The stand-in wallet of `page` tells the page what a real one does when its owner turns to another account
+ * ("accountsChanged", a list of addresses) or another network ("chainChanged", a chain id in hex). The wallet's own
+ * answers must change with it: `instead` of walletFor is the place for that.
+ */
+export const walletSays = (page, event, value) => page.evaluate(([name, told]) => window.__standWalletSays(name, told), [event, value]);
 
 let browser;
 /** Closes the browser the pages share; call it once everything is done. */

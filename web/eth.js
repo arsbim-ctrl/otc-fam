@@ -301,6 +301,8 @@ function revertData(error) {
   const places = [error?.data, error?.data?.data, error?.data?.originalError?.data, error?.error?.data, error?.info?.error?.data];
   return places.find((value) => typeof value === "string" && /^0x[0-9a-f]{8}/i.test(value)) ?? null;
 }
+/** Which of a contract's errors an error carries: the selector its revert data begins with, or null. */
+export const refusalOf = (error) => revertData(error)?.slice(0, 10).toLowerCase() ?? null;
 
 /**
  * What went wrong, for the person: a refusal in their wallet, a deal contract's reason, the page's own words, or a

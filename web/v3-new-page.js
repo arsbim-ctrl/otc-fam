@@ -6,10 +6,10 @@
 // buyer settles it, each from their own wallet, on the deal's page.
 // #/v3/new/<terms> starts the form from another deal's terms (to duplicate them): the new deal gets a new nonce and
 // a new deadline, so it is another deal with another ID, and the old one is unchanged.
-import { explain, same } from "./eth.js";
+import { explain, same, say } from "./eth.js";
 import { action, amount, card, copyButton, dot, fact, h, networkName, secondary, setNote, show, span, TOKEN_WARNING, utc } from "./ui.js";
 import { daysToSeconds, formatAmount, isAddress, openFor, parseAmount, parseUtc } from "./units.js";
-import { BPS, IMMEDIATE, linkOf, money, packTerms, percent, remember, unpackTerms, VESTING } from "./v3.js";
+import { BPS, flawOf, IMMEDIATE, linkOf, money, packTerms, percent, remember, unpackTerms, VESTING } from "./v3.js";
 
 /** A share of the fees typed as a percentage ("20", "12.5") -> hundredths of a percent, or what to fix. */
 export function shareOf(text) {
@@ -74,7 +74,12 @@ export function newDealPageV3(app, from = "") {
     choice("start", "settlement", "start-settlement", "At settlement", "When the buyer pays, at that block's time.", true),
     choice("start", "fixed", "start-fixed", "At a fixed time", "A date and time in UTC, still in the future."));
   const pill = { base: h("span", { class: "token" }), quote: h("span", { class: "token" }) };
-  const note = Object.fromEntries(["base", "quote", "seller", "buyer", "broker", "share", "hours", "start", "cliff", "duration"].map((key) => [key, h("p", { class: "note" })]));
+  const note = Object.fromEntries(["base", "quote", "seller", "buyer", "broker", "share", "hours", "start", "cliff", "duration"].map((key) => [key, h("p", { class: "note", id: `note-${key}` })]));
+  // Each field is tied to the note under it, which says what the field means or what is wrong with it: a screen reader reads the two together.
+  const NOTE_OF = { baseToken: "base", allocation: "base", quoteToken: "quote", quote: "quote", seller: "seller", buyer: "buyer", broker: "broker", share: "share", hours: "hours", start: "start", cliff: "cliff", duration: "duration" };
+  for (const [key, name] of Object.entries(NOTE_OF)) field[key].setAttribute("aria-describedby", `note-${name}`);
+  /** Marks the fields a note finds fault with (aria-invalid), and clears the mark once they are right. */
+  const flag = (bad, ...inputs) => inputs.forEach((el) => (bad ? el.setAttribute("aria-invalid", "true") : el.removeAttribute("aria-invalid")));
   const startBox = h("div", { class: "field" }, h("label", { for: "start-utc" }, "Start (UTC)"), field.start, note.start);
   const vestingBox = h("div", { class: "vesting-fields" }, startMode, startBox,
     h("div", { class: "pair" },
@@ -211,8 +216,17 @@ export function newDealPageV3(app, from = "") {
       pill[key].replaceChildren(...(x.token ? [dot(x.token), x.token.symbol] : ["Token"]));
       pill[key].classList.toggle("empty", !x.token);
       setNote(note[key], x.note ?? (x.pending ? "Looking up the token…" : x.token ? `${x.token.symbol}, ${x.token.decimals} decimals` : ""), Boolean(x.note));
+      // With no token known the fault is in the token's address; with one, in the amount.
+      flag(Boolean(x.note) && !x.token, field[`${key}Token`]);
+      flag(Boolean(x.note) && Boolean(x.token), field[key === "base" ? "allocation" : "quote"]);
     }
-    if (t.distinct.note) setNote(note.quote, t.distinct.note, true);
+    if (t.distinct.note) {
+      setNote(note.quote, t.distinct.note, true);
+      flag(true, field.quoteToken);
+    }
+    for (const key of ["seller", "buyer", "broker", "share"]) flag(Boolean(t[key].note), field[key]);
+    flag(Boolean(t.expiry.note), field.hours);
+    for (const key of ["start", "cliff", "duration"]) flag(Boolean(t.schedule.notes[key]), field[key]);
     setNote(note.seller, t.seller.note ?? "Only this address can fund the deal: it deposits the tokens.", Boolean(t.seller.note));
     setNote(note.buyer, t.buyer.note ?? "Only this address can settle the deal, and a vesting grant only ever pays this address.", Boolean(t.buyer.note));
     setNote(note.broker, t.broker.note ?? "Your share is paid to this address when the buyer settles, and never before.", Boolean(t.broker.note));
@@ -276,6 +290,9 @@ export function newDealPageV3(app, from = "") {
       const terms = { seller: t.seller.address, buyer: t.buyer.address, baseToken: t.base.token.address, quoteToken: t.quote.token.address, allocation: t.base.units, quote: t.quote.units,
         expiry: BigInt(Math.floor(start + t.expiry.hours * 3600)), nonce: newNonce(), delivery: t.vesting ? VESTING : IMMEDIATE, fixedStart: BigInt(t.schedule.fixedStart),
         cliffSeconds: t.schedule.cliffSeconds, durationSeconds: t.schedule.durationSeconds, broker: t.broker.address, brokerBps: t.share.bps };
+      // Terms the contract would refuse get no link: nobody could ever fund them.
+      const flaw = flawOf(terms, v3.contract);
+      if (flaw) throw say(`${flaw} Change the form, then try again.`);
       const id = await v3.idOf(terms);
       remember(app, id, terms, "prepared");
       if (live) s.created = { id, terms, base: t.base.token, quote: t.quote.token, link: `${location.href.split("#")[0]}${linkOf(app, packTerms(terms))}` };
@@ -310,7 +327,7 @@ export function newDealPageV3(app, from = "") {
       h("p", { class: "lead" }, "Send this one link to the seller, then to the buyer. It shows the terms to anyone, with no wallet, and it gives nobody any right: "
         + "the deal is on the chain only once the seller has signed these terms and funded it."),
       h("div", { class: "linkbox" }, h("a", { testid: "deal-link", href: link }, link)),
-      h("div", { class: "row" }, copyButton(link), h("a", { class: "button secondary", href: link }, "Open the deal")),
+      h("div", { class: "row" }, copyButton(link, "Copying failed: select the link above and copy it"), h("a", { class: "button secondary", href: link }, "Open the deal")),
       h("dl", { class: "facts" },
         fact("Deal ID", h("span", { class: "mono", testid: "created-id" }, id)),
         fact("Delivery", vesting ? "Vesting: a new grant for the buyer" : "Immediate: to the buyer's wallet"),
@@ -333,7 +350,8 @@ export function newDealPageV3(app, from = "") {
       delivery.querySelector('[value="vesting"]').checked = true;
       field.cliff.value = daysOf(t.cliffSeconds);
       field.duration.value = daysOf(t.durationSeconds);
-      if (Number(t.fixedStart) > now() + 60) {
+      // A start that is still ahead is kept; one beyond what a date can say is left for the broker to enter.
+      if (Number(t.fixedStart) > now() + 60 && Number(t.fixedStart) < 8.64e12) {
         startMode.querySelector('[value="fixed"]').checked = true;
         field.start.value = new Date(Number(t.fixedStart) * 1000).toISOString().slice(0, 19).replace("T", " ");
       }

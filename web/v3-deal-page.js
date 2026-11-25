@@ -5,7 +5,7 @@
 // buyer signs the same terms and settles. After a vesting settlement it is the grant's page too (v2-grant.js draws
 // it), and every transaction is listed as a receipt (v3-receipt.js). A link that ends with a deal's ID works as
 // well, once the deal is funded: the chain then has its terms.
-import { approveExactly, explain, same, say, transact } from "./eth.js";
+import { approveExactly, explain, refusalOf, same, say, transact } from "./eth.js";
 import { flow } from "./flow.js";
 import { action, amount, card, copyButton, fact, fromNow, h, head, leg, networkName, NO_WALLET, notice, secondary, short, show, span, TOKEN_WARNING, utc } from "./ui.js";
 import { formatAmount, isAddress } from "./units.js";
@@ -16,6 +16,7 @@ import { claimData, DOMAIN, flawOf, fundData, linkOf, money, packTerms, percent,
 // The signatures made while this page is open, by deal and account: a transaction declined after signing does not
 // ask for the signature again. They are kept nowhere else.
 const signed = new Map();
+const BAD_SIGNATURE = "0x9a7d38d9"; // BadSignature(address): the contract's refusal of a signature that is not the signer's of these terms
 
 export function dealPageV3(app, path) {
   const { config, chain, wallet, v3 } = app;
@@ -27,7 +28,9 @@ export function dealPageV3(app, path) {
   // t: the terms. status: what the chain says of the deal. history: undefined until its events are read, null when the node would not give them.
   const s = { id: null, t: null, status: null, grantId: 0n, base: null, quote: null, block: null, escrow: 0n, buyerHolds: 0n, treasury: null, grant: null, funds: null,
     nonceUsed: false, history: undefined, historyOf: null, failed: null, busy: null, notice: null, receipt: null };
-  let live = true, reads = 0, timer;
+  let live = true, reads = 0, timer, shown = null, movedOn = false; // shown: the state the page drew last
+  const walletNow = () => `${wallet?.account}:${wallet?.chainId}`;
+  let walletSeen = walletNow();
   const poll = setInterval(() => s.busy || load(), 5000);
   const onFocus = () => s.busy || load();
   addEventListener("focus", onFocus);
@@ -100,7 +103,14 @@ export function dealPageV3(app, path) {
 
   function render() {
     if (!live) return;
-    show(app.main, view());
+    // When a press is over and its button is gone (the deal was funded, settled or refunded, or the wallet that
+    // connected is not the one whose turn it is), the focus goes to the line that says whose turn it is now, which
+    // a screen reader then reads out. It never goes to another button: a second Enter must not refund or claim.
+    const st = s.t ? state() : null;
+    if (shown !== null && st !== shown) movedOn = true;
+    shown = st;
+    show(app.main, view(), s.busy ? null : "next-actor", movedOn);
+    if (!s.busy) movedOn = false;
     clearTimeout(timer);
     const left = s.t && (s.status === "unfunded" || s.status === "funded") ? settleBy(s.t) - now() : -1;
     // The page turns to "expired" on time.
@@ -145,8 +155,8 @@ export function dealPageV3(app, path) {
     const t = s.t, q = s.quote, m = money(t.quote, t.brokerBps), st = state(), role = roleOf(wallet?.account), vesting = t.delivery === VESTING, done = s.status === "settled";
     const give = amount(t.allocation, s.base), turn = turnOf(st, role, give);
     const [payLabel, receiveLabel] = role === "seller" ? [done ? "The buyer paid" : "The buyer pays", done ? "You sold" : "You sell"]
-      : role === "buyer" ? [done ? "You paid" : "You pay", done ? (vesting ? "Your grant holds" : "You received") : "You receive"]
-      : [done ? "The buyer paid" : "The buyer pays", done ? (vesting ? "The buyer's grant holds" : "The buyer received") : "The buyer receives"];
+      : role === "buyer" ? [done ? "You paid" : "You pay", done ? (vesting ? "Your grant was funded with" : "You received") : "You receive"]
+      : [done ? "The buyer paid" : "The buyer pays", done ? (vesting ? "The buyer's grant was funded with" : "The buyer received") : "The buyer receives"];
     const sum = (label, testid, units, ...more) => fact(label, h("span", { testid }, formatAmount(units, q.decimals)), ` ${q.symbol}`, ...more);
     const open = st === "awaiting" || st === "funded";
     document.title = `Broker deal ${short(s.id)} (v3): ${give} for ${amount(t.quote, q)} · otc.fam`;
@@ -156,11 +166,12 @@ export function dealPageV3(app, path) {
         h("strong", {}, vesting ? "Vesting delivery" : "Immediate delivery"),
         vesting ? ": the buyer gets a new grant that unlocks over time. Settled does not mean unlocked." : ": the buyer gets the tokens in the settlement transaction."),
       h("p", { class: "lead" }, lead(st, role, vesting)),
-      h("p", { class: `turn ${turn.who}`, testid: "next-actor", "data-actor": turn.who, role: "status" }, h("strong", {}, turn.title), " ", turn.why),
+      h("p", { class: `turn ${turn.who}`, testid: "next-actor", "data-actor": turn.who, role: "status", tabindex: "-1" }, h("strong", {}, turn.title), " ", turn.why),
       waiting(),
       leg(payLabel, m.buyerTotal, q, "pay", `Price ${amount(t.quote, q)} + 0.5% buyer fee ${amount(m.buyerFee, q)}`),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
-      leg(receiveLabel, t.allocation, s.base, "receive", vesting ? "As a vesting grant, held in a vault of its own." : "To the buyer's wallet, at settlement."),
+      leg(receiveLabel, t.allocation, s.base, "receive", !vesting ? "To the buyer's wallet, at settlement."
+        : done ? "As a vesting grant, paid to the buyer out of a vault of its own as it vests." : "As a vesting grant, held in a vault of its own."),
       funding(st, give, vesting),
       h("dl", { class: "facts" },
         sum("Price", "price", t.quote),
@@ -187,9 +198,10 @@ export function dealPageV3(app, path) {
       return { who: "buyer", title: "Waiting for the buyer to settle.", why: `${name("buyer", t.buyer)} must sign these terms and pay. No other wallet can settle, and the seller can take the tokens back until then.` };
     }
     if (st === "settled") {
-      return s.grant && s.grant.claimed < s.grant.allocation
+      if (t.delivery !== VESTING) return { who: "none", title: "Settled.", why: "Nobody has to act: everything was paid and delivered in one transaction." };
+      return !s.grant || s.grant.claimed < s.grant.allocation
         ? { who: "buyer", title: "Settled.", why: "Nobody has to act. The buyer claims from the grant as it vests; no other wallet can." }
-        : { who: "none", title: "Settled.", why: "Nobody has to act: everything was paid and delivered in one transaction." };
+        : { who: "none", title: "Settled, and the grant is paid out.", why: "Nobody has to act: the buyer has claimed the whole allocation from the grant." };
     }
     if (st === "refunded") return { who: "none", title: "Refunded.", why: "Nobody can act on this deal any more: the seller took the tokens back." };
     if (st === "void") return { who: "none", title: "This deal cannot be funded.", why: voidWhy() };
@@ -227,8 +239,12 @@ export function dealPageV3(app, path) {
       return "A private deal for one buyer. Anyone can check its terms and its funding here; only the buyer's wallet can settle it.";
     }
     if (st === "settled") {
-      return vesting ? "Settled, not unlocked: the buyer paid, and the whole allocation moved into a vault that pays the buyer as the grant vests."
-        : "Settled: in one transaction the buyer paid, the seller, the broker and the treasury were paid, and the tokens went to the buyer.";
+      if (!vesting) return "Settled: in one transaction the buyer paid, the seller, the broker and the treasury were paid, and the tokens went to the buyer.";
+      // What the grant's card says in numbers, in a sentence: the page never says "not unlocked" of a grant that is.
+      const g = s.grant, moved = "the buyer paid, and the whole allocation moved into a vault of the grant's own";
+      if (g && g.claimed >= g.allocation) return `Settled, and fully claimed: ${moved}; the buyer has since claimed all of it.`;
+      if (g && g.vested >= g.allocation) return `Settled, and fully vested: ${moved}; the buyer can claim everything that is left in it.`;
+      return `Settled, not unlocked: ${moved}, which pays the buyer as the grant vests.`;
     }
     if (st === "refunded") return "The seller took the allocation back. The deal can no longer be settled; no fee was taken and the broker received nothing.";
     if (st === "void") return "These terms can never become a deal on the chain. Nothing was deposited.";
@@ -255,7 +271,7 @@ export function dealPageV3(app, path) {
   /** A deal that awaits funding: the seller's button (connect, switch network, approve, sign and fund), and what it is about to do. */
   function sellerActions(t, role, m, give) {
     const steps = walletSteps(s.base, "Sign and fund"), me = wallet?.account;
-    if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: busyHint() });
+    if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: busyHint(), announce: true });
     if (!wallet) return action({ steps, step: 0, button: { label: "Connect the seller's wallet to fund" }, notice: { kind: "info", text: NO_WALLET }, extra: copyButton(fullLink()) });
     if (!me) {
       return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: `Only the seller, ${t.seller}, can fund this deal. Connect that wallet. Nothing is sent yet.`, notice: s.notice });
@@ -279,15 +295,17 @@ export function dealPageV3(app, path) {
   /** A funded deal: the buyer's button (connect, switch network, approve, sign and settle); to the seller, the way to take the tokens back. */
   function buyerActions(t, role, m, give) {
     const q = s.quote, steps = walletSteps(q, "Sign and settle"), me = wallet?.account, total = amount(m.buyerTotal, q), vesting = t.delivery === VESTING;
-    if (s.busy?.step === null) return action({ hint: busyHint(), extra: secondary("refund-action", s.busy.label) });
-    if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: busyHint() });
+    if (s.busy?.step === null) return action({ hint: busyHint(), announce: true, extra: secondary("refund-action", s.busy.label) });
+    if (s.busy) return action({ steps: role === "seller" ? null : steps, step: s.busy.step, button: { label: s.busy.label }, hint: busyHint(), announce: true });
     if (!wallet) return action({ steps, step: 0, button: { label: "Connect the buyer's wallet to settle" }, notice: { kind: "info", text: NO_WALLET }, extra: copyButton(fullLink()) });
     if (!me) {
       return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: `Only the buyer, ${t.buyer}, can settle this deal. Connect that wallet. Nothing is sent yet.`, notice: s.notice });
     }
     if (role === "seller") {
-      return action({ notice: s.notice ?? { kind: "info", text: `This is your own deal: only its buyer can settle it. Until then you can take back your ${give}. A refund costs no fee and pays the broker nothing.` },
-        extra: secondary("refund-action", `Refund: take back ${give}`, refund) });
+      const yours = `This is your own deal: only its buyer can settle it. Until then you can take back your ${give}. A refund costs no fee and pays the broker nothing.`;
+      // A wallet on another network cannot send the refund: it is offered the switch first, as the buyer's is.
+      if (wallet.chainId !== config.chainId) return wrongNetwork(null, yours);
+      return action({ notice: s.notice ?? { kind: "info", text: yours }, extra: secondary("refund-action", `Refund: take back ${give}`, refund) });
     }
     if (role !== "buyer") return action({ notice: s.notice ?? notYours("settle", "buyer", t.buyer, role === "broker" ? "broker" : "other", m) });
     if (wallet.chainId !== config.chainId) return wrongNetwork(steps);
@@ -307,15 +325,15 @@ export function dealPageV3(app, path) {
         + "All of it happens, or nothing moves.", notice: s.notice });
   }
 
-  const wrongNetwork = (steps) => action({ steps, step: 0, button: { label: `Switch to ${networkName(config.chainId)}`, run: switchNetwork },
-    hint: `Your wallet is on ${networkName(wallet.chainId)}, and this deal is on ${networkName(config.chainId)}. Nothing can be signed or sent until it is switched.`, notice: s.notice });
+  const wrongNetwork = (steps, first = "") => action({ steps, step: 0, button: { label: `Switch to ${networkName(config.chainId)}`, run: switchNetwork },
+    hint: `${first}${first && " "}Your wallet is on ${networkName(wallet.chainId)}, and this deal is on ${networkName(config.chainId)}. Nothing can be signed or sent until it is switched.`, notice: s.notice });
 
   /** What a settled, refunded, expired or impossible deal offers: nothing to settle; to its seller, an expired deal's tokens back. */
   function ended(st, role, give) {
     const vesting = s.t.delivery === VESTING, again = h("a", { class: "button secondary", testid: "duplicate", href: `#/v3/new/${packTerms(s.t)}` }, "Duplicate these terms into a new deal");
     if (st === "settled") {
       return h("div", { class: "action" },
-        h("p", { class: "success" }, vesting ? `The grant is funded with all ${give}. Its schedule, and what can be claimed, are in the grant's card on this page.`
+        h("p", { class: "success" }, vesting ? `The grant was funded with all ${give} at settlement. Its schedule, and what is vested, claimed and still locked now, are in the grant's card on this page.`
           : `Delivered: all ${give} went to the buyer's wallet in the settlement transaction. That wallet holds ${amount(s.buyerHolds, s.base)} now.`),
         !vesting && s.notice && notice(s.notice));
     }
@@ -326,9 +344,10 @@ export function dealPageV3(app, path) {
         wallet && !wallet.account && secondary("connect-action", s.busy?.label ?? "Sold this? Connect to take your tokens back", !s.busy && connect),
         s.notice && notice(s.notice));
     }
+    if (!s.busy && wallet.chainId !== config.chainId) return wrongNetwork(null, `Only you can act on this deal now, to take your ${give} back.`);
     return h("div", { class: "action" },
       secondary("refund-action", s.busy?.label ?? `Refund: take back your ${give}`, !s.busy && refund),
-      s.busy && busyHint() && h("p", { class: "hint" }, s.busy.hint),
+      s.busy && busyHint() && h("p", { class: "hint", role: "status" }, s.busy.hint),
       s.notice && notice(s.notice));
   }
 
@@ -377,10 +396,20 @@ export function dealPageV3(app, path) {
     const total = money(s.t.quote, s.t.brokerBps).buyerTotal;
     return presses.act(`Approving ${amount(total, s.quote)}…`, 1, (stage) => approveExactly(app, s.quote, total, s.funds.allowance, stage, v3.contract));
   };
-  const fund = () => presses.act("Signing and funding…", 2, async (stage, sent) =>
-    transact(app, v3.contract, fundData(s.t, await signature(stage)), stage, `Funding the deal with ${amount(s.t.allocation, s.base)}`, sent));
-  const settle = () => presses.act("Signing and settling…", 2, async (stage, sent) =>
-    transact(app, v3.contract, settleData(s.id, await signature(stage)), stage, `Paying ${amount(money(s.t.quote, s.t.brokerBps).buyerTotal, s.quote)} for ${amount(s.t.allocation, s.base)}`, sent));
+  /** Sends the transaction that carries the account's signature. A signature the contract refuses is not kept: the next press asks the wallet for it again. */
+  async function signedSend(stage, sent, dataFor, what) {
+    const key = `${s.id}:${wallet.account}`;
+    try {
+      return await transact(app, v3.contract, dataFor(await signature(stage)), stage, what, sent);
+    } catch (e) {
+      if (refusalOf(e) === BAD_SIGNATURE) signed.delete(key);
+      throw e;
+    }
+  }
+  const fund = () => presses.act("Signing and funding…", 2, (stage, sent) =>
+    signedSend(stage, sent, (signature) => fundData(s.t, signature), `Funding the deal with ${amount(s.t.allocation, s.base)}`));
+  const settle = () => presses.act("Signing and settling…", 2, (stage, sent) =>
+    signedSend(stage, sent, (signature) => settleData(s.id, signature), `Paying ${amount(money(s.t.quote, s.t.brokerBps).buyerTotal, s.quote)} for ${amount(s.t.allocation, s.base)}`));
   const refund = () => presses.act("Refunding…", null, (stage, sent) => transact(app, v3.contract, refundData(s.id), stage, "Taking the allocation back", sent));
   const claim = () => presses.act("Claiming…", 1, (stage, sent) => transact(app, v3.contract, claimData(s.grantId), stage, `Claiming ${amount(s.grant.claimable, s.base)}`, sent));
 
@@ -388,7 +417,14 @@ export function dealPageV3(app, path) {
     s.notice = { kind: "info", text: "The transaction sent before this page was reloaded is confirmed. What you see is the chain's state now." };
   }));
   return {
-    update: () => s.busy || load(),
+    // The wallet changed its account or its network: what the page said to the wallet as it was is not about this
+    // one, and everything is read from the chain again.
+    update() {
+      const now = walletNow();
+      if (now !== walletSeen && !s.busy) s.notice = null;
+      walletSeen = now;
+      return s.busy || load();
+    },
     stop() {
       live = false;
       presses.stop();
