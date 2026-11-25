@@ -246,7 +246,7 @@ Every test of round 3 is named by the acceptance point it shows, and compares wh
 and after (`holdings()`), to the smallest unit. `npm run play:v3` plays the brief's scenes at 390 px and
 1440 px with a broker, a seller, a buyer and a stranger, each in a browser of their own; it prints what a
 person reads, the balances that moved, and saves the screens. [evidence/round-3/](evidence/round-3/) holds
-one run of the checks, the tests and the scenes, with its 42 screenshots.
+one run of the checks, the tests and the scenes, with its 34 screenshots.
 
 | | Shown by |
 | --- | --- |

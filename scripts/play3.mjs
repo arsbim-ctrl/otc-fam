@@ -39,14 +39,16 @@ async function play(size) {
   const linkOf = (t) => `#/v3/d/31337/${w.v3.address.toLowerCase()}/${packTerms(t)}`;
   const pressed = (page) => async (presses) => console.log(`    press ${presses + 1}: ${await seen(page, "primary-action")}`);
 
-  /** Prints what the page shows now, and saves it as `<folder>/<name>-<width>.jpg`. */
+  /** Prints what the page shows now and, when `name` starts with a number, saves it as `<folder>/<name>-<width>.jpg`. */
   async function look(page, name) {
-    const file = `${name}-${size.width}.jpg`;
+    const file = /^\d/.test(name) ? `${name}-${size.width}.jpg` : null;
     await page.waitForTimeout(150); // a last look-up may still be drawing
     assert.ok(await fits(page), `${name}: the page is wider than its ${size.width} px window`);
-    await page.screenshot({ path: join(folder, file), fullPage: true, type: "jpeg", quality: 45 });
-    shots++;
-    console.log(`\n--- ${name} (${file})\n${(await read(page)).split("\n").map((line) => `    ${line}`).join("\n")}`);
+    if (file) {
+      await page.screenshot({ path: join(folder, file), fullPage: true, type: "jpeg", quality: 38 });
+      shots++;
+    }
+    console.log(`\n--- ${name} (${file ?? "text only"})\n${(await read(page)).split("\n").map((line) => `    ${line}`).join("\n")}`);
     // What was typed or chosen in a form is not part of the page's text: it is listed after it.
     const typed = await page.evaluate(() => [...document.querySelectorAll("input[data-testid]")].filter((i) => i.offsetParent && (i.type === "radio" ? i.checked : i.value))
       .map((i) => (i.type === "radio" ? `${i.dataset.testid} chosen` : `${i.dataset.testid} = ${i.value}`)));
@@ -102,7 +104,7 @@ async function play(size) {
       await pressUntil(page, is(a.id, STATUS3.Funded), "the deal funded", pressed(page));
       await state(page, "funded");
       await until(async () => (await page.locator('[data-testid="receipts"] li[data-kind="funded"]').count()) === 1, "the funding's receipt");
-      await look(page, "05-seller-funded");
+      await look(page, "the seller's page once the deal is funded");
       await moved(start, { "seller.FAM": -ALLOCATION, "brokerDeals.FAM": ALLOCATION }, "funding the deal (no fee, nothing for the broker)");
     });
 
@@ -111,7 +113,7 @@ async function play(size) {
       await says(page, "funding", "true", "data-funded");
       await says(page, "next-actor", "buyer", "data-actor");
       assert.equal(await offered(page), false);
-      await look(page, "06-buyer-no-wallet");
+      await look(page, "05-buyer-no-wallet");
     });
     await browse(site, a.hash, { wallet: signerFor(w, "buyer"), size }, async (page) => {
       const before = await w.holdings();
@@ -120,7 +122,7 @@ async function play(size) {
       await says(page, "receipt-broker-fee", "200");
       const tx = await seen(page, "settlement", "data-tx");
       assert.equal(await page.locator('[data-testid="receipt-tx"] a').getAttribute("href"), `${EXPLORER}/tx/${tx}`, "the receipt links to the explorer");
-      await look(page, "07-buyer-settled-receipt");
+      await look(page, "06-buyer-settled-receipt");
       await moved(before, { "buyer.USDC": -100_500n * USDC, "seller.USDC": 99_500n * USDC, "broker.USDC": 200n * USDC, "treasury.USDC": 800n * USDC, "buyer.FAM": ALLOCATION, "brokerDeals.FAM": -ALLOCATION },
         "the immediate settlement of 100,000 USDC with a 20% broker share");
       await page.reload();
@@ -135,12 +137,12 @@ async function play(size) {
     const b = await browse(site, "#/v3/new", { size }, async (page) => {
       await form(page, "123.456789", true);
       for (const [id, text] of Object.entries({ "buyer-total": "124.074072", "seller-net": "122.839506", "fee-pool": "1.234566", "broker-fee": "0.246913", "treasury-fee": "0.987653" })) await says(page, id, text);
-      await look(page, "08-broker-form-vesting");
+      await look(page, "07-broker-form-vesting");
       return link(page);
     });
     await browse(site, b.hash, { wallet: signerFor(w, "buyer"), size }, async (page) => {
       await pressUntil(page, async () => (await seen(page, "notice"))?.includes("not funded yet") && !(await offered(page)), "why the buyer cannot settle yet", pressed(page));
-      await look(page, "09-buyer-cannot-settle-unfunded");
+      await look(page, "08-buyer-cannot-settle-unfunded");
     });
     await browse(site, b.hash, { wallet: signerFor(w, "seller"), size }, async (page) => {
       await pressUntil(page, is(b.id, STATUS3.Funded), "the vesting deal funded");
@@ -154,14 +156,14 @@ async function play(size) {
     });
     const vault = await browse(site, b.hash, { wallet: elsewhere, size }, async (page) => {
       await pressUntil(page, async () => (await seen(page, "primary-action")) === "Switch to Local test chain", "the offer to switch network", pressed(page));
-      await look(page, "10-buyer-on-another-network");
+      await look(page, "09-buyer-on-another-network");
       const before = await w.holdings();
       await pressUntil(page, is(b.id, STATUS3.Settled), "the vesting deal settled", pressed(page));
       const { custodian } = await w.v3.read.getGrant(1);
       w.watch("vault", custodian);
       await says(page, "grant-status", "cliff", "data-status");
       await says(page, "receipt-delivery", "1", "data-grant");
-      await look(page, "11-vesting-settled-day-0");
+      await look(page, "10-vesting-settled-day-0");
       await moved({ ...before, "vault.FAM": 0n }, { "buyer.USDC": -fees.buyerTotal, "seller.USDC": fees.sellerNet, "broker.USDC": fees.brokerFee, "treasury.USDC": fees.treasuryFee,
         "brokerDeals.FAM": -ALLOCATION, "vault.FAM": ALLOCATION }, "the vesting settlement of 123.456789 USDC with a 20% broker share: the whole allocation is in the grant's vault");
       return custodian;
@@ -172,7 +174,7 @@ async function play(size) {
     const cId = await w.fund3(c);
     await browse(site, linkOf(c), { wallet: signerFor(w, "other"), size }, async (page) => {
       await pressUntil(page, async () => (await seen(page, "notice"))?.includes(w.buyer) && !(await offered(page)), "a notice naming the buyer", pressed(page));
-      await look(page, "12-not-a-party");
+      await look(page, "11-not-a-party");
     });
     await browse(site, linkOf(c), { wallet: signerFor(w, "broker"), size }, async (page) => {
       await pressUntil(page, async () => (await seen(page, "notice"))?.includes("You are this deal's broker") && !(await offered(page)), "what the broker can and cannot do", pressed(page));
@@ -181,11 +183,11 @@ async function play(size) {
     await browse(site, linkOf(c), { wallet: signerFor(w, "seller"), size }, async (page) => {
       const before = await w.holdings();
       await pressUntil(page, async () => (await page.getByTestId("refund-action").count()) === 1, "the seller's refund button", pressed(page));
-      await look(page, "13-seller-can-refund");
+      await look(page, "12-seller-can-refund");
       await page.getByTestId("refund-action").click();
       await state(page, "refunded");
       await until(async () => (await page.locator('[data-testid="receipts"] li[data-kind="refunded"]').count()) === 1, "the refund's receipt");
-      await look(page, "14-refunded");
+      await look(page, "13-refunded");
       await moved(before, { "seller.FAM": ALLOCATION, "brokerDeals.FAM": -ALLOCATION }, "the refund (no fee, nothing for the broker)");
     });
 
@@ -199,13 +201,13 @@ async function play(size) {
       await state(page, "expired");
       await says(page, "next-actor", "none", "data-actor");
       assert.equal(await offered(page), false);
-      await look(page, "15-expired-before-funding");
+      await look(page, "14-expired-before-funding");
     });
     await browse(site, linkOf(e), { wallet: signerFor(w, "buyer"), size }, async (page) => {
       await state(page, "expired");
       await says(page, "next-actor", "seller", "data-actor");
       assert.equal(await offered(page), false);
-      await look(page, "16-expired-funded-cannot-settle");
+      await look(page, "15-expired-funded-cannot-settle");
     });
     await moved(beforeExpired, {}, "expiry (no fee, nothing for the broker)");
 
@@ -222,11 +224,11 @@ async function play(size) {
       const statuses = await page.getByTestId("deal-row").evaluateAll((rows) => rows.map((row) => row.dataset.status).sort());
       assert.deepEqual(statuses, ["awaiting", "expired", "expired", "funded", "refunded", "settled", "settled"]);
       assert.deepEqual(await page.getByTestId("deal-row").evaluateAll((rows) => [...new Set(rows.map((row) => row.dataset.role))]), ["broker"]);
-      await look(page, "17-broker-history");
+      await look(page, "16-broker-history");
       await page.locator(`[data-testid="deal-row"][data-id="${gId}"] [data-testid="row-duplicate"]`).click();
       await says(page, "broker-fee", "200");
       await shows(page, "copied", (text) => text.includes("another deal with another ID"), "the note that these are copied terms");
-      await look(page, "18-broker-duplicates-terms");
+      await look(page, "17-broker-duplicates-terms");
       const copy = await link(page);
       assert.notEqual(copy.id, gId, "duplicated terms are another deal, with another ID");
       console.log(`\n    DUPLICATE: the copied terms became deal ${copy.id}, another deal than ${gId}, whose terms are unchanged.`);
@@ -235,7 +237,7 @@ async function play(size) {
       await page.getByTestId("connect-action").click();
       await until(async () => (await page.getByTestId("deal-row").count()) === 5, "the five deals the chain has for the seller");
       assert.deepEqual(await page.getByTestId("deal-row").evaluateAll((rows) => [...new Set(rows.map((row) => row.dataset.role))]), ["seller"]);
-      await look(page, "19-seller-history-from-the-chain");
+      await look(page, "the seller's history, from the chain alone");
     });
     assert.equal((await w.v3.read.getDeal(eId)).status, STATUS3.Funded);
     assert.equal((await w.v3.read.getDeal(cId)).status, STATUS3.Refunded);
@@ -256,8 +258,9 @@ async function play(size) {
         await look(page, name);
         await moved(held, { "buyer.FAM": amount, "vault.FAM": -amount }, "the claim (no fee, nothing for the broker)");
       };
-      await claim(cliff, "20-grant-day-30-claimed", ALLOCATION / 3n, { claimable: "333,333.333333333333333333", claimed: "333,333.333333333333333333" });
-      await claim(end, "21-grant-day-90-claimed", ALLOCATION - ALLOCATION / 3n, { claimable: "666,666.666666666666666667", claimed: "1,000,000" });
+      // In text only: the grant's card is the one round 2's screenshots show day by day (evidence/round-2).
+      await claim(cliff, "the grant on day 30, at its cliff, after the claim", ALLOCATION / 3n, { claimable: "333,333.333333333333333333", claimed: "333,333.333333333333333333" });
+      await claim(end, "the grant on day 90, at its end, after the last claim", ALLOCATION - ALLOCATION / 3n, { claimable: "666,666.666666666666666667", claimed: "1,000,000" });
       assert.equal(await w.fam.read.balanceOf(vault), 0n, "the vault paid everything out");
     });
 
