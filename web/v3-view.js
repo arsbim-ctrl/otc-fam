@@ -32,16 +32,16 @@ export function domainLabel(domain) {
   return `${networkName(domain.chainId)} · Chain ${domain.chainId}`;
 }
 
-export function compare(terms, base, quote) {
+export function compare(terms, base, quote, allowRaw = true) {
   return h("div", { class: "broker-pair" },
     h("div", {}, h("span", { class: "eyeline" }, "Base allocation"),
-      h("strong", {}, quoteAmount(terms.allocation, base)), addressText(terms.baseToken)),
+      h("strong", {}, base || allowRaw ? quoteAmount(terms.allocation, base) : "Amount unavailable"), addressText(terms.baseToken)),
     h("div", {}, h("span", { class: "eyeline" }, "Agreed quote"),
-      h("strong", {}, quoteAmount(terms.quote, quote)), addressText(terms.quoteToken)));
+      h("strong", {}, quote || allowRaw ? quoteAmount(terms.quote, quote) : "Amount unavailable"), addressText(terms.quoteToken)));
 }
 
-export function feeFacts(fees, quote, terms, treasury) {
-  const fee = (label, units, id) => fact(label, h("span", { testid: id }, quoteAmount(units, quote)));
+export function feeFacts(fees, quote, terms, treasury, allowRaw = true) {
+  const fee = (label, units, id) => fact(label, h("span", { testid: id }, quote || allowRaw ? quoteAmount(units, quote) : "Amount unavailable"));
   return h("dl", { class: "broker-facts broker-fees" },
     fee("Buyer pays", fees.buyerTotal, "broker-buyer-total"),
     fee("Seller receives", fees.sellerNet, "broker-seller-net"),
@@ -52,7 +52,7 @@ export function feeFacts(fees, quote, terms, treasury) {
     treasury && fact("Treasury wallet", addressText(treasury)));
 }
 
-export function exactTerms(terms, domain, id) {
+export function exactTerms(terms, domain, id, { hasAllocation = true, hasQuote = true } = {}) {
   return h("dl", { class: "broker-facts" },
     fact("Seller wallet", addressText(terms.seller)),
     fact("Designated buyer wallet", addressText(terms.buyer)),
@@ -60,8 +60,8 @@ export function exactTerms(terms, domain, id) {
     fact("Share in basis points", String(terms.brokerBps)),
     fact("Expiry", utc(terms.expiry), h("span", { class: "block mono" }, `${terms.expiry} Unix seconds`)),
     fact("Seller nonce", addressText(String(terms.nonce))),
-    fact("Allocation · raw units", addressText(String(terms.allocation))),
-    fact("Quote · raw units", addressText(String(terms.quote))),
+    fact("Allocation · raw units", hasAllocation ? addressText(String(terms.allocation)) : "Amount unavailable"),
+    fact("Quote · raw units", hasQuote ? addressText(String(terms.quote)) : "Amount unavailable"),
     fact("Delivery", deliveryLabel(terms)),
     fact("Start", terms.delivery ? (terms.fixedStart ? utc(terms.fixedStart) : "At settlement") : "Immediate",
       h("span", { class: "block mono" }, `Fixed start ${terms.fixedStart} (Unix seconds)`)),

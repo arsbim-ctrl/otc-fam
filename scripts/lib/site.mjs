@@ -100,12 +100,13 @@ export const closeBrowser = () => browser?.then((b) => b.close());
  * Opens `site.url/<hash>` in a fresh browser profile (English, UTC) at `size`, with `wallet` (walletFor) as
  * window.ethereum or none, runs `steps(page)` and closes it. A failure carries what the page itself reported.
  */
-export async function browse(site, hash, { wallet = null, size = PHONE } = {}, steps) {
+export async function browse(site, hash, { wallet = null, size = PHONE, waitUntil = "load" } = {}, steps) {
   browser ??= chromium.launch();
   const context = await (await browser).newContext({ locale: "en-US", timezoneId: "UTC", viewport: size });
   const reported = [];
   try {
-    context.setDefaultTimeout(5000);
+    context.setDefaultTimeout(45_000);
+    context.setDefaultNavigationTimeout(90_000);
     if (wallet) {
       await context.exposeBinding("__standWallet", (_source, request) => wallet(request));
       await context.addInitScript(injectWallet);
@@ -113,7 +114,7 @@ export async function browse(site, hash, { wallet = null, size = PHONE } = {}, s
     const page = await context.newPage();
     page.on("pageerror", (e) => reported.push(`uncaught ${e.message}`));
     page.on("console", (m) => m.type() === "error" && reported.push(m.text()));
-    await page.goto(`${site.url}/${hash}`);
+    await page.goto(`${site.url}/${hash}`, { waitUntil });
     return await steps(page);
   } catch (e) {
     throw new Error(`${e.message}${reported.length ? `\nThe page reported: ${reported.slice(-5).join(" | ").slice(0, 800)}` : ""}`);

@@ -108,7 +108,9 @@ export class Chain {
   }
 
   async balanceOf(token, owner, block) {
-    return uint(words(await this.call(token, encode(SELECTOR.balanceOf, owner), undefined, block))[0] ?? "0");
+    const result = await this.call(token, encode(SELECTOR.balanceOf, owner), undefined, block);
+    if (block !== undefined && !/^0x[\da-f]{64}$/i.test(result)) throw say("The token balance could not be verified at this block.");
+    return uint(words(result)[0] ?? "0");
   }
 
   /** What `owner` lets `spender` (the round 1 deal contract unless given) take of `token`. */
@@ -223,11 +225,9 @@ const NO_FEE = "This wallet has too little of the network's own coin (ETH) to pa
  * wallet has sent it. A transaction the chain would refuse is never sent. Whether the wallet can pay the network
  * fee is the wallet's to say (some have it paid for them): its refusal is worded by explain().
  */
-export async function transact({ chain, wallet, config }, to, data, stage, what, sent) {
-  await chain.call(to, data, wallet.account);
-  const count = await chain.rpc("eth_getTransactionCount", [wallet.account, "latest"]).then(BigInt, () => null);
-  stage(`${what}. Confirm it in your wallet.`);
-  const hash = await wallet.send({ to, data }, config.chainId);
+export async function transact(app, to, data, stage, what, sent) {
+  const { chain, wallet } = app;
+  const { hash, count } = await broadcast(app, to, data, stage, what, true);
   // The wallet's node knows the number it gave the transaction; failing that, the account's count before it was sent.
   const nonce = (await wallet.nonceOf(hash)) ?? count;
   sent?.(hash, nonce);
@@ -235,14 +235,22 @@ export async function transact({ chain, wallet, config }, to, data, stage, what,
   return chain.confirmed(hash, wallet.account, nonce);
 }
 
+/** Simulates the call and returns as soon as the wallet supplies a transaction hash. */
+export async function broadcast({ chain, wallet, config }, to, data, stage, what, captureCount = false) {
+  await chain.call(to, data, wallet.account);
+  const count = captureCount ? await chain.rpc("eth_getTransactionCount", [wallet.account, "latest"]).then(BigInt, () => null) : null;
+  stage(`${what}. Confirm it in your wallet.`);
+  return { hash: await wallet.send({ to, data }, config.chainId), count };
+}
+
 /** Approves `spender` (the round 1 deal contract unless given) for exactly `units` of `token`: one deal's amount, never more. */
-export async function approveExactly(app, token, units, allowance, stage, spender = app.config.contract) {
+export async function approveExactly(app, token, units, allowance, stage, spender = app.config.contract, send = transact) {
   const data = approveData(spender, units);
   // Some tokens (USDT among them) refuse to change an approval that is not zero: it is set to zero first.
   if (allowance > 0n && (await app.chain.call(token.address, data, app.wallet.account).then(() => false, () => true))) {
-    await transact(app, token.address, approveData(spender, 0n), stage, `Setting your ${token.symbol} approval to zero first`);
+    await send(app, token.address, approveData(spender, 0n), stage, `Setting your ${token.symbol} approval to zero first`);
   }
-  await transact(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`);
+  await send(app, token.address, data, stage, `Approving ${formatAmount(units, token.decimals)} ${token.symbol}`);
 }
 
 // Why a deal contract refused a call, in words: its errors by selector, with their arguments' words. The first eleven

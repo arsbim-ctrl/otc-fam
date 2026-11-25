@@ -13,6 +13,27 @@ npm test
 BROKER_EVIDENCE_DIR=evidence/round-3 node --test test/v3-page.test.mjs
 ```
 
+## Recovery and observed balances
+
+Run this command from a clean checkout with Node.js 22 or later and Playwright's Chromium system
+dependencies. The pinned Playwright image already includes those system dependencies.
+
+```sh
+npm ci --ignore-scripts && npx playwright install chromium && node --test --test-reporter=tap test/v3-recovery.test.mjs
+```
+
+At both 390 px and 1440 px, the command prints the actual before-and-after balance deltas in raw units.
+The local refund returns the full allocation with zero quote movements. The tests also verify a grant
+claim with metadata unavailable, that critical deal-state errors pause sending, and that unrelated and
+wrong-network wallets leave balances untouched.
+
+The receipt test submits a real unmined local transaction, injects a receipt RPC error and reloads.
+It verifies that **Check transaction** queries the pending hash, keyboard focus stays on the active
+control during passive updates, and the chain settles exactly once. A separate case returns a real
+receipt for another deal on the same contract and verifies that the page shows the canonical
+settlement for the requested deal when it occurs. Dynamic errors use a persistent live region.
+[Modern Web Guidance on live regions](https://developer.chrome.com/docs/modern-web-guidance/guides/accessibility/accessibility#8-live-regions)
+
 | Acceptance | Verification |
 | --- | --- |
 | R3-01 | Round 3 checks fund and settle immediate swaps and funded vesting grants. Both browser viewport tests prepare as broker, fund as seller, settle as buyer and check the stranger's restrictions. |

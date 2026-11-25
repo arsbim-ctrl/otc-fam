@@ -278,3 +278,8 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
   .broker-columns { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; }
 }
 .broker-feedback:empty, .broker-wallet-slot:empty, .broker-action-buttons:empty { display: none; }
+.broker-payment-slot:empty, .broker-pending-slot:empty { display: none; }
+.broker-feedback .notice + .notice { margin-top: 6px; }
+.broker-feedback:has(.notice) { margin-bottom: 14px; }
+.broker-action-buttons button[aria-disabled="true"] { background: #e9e7f1; color: #645e7c; cursor: default; }
+.broker-pending { overflow-wrap: anywhere; }

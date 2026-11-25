@@ -1,7 +1,7 @@
-import { approveExactly, explain, same, say, transact } from "./eth.js";
+import { approveExactly, broadcast, explain, same, say, word, ZERO_ADDRESS } from "./eth.js";
 import {
   blockTag, brokerMoney, dealPhase, fundData, grantClaimData, linkPayload, readPayload,
-  refundData, settleData, typedTerms,
+  refundData, settleData, typedTerms, V3_TOPIC,
 } from "./v3.js";
 import { fact, h, notice, show, span, transaction, utc } from "./ui.js";
 import {
@@ -12,12 +12,20 @@ import {
 const PENDING_HASH = /^0x[\da-f]{64}$/i;
 const eventTitle = { funded: "Escrow funding", settled: "Settlement receipt", refunded: "Seller refund" };
 const completeStatus = { fund: "funded", settle: "settled", refund: "refunded", claim: "settled" };
-const stepName = { fund: "Funding escrow", settle: "Settling deal", refund: "Refunding allocation", claim: "Claiming vested tokens" };
+const stepName = { approval: "Approving tokens", fund: "Funding escrow", settle: "Settling deal", refund: "Refunding allocation", claim: "Claiming vested tokens" };
+
+const completionTopic = {
+  fund: V3_TOPIC.BrokerDealFunded, settle: V3_TOPIC.BrokerDealSettled,
+  refund: V3_TOPIC.BrokerDealRefunded, claim: V3_TOPIC.BrokerGrantClaimed,
+};
 
 function readPending(key) {
   try {
     const value = JSON.parse(sessionStorage.getItem(key));
-    if (PENDING_HASH.test(value?.hash) && /^0x[\da-f]{40}$/i.test(value.account) && Object.hasOwn(stepName, value.action)) return value;
+    if (PENDING_HASH.test(value?.hash) && /^0x[\da-f]{40}$/i.test(value.account) && Object.hasOwn(stepName, value.action)) {
+      // Older records could use an estimated nonce. Only follow replacements using an exact one.
+      return { ...value, nonce: value.to && /^\d+$/.test(value.nonce) ? value.nonce : null };
+    }
   } catch {}
   return null;
 }
@@ -41,6 +49,7 @@ export function brokerDealPage(app, payload) {
   }
   let stopped = false;
   let refreshing = false;
+  let refreshQueued = false;
   let model = null;
   let readError = "";
   let message = null;
@@ -49,21 +58,24 @@ export function brokerDealPage(app, payload) {
   let treasury;
   let base;
   let quote;
-  let latestHash;
-  let focusAfterAction;
+  let readingMetadata = false;
+  let triedMetadata = false;
+  let pending;
+  let replacementReads = 0;
   let showExact = false;
 
   function render() {
     if (stopped) return;
     const { phase, status, grant, receipts = [], receiptError = "" } = model ?? {};
     const fees = brokerMoney(terms.quote, terms.brokerBps);
+    const verified = Boolean(status && status !== "unfunded");
     const actions = actionView(phase, status, grant);
     const receipt = receipts.find((event) => event.kind === "settled");
     const summary = panel(
       h("span", { class: "eyeline" }, domainLabel(v3.domain)),
       h("div", { class: "card-head" }, h("h1", {}, "Private broker deal"), h("div", { role: "status" }, phase && statusPill(phase))),
       h("p", { class: "broker-delivery" }, deliveryLabel(terms)),
-      compare(terms, base, quote),
+      compare(terms, base, quote, verified),
       h("dl", { class: "broker-facts" },
         fact("Named seller", addressText(terms.seller)), fact("Designated buyer", addressText(terms.buyer)),
         fact("Expires", utc(terms.expiry)),
@@ -72,28 +84,39 @@ export function brokerDealPage(app, payload) {
       tokenWarning(),
       h("details", { open: showExact, ontoggle: (e) => {
         if (e.currentTarget.isConnected) showExact = e.currentTarget.open;
-      } }, h("summary", {}, "Exact terms for signing"), exactTerms(terms, v3.domain, id)));
+      } }, h("summary", {}, "Exact terms for signing"), exactTerms(terms, v3.domain, id, { hasAllocation: verified || Boolean(base), hasQuote: verified || Boolean(quote) })));
 
     const actionsPanel = panel(h("h2", { tabindex: "-1", testid: "broker-action-title" }, actions.heading),
       h("p", { class: "lead", testid: "broker-next" }, actions.hint),
+      h("div", { class: "broker-feedback" },
+        h("div", { role: "alert", "aria-atomic": "true", testid: "broker-errors" },
+          readError && h("p", { class: "notice error" }, readError),
+          message?.kind === "error" && h("p", { class: "notice error" }, message.text)),
+        h("div", { role: "status", "aria-atomic": "true" },
+          triedMetadata && (!base || !quote) && h("p", { class: "notice warn", testid: "broker-metadata" },
+            "Token display details are unavailable. Verified amounts may appear in raw units. Funding and settlement require both tokens’ display details."),
+          receiptError && h("p", { class: "notice warn" }, receiptError),
+          message?.kind === "info" && h("p", { class: "notice info" }, message.text))),
       h("div", { class: "broker-stack" },
-        h("div", { class: "broker-stack broker-feedback" },
-          readError && notice({ kind: "error", text: readError }),
-          receiptError && notice({ kind: "warn", text: receiptError }),
-          message && notice(message)),
+        h("div", { class: "broker-pending-slot" }, pending && h("p", { class: "hint broker-pending", testid: "broker-pending" },
+          "Submitted transaction ", transaction(pending.hash, app.explorer), ". Sending is paused while its outcome is unknown.")),
         h("div", { class: "broker-wallet-slot" }, walletButton(app, refresh, report, busy)),
         h("div", { class: "broker-stack broker-action-buttons" },
           actions.available.map(([action, label, secondary]) =>
             h("button", { type: "button", class: secondary ? "secondary" : "primary", testid: `broker-${action}`,
-              disabled: busy || Boolean(readError), onclick: (event) => run(action, event.currentTarget) }, label))),
-        h("button", { type: "button", class: "secondary", onclick: refresh }, "Refresh chain data")));
+              "aria-disabled": blocked(action) ? "true" : null, onclick: () => run(action) }, label))),
+        h("button", { type: "button", class: "secondary", testid: "broker-refresh", onclick: () => refresh(true) },
+          pending ? "Check transaction" : "Refresh chain data")));
 
+    const focusedAction = document.activeElement?.closest(".broker-action-buttons") ? document.activeElement.dataset.testid : null;
     const activity = receipts.length > 0 && panel(h("h2", {}, "Onchain activity"),
       h("ol", { class: "broker-events" }, receipts.map((event) => h("li", {}, h("strong", {}, eventTitle[event.kind]), txLine(event)))));
     show(app.main, brokerView(null, h("div", { class: "broker-columns" },
       summary,
       h("aside", { class: "broker-stack", "aria-label": "Payment and next step" },
-        status !== "settled" && panel(h("h2", {}, "Payment on settlement"), feeFacts(fees, quote, terms, treasury)), actionsPanel)),
+        h("div", { class: "broker-payment-slot" },
+          status !== "settled" && panel(h("h2", {}, "Payment on settlement"), feeFacts(fees, quote, terms, treasury, verified))),
+        actionsPanel)),
     status === "settled" && h("div", { class: "broker-columns" },
       receipt && receiptView(receipt, quote, grant),
       grant && grantView(grant, base)),
@@ -101,12 +124,15 @@ export function brokerDealPage(app, payload) {
       panel(h("h2", {}, "Share this deal"),
         h("p", { class: "lead" }, "Anyone with the link can view the terms. Share it only with the intended parties."),
         copyControls(linkFor(v3.domain, terms))))));
-
-    if (focusAfterAction && model?.status === focusAfterAction.status && (focusAfterAction.target !== "broker-receipt-title" || receipt)) {
-      const { target } = focusAfterAction;
-      focusAfterAction = null;
-      if (!app.main.contains(document.activeElement)) app.main.querySelector(`[data-testid="${target}"]`)?.focus();
+    if (focusedAction && document.activeElement?.dataset.testid !== focusedAction) {
+      (app.main.querySelector(`[data-testid="${CSS.escape(focusedAction)}"]`) ??
+        app.main.querySelector('[data-testid="broker-refresh"]'))?.focus({ preventScroll: true });
     }
+  }
+
+  function blocked(action) {
+    return stopped || busy || Boolean(pending || readError) ||
+      ((action === "fund" || action === "settle") && (!base || !quote));
   }
 
   function actionView(phase, status, grant) {
@@ -187,9 +213,11 @@ export function brokerDealPage(app, payload) {
   }
 
   async function snapshot() {
-    treasury ??= await v3.setup();
-    id ??= await v3.id(terms);
-    const { number, time } = await chain.block();
+    const [verifiedTreasury, { number, time }] = await Promise.all([v3.setup(), chain.block()]);
+    treasury = verifiedTreasury;
+    if (!Number.isSafeInteger(number) || number < 0 || !Number.isSafeInteger(time) || time <= 0) {
+      throw say("The RPC could not verify the current block.");
+    }
     const block = blockTag(number);
     const deal = await v3.deal(id, block);
     if (!deal.status) throw say("The broker contract returned an unknown status.");
@@ -199,24 +227,49 @@ export function brokerDealPage(app, payload) {
     const used = deal.status === "unfunded" && await v3.used(terms, block);
     const phase = dealPhase(deal.status, terms, time, used);
     let grant;
+    if ((deal.status === "settled" && terms.delivery === 1n) !== (deal.grantId > 0n)) {
+      throw say("The deal’s delivery and grant ID do not match.");
+    }
     if (deal.grantId > 0n) {
       const data = await v3.grant(deal.grantId, block);
-      grant = { ...data, held: await chain.balanceOf(data.token, data.custodian, block) };
+      if (deal.status !== "settled" || !same(data.token, terms.baseToken) || !same(data.beneficiary, terms.buyer) ||
+          same(data.custodian, ZERO_ADDRESS) || data.allocation !== terms.allocation || data.claimed + data.claimable > data.allocation) {
+        throw say("The grant does not match the verified deal.");
+      }
+      const held = await chain.balanceOf(data.token, data.custodian, block);
+      if (held < data.claimable) throw say("The verified grant balance is smaller than the claimable amount.");
+      grant = { ...data, held };
     }
     return { ...deal, phase, grant, number };
   }
 
-  async function refresh() {
-    if (stopped || refreshing) return;
+  async function readTokenDetails() {
+    if (readingMetadata || (base && quote)) return;
+    readingMetadata = true;
+    [base, quote] = await Promise.all([
+      base || chain.token(terms.baseToken).catch(() => null),
+      quote || chain.token(terms.quoteToken).catch(() => null),
+    ]);
+    readingMetadata = false;
+    triedMetadata = true;
+    render();
+  }
+
+  async function refresh(requested = false) {
+    if (stopped) return;
+    if (refreshing) {
+      if (requested === true) refreshQueued = true;
+      return;
+    }
     refreshing = true;
     try {
-      const [next, baseToken, quoteToken] = await Promise.all([
-        snapshot(), chain.token(terms.baseToken).catch(() => null), chain.token(terms.quoteToken).catch(() => null),
-      ]);
-      base = baseToken;
-      quote = quoteToken;
+      if (!id) {
+        id = await v3.id(terms);
+        pending = readPending(pendingKey());
+      }
+      void readTokenDetails();
+      const next = await snapshot();
       readError = "";
-      if (!base || !quote) readError = "Token details could not be verified. Amounts are shown in raw units and actions are paused.";
       const lastReceipts = model?.status === next.status ? model.receipts : [];
       model = { ...next, receipts: lastReceipts };
       if (model.status !== "unfunded") {
@@ -229,12 +282,16 @@ export function brokerDealPage(app, payload) {
           model.receiptError = "The RPC could not return transaction history. Refresh to try again.";
         }
       }
-      if (!busy) void resume();
+      if (!busy && pending) await checkPending(model);
     } catch (error) {
-      readError = explain(error);
+      readError = `Deal state could not be verified. Actions are paused. ${explain(error)}`;
     } finally {
       refreshing = false;
       render();
+      if (refreshQueued) {
+        refreshQueued = false;
+        void refresh();
+      }
     }
   }
 
@@ -250,31 +307,81 @@ export function brokerDealPage(app, payload) {
 
   const pendingKey = () => `otc.fam/v3/pending/${v3.domain.chainId}/${v3.contract}/${id}`;
 
-  async function resume() {
-    const pending = readPending(pendingKey());
-    if (!pending || pending.hash === latestHash) return;
-    latestHash = pending.hash;
-    busy = true;
-    stage(`${stepName[pending.action]}. Checking the submitted transaction onchain.`);
+  function recordPending(value) {
+    pending = value;
+    storePending(pendingKey(), value);
+  }
+
+  function finishPending(kind, text) {
+    if (stopped) return;
+    recordPending(null);
+    replacementReads = 0;
+    message = { kind, text };
+  }
+
+  async function receiptMatches(receipt, tx, grantId) {
+    if (!same(receipt.transactionHash, tx.hash) || !same(receipt.from, tx.account) ||
+        !same(receipt.to, tx.to ?? v3.contract)) return false;
+    if (receipt.status === "0x0") return true;
+    if (tx.action === "approval") {
+      const sent = await chain.rpc("eth_getTransactionByHash", [tx.hash]);
+      return same(sent?.hash, tx.hash) && same(sent.from, tx.account) && same(sent.to, tx.to) &&
+        same(sent.input, tx.approvalData) && same(sent.blockHash, receipt.blockHash);
+    }
+    const subject = tx.action === "claim" && (tx.grantId || grantId) ? `0x${word(tx.grantId || grantId)}` : id;
+    return receipt.logs?.some((log) => same(log.address, v3.contract) &&
+      same(log.topics[0], completionTopic[tx.action]) && same(log.topics[1], subject));
+  }
+
+  async function checkPending(current) {
+    const tx = pending;
+    const expectedStatus = completeStatus[tx.action];
+    const event = !current.receiptError && current.receipts?.find((item) =>
+      item.kind === expectedStatus && same(item.hash, tx.hash));
+    if (event) {
+      finishPending("info", `${stepName[tx.action]} confirmed.`);
+      return;
+    }
+    // Claims can repeat, so the deal's Settled status never resolves a claim.
+    const reflected = tx.action === "fund" ? current.status !== "unfunded"
+      : (tx.action === "refund" || tx.action === "settle") && ["refunded", "settled"].includes(current.status);
     try {
-      await chain.confirmed(pending.hash, pending.account, pending.nonce == null ? null : BigInt(pending.nonce));
-      storePending(pendingKey(), null);
-      stage(`${stepName[pending.action]} confirmed.`);
+      const receipt = await chain.rpc("eth_getTransactionReceipt", [tx.hash]);
+      if (receipt) {
+        if (!["0x0", "0x1"].includes(receipt.status) || !await receiptMatches(receipt, tx, current.grant?.id)) {
+          throw say("The receipt does not match this action.");
+        }
+        if (Number(receipt.blockNumber) > current.number) {
+          message = { kind: "info", text: "The receipt is available. Waiting for the deal state to reach the receipt’s block." };
+          return;
+        }
+        if (receipt.status === "0x1") finishPending("info", `${stepName[tx.action]} confirmed.`);
+        else finishPending("error", "The submitted transaction failed onchain. Check the current deal before trying again.");
+        return;
+      }
+      if (reflected) {
+        finishPending("info", "The deal has advanced onchain. The submitted hash is still unconfirmed.");
+        return;
+      }
+      replacementReads = await chain.overtaken(tx.hash, tx.account, pending.nonce === null ? null : BigInt(pending.nonce))
+        ? replacementReads + 1 : 0;
+      if (replacementReads >= 3) {
+        finishPending("info", "The wallet used this transaction’s nonce for another transaction. The deal shows the latest verified chain state.");
+        return;
+      }
+      message = { kind: "info", text: "The submitted transaction has no receipt yet. Check its status again or use your wallet’s activity." };
     } catch (error) {
-      if (error.replaced || error.message.includes("failed on the chain")) storePending(pendingKey(), null);
-      report(error);
-    } finally {
-      busy = false;
-      await refresh();
+      replacementReads = 0;
+      if (reflected) finishPending("info", "The deal has advanced onchain. The submitted hash is still unconfirmed.");
+      else report(say(`The submitted transaction could not be checked. ${explain(error)} Use Check transaction to retry.`));
     }
   }
 
-  async function run(action, button) {
-    if (busy || stopped) return;
-    const hadFocus = document.activeElement === button;
+  async function run(action) {
+    if (blocked(action)) return;
     busy = true;
-    button.disabled = true;
     message = null;
+    render();
     const expected = action === "fund" || action === "refund" ? terms.seller : terms.buyer;
     const wallet = app.wallet;
 
@@ -296,6 +403,34 @@ export function brokerDealPage(app, payload) {
         return wallet.provider.request({ method: "eth_sendTransaction", params: [{ from: expected, ...tx }] });
       },
     } };
+    async function sendTracked(context, to, data, showStage, label, kind, grantId) {
+      const { hash } = await broadcast(context, to, data, showStage, label);
+      const record = { action: kind, account: expected, hash, to, nonce: null,
+        ...(grantId && { grantId: grantId.toString() }),
+        ...(kind === "approval" && { approvalData: data }),
+      };
+      recordPending(record);
+      replacementReads = 0;
+      showStage(`${label}. Waiting for confirmation.`);
+      void wallet.nonceOf(hash).then((nonce) => {
+        if (!stopped && nonce !== null && same(pending?.hash, hash)) recordPending({ ...pending, nonce: String(nonce) });
+      }).catch(() => {});
+      return record;
+    }
+
+    async function approveAndConfirm(context, to, data, showStage, label) {
+      const tx = await sendTracked(context, to, data, showStage, label, "approval");
+      const receipt = await chain.receipt(tx.hash, tx.account);
+      if (!await receiptMatches(receipt, tx)) throw say("The receipt does not match this token approval.");
+      if (stopped) throw say("Return to the deal to continue.");
+      if (receipt.status === "0x0") {
+        recordPending(null);
+        throw say("The submitted token approval failed onchain.");
+      }
+      if (receipt.status !== "0x1") throw say("The token approval status could not be verified.");
+      recordPending(null);
+    }
+
     let approved = false;
     try {
       await guard();
@@ -319,29 +454,20 @@ export function brokerDealPage(app, payload) {
         });
         data = action === "fund" ? fundData(terms, signature) : settleData(id, signature);
         if (allowance < units) {
-          await approveExactly(context, token, units, allowance, stage, v3.contract);
+          await approveExactly(context, token, units, allowance, stage, v3.contract, approveAndConfirm);
           approved = true;
         }
       } else {
         data = action === "refund" ? refundData(id) : grantClaimData(current.grant.id);
       }
-      await transact(context, v3.contract, data, stage, stepName[action], (hash, nonce) => {
-        latestHash = hash;
-        storePending(pendingKey(), { action, account: expected, hash, nonce: nonce?.toString() ?? null });
-      });
-      storePending(pendingKey(), null);
-      if (hadFocus) focusAfterAction = {
-        status: completeStatus[action],
-        target: action === "settle" ? "broker-receipt-title" : "broker-action-title",
-      };
-      stage(`${stepName[action]} confirmed.`);
+      await sendTracked(context, v3.contract, data, stage, stepName[action], action, current.grant?.id);
     } catch (error) {
-      if (error.replaced || error.message.includes("failed on the chain")) storePending(pendingKey(), null);
-      message = { kind: "error", text: explain(error) + (approved ? " The token approval already confirmed." : "") };
+      message = { kind: "error", text: (pending ? "The submitted transaction could not be checked. " : "") + explain(error) +
+        (pending ? " Use Check transaction to retry." : "") + (approved ? " The token approval already confirmed." : "") };
     } finally {
       busy = false;
       render();
-      await refresh();
+      await refresh(true);
     }
   }
 
