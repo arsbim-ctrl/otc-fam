@@ -176,11 +176,13 @@ export function dealPageV3(app, path) {
       h("dl", { class: "facts" },
         sum("Price", "price", t.quote),
         sum("Buyer fee, 0.5% of the price", "buyer-fee", m.buyerFee),
-        sum("Buyer pays in total", "buyer-total", m.buyerTotal),
+        sum(done ? "Buyer paid in total" : "Buyer pays in total", "buyer-total", m.buyerTotal),
         sum("Seller fee, 0.5% of the price", "seller-fee", m.sellerFee),
-        sum("Seller receives", "seller-net", m.sellerNet),
-        sum(`Broker receives ${percent(t.brokerBps)} of both fees, only if the deal settles`, "broker-fee", m.brokerFee, h("span", { class: "mono block", testid: "broker" }, t.broker), role === "broker" && " (you)"),
-        sum("Treasury receives the rest of the fees", "treasury-fee", m.treasuryFee, h("span", { class: "mono block", testid: "treasury" }, s.treasury)),
+        sum(done ? "Seller received" : "Seller receives", "seller-net", m.sellerNet),
+        // What the broker gets is said as it stands: to come if the deal settles, paid once it has, never if it cannot settle any more.
+        sum(done ? `Broker received ${percent(t.brokerBps)} of both fees` : open ? `Broker receives ${percent(t.brokerBps)} of both fees, only if the deal settles`
+          : `Broker would have received ${percent(t.brokerBps)} of both fees: the deal did not settle`, "broker-fee", m.brokerFee, h("span", { class: "mono block", testid: "broker" }, t.broker), role === "broker" && " (you)"),
+        sum(done ? "Treasury received the rest of the fees" : open ? "Treasury receives the rest of the fees" : "Treasury would have received the rest of the fees", "treasury-fee", m.treasuryFee, h("span", { class: "mono block", testid: "treasury" }, s.treasury)),
         (open || st === "expired") && h("div", {}, h("dt", {}, st === "awaiting" ? "Can be funded and settled until" : st === "funded" ? "Can be settled until" : "Could be settled until"),
           h("dd", { testid: "expires", "data-expiry": String(t.expiry), class: open && settleBy(t) - now() < 900 ? "soon" : null },
             `${utc(settleBy(t))} (${fromNow(open ? settleBy(t) - now() : Math.min(-1, settleBy(t) - now()))})`))),
