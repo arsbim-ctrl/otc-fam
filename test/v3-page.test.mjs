@@ -130,20 +130,10 @@ for (const size of [PHONE, DESKTOP]) for (const mode of ["immediate", "vesting"]
 
       const buyer = demoWallet(w, "Buyer");
       let walletChain = 1;
-      const pauseForReload = mode === "vesting";
-      const stall = Promise.withResolvers();
-      const settleSelector = w.brokerDeals.interface.getFunction("settle").selector;
-      let broadcastHash, broadcastCount = 0, stalledLookup = false;
-      await browse(site, hash, { size, wallet: async request => {
+      await browse(site, hash, { size, wallet: request => {
         if (request.method === "eth_chainId") return { result: `0x${walletChain.toString(16)}` };
         if (request.method === "wallet_switchEthereumChain") walletChain = CHAIN_ID;
-        if (broadcastHash && request.method === "eth_getTransactionByHash") await stall.promise;
-        const response = await buyer(request);
-        if (request.method === "eth_sendTransaction" && request.params[0].data.startsWith(settleSelector)) {
-          broadcastHash = response.result;
-          broadcastCount++;
-        }
-        return response;
+        return buyer(request);
       } }, async page => {
         await status(page, "Funded");
         await click(page, "Connect wallet");
@@ -154,50 +144,11 @@ for (const size of [PHONE, DESKTOP]) for (const mode of ["immediate", "vesting"]
         await primary(page).click();
         await shows(page, "broker-primary", text => text === "Sign and settle deal", "buyer approval confirmed");
 
-        if (pauseForReload) {
-          await w.chain.rpc("evm_setAutomine", [false]);
-          const publicRpc = w.chain.publicRpc;
-          w.chain.publicRpc = async request => {
-            if (broadcastHash && request.method === "eth_getTransactionByHash" && request.params[0] === broadcastHash) {
-              stalledLookup = true;
-              await stall.promise;
-            }
-            return publicRpc(request);
-          };
-        }
-        try {
-          await primary(page).click();
-          if (pauseForReload) {
-            await until(() => broadcastHash, "the wallet returned the settlement hash");
-            await until(async () => (await pendingRecord(page))?.hash === broadcastHash, "hash stored before the nonce read finishes");
-            assert.equal((await pendingRecord(page)).nonce, null);
-            await page.reload();
-            await page.getByText("Submitted · awaiting network confirmation", { exact: false }).waitFor();
-            await until(() => stalledLookup, "the transaction lookup is still stalled");
-            assert.equal(await page.getByTestId("broker-pending-transaction").innerText(), broadcastHash);
-            assert.ok(await primary(page).isDisabled());
-            await primary(page).dispatchEvent("click");
-            const check = page.getByTestId("broker-refresh");
-            await check.focus();
-            await page.keyboard.press("Enter");
-            assert.equal(await check.evaluate(el => document.activeElement === el), true);
-            assert.equal(await w.chain.rpc("eth_getTransactionReceipt", [broadcastHash]), null);
-            assert.equal(broadcastCount, 1);
-            await picture(page, "07-reloaded-pending");
-            await w.chain.mine();
-            await w.chain.rpc("evm_setAutomine", [true]);
-            stall.resolve();
-          }
-          await status(page, "Settled");
-        } finally {
-          stall.resolve();
-        }
-        assert.equal(broadcastCount, 1);
+        await primary(page).click();
         await status(page, "Settled");
         const receipt = page.getByTestId("broker-settlement-receipt");
         await receipt.waitFor();
         settledHash = await receipt.getAttribute("data-tx");
-        assert.equal(settledHash, broadcastHash);
         const onchain = await w.chain.rpc("eth_getTransactionReceipt", [settledHash]);
         assert.equal(onchain.status, "0x1");
         assert.equal(await receipt.getByRole("link", { name: settledHash }).getAttribute("href"), `https://example.test/tx/${settledHash}`);
@@ -250,6 +201,86 @@ function fixtureTerms(w, now) {
     expiry: BigInt(now) + 600n, nonce: 999n, delivery: 0n,
     fixedStart: 0n, cliffSeconds: 0n, durationSeconds: 0n, brokerBps: 0n,
   };
+}
+
+async function fundedDeal(w, changes = {}) {
+  const { Seller, Buyer } = demoPeople;
+  const { dealIdOf, domainOf, pack } = await import("../web/v3.js");
+  const domain = domainOf(CHAIN_ID, w.brokerDeals.address);
+  const terms = { ...fixtureTerms(w, await w.chain.now()), ...changes };
+  const types = { BrokerTerms: w.brokerDeals.interface.getFunction("fund").inputs[0].components.map(({ name, type }) => ({ name, type })) };
+  await w.fam.as(Seller).approve(w.brokerDeals.address, terms.allocation);
+  await w.brokerDeals.as(Seller).fund(terms, await signers.Seller.signTypedData(domain, types, terms));
+  await w.usdc.as(Buyer).approve(w.brokerDeals.address, terms.quote + terms.quote / 200n);
+  return { id: dealIdOf(domain, terms), path: `#/v3/d/${pack(domain, terms)}` };
+}
+
+for (const size of [PHONE, DESKTOP]) {
+  test(`a returned hash survives reload with the nonce lookup stalled at ${size.width}px`, async () => {
+    const w = await brokerWorld();
+    const site = await serve(w, { ...w.brokerConfig, explorerUrl: "https://example.test" });
+    const picture = pictures(size, "vesting");
+    const buyer = demoWallet(w, "Buyer");
+    const stall = Promise.withResolvers();
+    let broadcastHash, broadcasts = 0, stalledLookup = false;
+    try {
+      const { path } = await fundedDeal(w, {
+        allocation: 900_000_000_000_000_000_001n, quote: 123_456_789n, brokerBps: 2_000n,
+        delivery: 1n, cliffSeconds: 2_592_000n, durationSeconds: 7_776_000n,
+      });
+      const publicRpc = w.chain.publicRpc;
+      w.chain.publicRpc = async request => {
+        if (broadcastHash && request.method === "eth_getTransactionByHash" && request.params[0] === broadcastHash) {
+          stalledLookup = true;
+          await stall.promise;
+        }
+        return publicRpc(request);
+      };
+      await browse(site, path, { size, wallet: async request => {
+        if (broadcastHash && request.method === "eth_getTransactionByHash") await stall.promise;
+        const response = await buyer(request);
+        if (request.method === "eth_sendTransaction") {
+          broadcastHash = response.result;
+          broadcasts++;
+        }
+        return response;
+      } }, async page => {
+        await status(page, "Funded");
+        await click(page, "Connect wallet");
+        await shows(page, "broker-primary", text => text === "Sign and settle deal", "buyer can authorize settlement");
+        await w.chain.rpc("evm_setAutomine", [false]);
+        await primary(page).click();
+        await until(() => broadcastHash, "the wallet returned the settlement hash");
+        await until(async () => (await pendingRecord(page))?.hash === broadcastHash, "hash stored before the nonce read finishes");
+        assert.equal((await pendingRecord(page)).nonce, null);
+        await page.reload();
+        await page.getByText("Submitted · awaiting network confirmation", { exact: false }).waitFor();
+        await until(() => stalledLookup, "the transaction lookup is still stalled");
+        assert.equal(await page.getByTestId("broker-pending-transaction").innerText(), broadcastHash);
+        assert.ok(await primary(page).isDisabled());
+        await primary(page).dispatchEvent("click");
+        const check = page.getByTestId("broker-refresh");
+        await check.focus();
+        await page.keyboard.press("Enter");
+        assert.equal(await check.evaluate(el => document.activeElement === el), true);
+        assert.equal(await w.chain.rpc("eth_getTransactionReceipt", [broadcastHash]), null);
+        assert.equal(broadcasts, 1);
+        await picture(page, "07-reloaded-pending");
+        await w.chain.mine();
+        await w.chain.rpc("evm_setAutomine", [true]);
+        stall.resolve();
+        await status(page, "Settled");
+        const receipt = page.getByTestId("broker-settlement-receipt");
+        assert.equal(await receipt.getAttribute("data-tx"), broadcastHash);
+        assert.equal((await w.chain.rpc("eth_getTransactionReceipt", [broadcastHash])).status, "0x1");
+        assert.equal(await pendingRecord(page), null);
+        assert.equal(broadcasts, 1);
+      });
+    } finally {
+      stall.resolve();
+      await site.close();
+    }
+  });
 }
 
 for (const size of [PHONE, DESKTOP]) {
@@ -342,17 +373,11 @@ test("a mined replacement unlocks retry only after the exact transaction nonce i
   const site = await serve(w, w.brokerConfig);
   const { Buyer, Seller } = demoPeople;
   try {
-    const { dealIdOf, domainOf, pack } = await import("../web/v3.js");
-    const domain = domainOf(CHAIN_ID, w.brokerDeals.address);
-    const terms = fixtureTerms(w, await w.chain.now());
-    const types = { BrokerTerms: w.brokerDeals.interface.getFunction("fund").inputs[0].components.map(({ name, type }) => ({ name, type })) };
-    await w.fam.as(Seller).approve(w.brokerDeals.address, terms.allocation);
-    await w.brokerDeals.as(Seller).fund(terms, await signers.Seller.signTypedData(domain, types, terms));
-    await w.usdc.as(Buyer).approve(w.brokerDeals.address, terms.quote + 5n);
+    const { id, path } = await fundedDeal(w);
 
     const buyer = demoWallet(w, "Buyer");
     let broadcasts = 0;
-    await browse(site, `#/v3/d/${pack(domain, terms)}`, { wallet: async request => {
+    await browse(site, path, { wallet: async request => {
       if (request.method === "eth_sendTransaction") broadcasts++;
       return buyer(request);
     } }, async page => {
@@ -386,7 +411,7 @@ test("a mined replacement unlocks retry only after the exact transaction nonce i
         return false;
       }, "the tracker observed the mined replacement");
       assert.equal(await pendingRecord(page), null);
-      assert.equal((await w.brokerDeals.read.getDeal(dealIdOf(domain, terms))).status, 1n);
+      assert.equal((await w.brokerDeals.read.getDeal(id)).status, 1n);
       assert.equal(broadcasts, 1);
       await primary(page).click();
       await status(page, "Settled");

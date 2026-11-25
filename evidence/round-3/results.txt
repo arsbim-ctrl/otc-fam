@@ -1,14 +1,16 @@
 Pinned Playwright runner, local EDR chain
-Round 3 contract and browser scenarios from npm test
+Round 3 contract checks and focused browser verification
 
-✔ the browser link, wallet payload and deployment hash the same immutable V3 terms
-✔ a seller nonce stays burned after refund, and buyer signatures for another chain or deployment cannot settle
-✔ fixed-start grants accrue from their agreed UTC second and an unfilled past start permits only refund
-✔ contract-wallet seller authorization is bound to the digest and must be submitted by that wallet
-✔ broker link, immediate or vesting settlement, receipts and history: immediate at 390px
-✔ broker link, immediate or vesting settlement, receipts and history: vesting at 390px
-✔ broker link, immediate or vesting settlement, receipts and history: immediate at 1440px
-✔ broker link, immediate or vesting settlement, receipts and history: vesting at 1440px
-✔ seller recovers expired escrow and its refund appears on a fresh broker history
+PASS  the browser link, wallet payload and deployment hash the same immutable V3 terms
+PASS  a seller nonce stays burned after refund, and buyer signatures for another chain or deployment cannot settle
+PASS  four fee fixtures and an expired refund publish measured token balance deltas
+PASS  fixed-start grants accrue from their agreed UTC second and an unfilled past start permits only refund
+PASS  contract-wallet seller authorization is bound to the digest and must be submitted by that wallet
+PASS  fresh broker history retains its confirmed funding receipt through expiry and shows the refund at 390px
+PASS  fresh broker history retains its confirmed funding receipt through expiry and shows the refund at 1440px
+PASS  a mined replacement unlocks retry only after the exact transaction nonce is verified
+PASS  a returned hash survives reload with the nonce lookup stalled at 390px
+PASS  a returned hash survives reload with the nonce lookup stalled at 1440px
 
-9 passed
+5 contract checks passed
+5 browser checks passed
