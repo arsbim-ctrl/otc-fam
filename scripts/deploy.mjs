@@ -1,8 +1,9 @@
 // npm run deploy: compiles contracts/OtcDeals.sol as the checks do (solc 0.8.38, optimizer on with 200 runs, EVM
 // cancun), deploys it to the network at RPC_URL from the key in DEPLOYER_KEY, and prints the contract's address
-// on stdout (progress goes to stderr). npm run deploy:v2 does the same for contracts/OtcDealsV2.sol, whose
-// treasury is the address in TREASURY. All values come from the environment only: nothing is written to a file,
-// and neither RPC_URL nor the key is ever printed (an RPC URL can hold an API key).
+// on stdout (progress goes to stderr). npm run deploy:v2 does the same for contracts/OtcDealsV2.sol and
+// npm run deploy:v3 for contracts/BrokerDeals.sol; the treasury of each is the address in TREASURY. All values
+// come from the environment only: nothing is written to a file, and neither RPC_URL nor the key is ever printed
+// (an RPC URL can hold an API key).
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { ContractFactory, JsonRpcProvider, Wallet } from "ethers";
@@ -13,10 +14,12 @@ const fail = (message) => {
   process.exit(1);
 };
 
-const v2 = process.argv[2] === "v2", name = v2 ? "OtcDealsV2" : "OtcDeals";
+// Which contract: "v2" and "v3" each take a treasury; anything else is the round 1 contract, which takes nothing.
+const version = ["v2", "v3"].includes(process.argv[2]) ? process.argv[2] : "v1", v2 = version !== "v1", upper = version.toUpperCase();
+const name = { v1: "OtcDeals", v2: "OtcDealsV2", v3: "BrokerDeals" }[version];
 const rpcUrl = process.env.RPC_URL?.trim(), key = process.env.DEPLOYER_KEY?.trim(), treasury = process.env.TREASURY?.trim();
 if (!rpcUrl || !key || (v2 && !treasury)) {
-  fail(`Usage: RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> ${v2 ? "TREASURY=<the address that receives the fees> npm run deploy:v2" : "npm run deploy"}`);
+  fail(`Usage: RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> ${v2 ? `TREASURY=<the address that receives the fees> npm run deploy:${version}` : "npm run deploy"}`);
 }
 if (!/^(0x)?[0-9a-fA-F]{64}$/.test(key)) fail("DEPLOYER_KEY is not a private key: it must be 64 hex digits, with or without 0x.");
 if (v2 && (!/^0x[0-9a-fA-F]{40}$/.test(treasury) || /^0x0{40}$/.test(treasury))) {
@@ -32,7 +35,7 @@ try {
   const receipt = await contract.deploymentTransaction().wait();
   const address = await contract.getAddress();
   console.error(`Deployed in block ${receipt.blockNumber} by transaction ${receipt.hash}.`);
-  console.error(v2 ? `In web/config.json, next to the others: "contractV2": "${address}", "fromBlockV2": ${receipt.blockNumber}`
+  console.error(v2 ? `In web/config.json, next to the others: "contract${upper}": "${address}", "fromBlock${upper}": ${receipt.blockNumber}`
     : `In web/config.json: { "chainId": ${chainId}, "contract": "${address}", "rpcUrl": "<a public JSON-RPC URL of chain ${chainId}>" }`);
   console.log(address);
 } catch (e) {

@@ -1,4 +1,4 @@
-// npm run deploy and npm run deploy:v2, end to end: a local chain (the checks' EDR) served over HTTP, a fresh random
+// npm run deploy, deploy:v2 and deploy:v3, end to end: a local chain (the checks' EDR) served over HTTP, a fresh random
 // key that it funds, then the script. It must print only the new contract's address on stdout, and that contract must
 // answer as the one it is.
 import assert from "node:assert/strict";
@@ -61,6 +61,16 @@ test("npm run deploy:v2 deploys OtcDealsV2 with the treasury in TREASURY, and sa
   assert.equal(`0x${treasury.slice(-40)}`, TREASURY);
   const { stderr } = await run(process.execPath, ["scripts/deploy.mjs", "v2"], { env: { ...env, TREASURY } });
   assert.match(stderr, /"contractV2": "0x[0-9a-fA-F]{40}", "fromBlockV2": \d+/);
+}));
+
+test("npm run deploy:v3 deploys BrokerDeals with the treasury in TREASURY, and says where its events start", () => withNode(async (chain, env) => {
+  const address = await deployed(chain, { ...env, TREASURY }, ["v3"]);
+  const treasury = await chain.rpc("eth_call", [{ to: address, data: "0x61d027b3" }, "latest"]); // treasury()
+  assert.equal(`0x${treasury.slice(-40)}`, TREASURY);
+  assert.notEqual(await chain.rpc("eth_call", [{ to: address, data: "0xf698da25" }, "latest"]), "0x", "it answers domainSeparator(), as only the broker deals contract does");
+  const { stderr } = await run(process.execPath, ["scripts/deploy.mjs", "v3"], { env: { ...env, TREASURY } });
+  assert.match(stderr, /"contractV3": "0x[0-9a-fA-F]{40}", "fromBlockV3": \d+/);
+  assert.match((await run(process.execPath, ["scripts/deploy.mjs", "v3"], { env: { ...env, TREASURY: "" } }).then(() => assert.fail("it exited 0"), (e) => e)).stderr, /TREASURY=.*npm run deploy:v3/, "v3 needs a treasury");
 }));
 
 test("npm run deploy refuses to start without RPC_URL and DEPLOYER_KEY, or with a malformed key", async () => {

@@ -10,6 +10,7 @@ import { chromium } from "playwright";
 import { CHAIN_ID } from "../../.launchpad/checks/round-1/chain.mjs";
 import { ROOT } from "../../.launchpad/checks/round-1/lib/entry.mjs";
 import { wallet as checksWallet } from "../../.launchpad/checks/round-1/page.mjs";
+import { signing } from "./world3.mjs";
 
 export { offered, pressUntil, seen, shows, until } from "../../.launchpad/checks/round-1/page.mjs";
 export const PHONE = { width: 390, height: 844 }, DESKTOP = { width: 1440, height: 900 };
@@ -40,7 +41,9 @@ export async function serve(w, more = {}) {
       }
       if (req.method !== "GET") return send(405, "text/plain", "GET, or POST /rpc");
       if (path === "/config.json") {
-        return send(200, "application/json", JSON.stringify({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: 0, rpcUrl: "rpc", ...more }));
+        // A world with broker deals (world3.mjs) names its v3 contract too.
+        const v3 = w.v3 ? { contractV3: w.v3.address, fromBlockV3: 0 } : {};
+        return send(200, "application/json", JSON.stringify({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: 0, ...v3, rpcUrl: "rpc", ...more }));
       }
       const file = join(root, path.endsWith("/") ? `${path}index.html` : path);
       const real = existsSync(file) ? realpathSync(file) : null;
@@ -66,6 +69,14 @@ export function walletFor(w, account, instead = () => null, asked = []) {
     asked.push(request.method);
     return (await instead(request, answer)) ?? answer(request);
   };
+}
+
+/**
+ * The stand-in wallet of one of the people who can sign (world3.mjs: "seller", "buyer", "broker", "other"): the
+ * wallet above, which also signs typed data with that person's key, as a broker deal asks.
+ */
+export function signerFor(w, name, instead = () => null, asked = []) {
+  return walletFor(w, w[name], async (request, answer) => (await instead(request, answer)) ?? signing(name, request), asked);
 }
 
 /** Runs in the page before its own scripts: window.ethereum, answered by the wallet above. */

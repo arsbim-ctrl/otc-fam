@@ -9,6 +9,7 @@ const NETWORKS = {
 };
 const STATUS_WORDS = {
   open: "Open", filled: "Filled", cancelled: "Cancelled", expired: "Expired", "not-found": "No such deal", funded: "Funded", settled: "Settled",
+  awaiting: "Awaiting funding", refunded: "Refunded", void: "Cannot be funded", // broker deals (v3)
 };
 const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 export const DATE = new Intl.DateTimeFormat(undefined, {
