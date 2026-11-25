@@ -1,5 +1,7 @@
 # otc.fam
 
+**V3 broker deals.** See the [broker workflow and reproducible checks](docs/broker-v3.md) for signed terms, receipt history, and the local demo. After installing the dependencies and Chromium below, run `npm run proof:v3` for the signed contract fixtures and both browser widths.
+
 A link for one OTC token deal. The seller sends the link; the buyer opens it, checks what they pay and
 what they receive, and settles it. No person and no company holds the tokens: a small contract holds the
 seller's tokens until the buyer pays, then delivers them at once or as a vesting grant, or gives them back
@@ -12,7 +14,7 @@ brief in [.launchpad/project.md](.launchpad/project.md).
 
 **Where it stands.** Round 1: a deal contract for plain swaps (v1), its page and the deployment script.
 Round 2: a second contract (v2) with a 0.5% fee on each side and delivery at once or as a new vesting grant,
-and its pages. Nothing here has been reviewed for security, and nothing is deployed: local chains and test
+and its pages. Round 3 adds broker-prepared links, signed terms, and event-backed receipts for both delivery modes. Nothing here has been reviewed for security, and nothing is deployed: local chains and test
 networks only.
 
 ## What is in the repository
@@ -21,8 +23,9 @@ networks only.
 | --- | --- |
 | `contracts/OtcDeals.sol`, `IOtcDeals.sol` | v1, round 1: plain swaps, no owner, no fee. Its interface is fixed. |
 | `contracts/OtcDealsV2.sol`, `IOtcDealsV2.sol` | v2, round 2: deals for one named buyer, with fees, delivered at once or as a vesting grant. The interface is the round's, unchanged. |
+| `contracts/BrokerDeals.sol`, `IBrokerDeals.sol` | V3 broker deals and the signed terms for funding and settlement. |
 | `contracts/GrantVault.sol`, `TokenMoves.sol` | The vault that holds one grant's tokens, and the three checked ways a token moves in v2. |
-| `web/` | The page, plain files and no dependency. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
+| `web/` | Static pages. V3 uses the locked ethers SDK for typed data and event decoding. `app.js` routes; `deal-page.js` and `new-deal-page.js` are v1's pages; `v2-new-page.js` is v2's form and `v2-deal-page.js` its deal page, with `v2-grant.js` and `v2-receipts.js`; `v2.js` reads the v2 contract; `flow.js` runs a page's presses and remembers a transaction across a reload; `eth.js`, `ui.js` and `units.js` are shared. |
 | `scripts/` | `build.mjs`, `deploy.mjs`, `play.mjs` (round 2's scenes), `dev.mjs` (a local stand to click through), and `lib/`, the local chain and site they and the tests stand on. |
 | `test/` | The entry's own tests: what the rounds' checks leave out. |
 | `evidence/round-2/` | One run of `npm run play`: the text of every step, the balances that moved, 48 screenshots. |

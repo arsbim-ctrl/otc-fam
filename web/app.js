@@ -13,7 +13,7 @@ import { DealsV2 } from "./v2.js";
 
 /** What every page works with: where it draws, the config, the chain it reads, the v2 contract if the site has one, and the wallet, if the browser has one. */
 const app = { main: document.getElementById("app"), config: null, chain: null, v2: null, wallet: null, explorer: null };
-let page;
+let page, brokerPages;
 
 start();
 
@@ -33,6 +33,16 @@ async function start() {
   app.explorer = explorerOf(app.config); // where a receipt's transaction can be looked up, if the network has such a site
   // The v2 contract is optional: a site without one (or with the zero address) serves v1 deals only.
   if (isAddress(contractV2 ?? "") && !/^0x0{40}$/.test(contractV2)) app.v2 = new DealsV2(app.chain, contractV2, Number.isSafeInteger(fromBlockV2) ? fromBlockV2 : 0);
+  const addressV3 = app.config.contractV3 ?? "";
+  if (isAddress(addressV3) && !/^0x0{40}$/.test(addressV3)) {
+    try {
+      const [{ BrokerChain }, pages] = await Promise.all([import("./v3-chain.js"), import("./v3-page.js")]);
+      app.v3 = new BrokerChain(app.chain, app.config);
+      brokerPages = pages;
+    } catch {
+      app.v3Error = "The broker workflow could not load. Reload the built site.";
+    }
+  }
   if (window.ethereum) {
     app.wallet = new Wallet(window.ethereum, () => {
       showAccount();
@@ -53,6 +63,19 @@ async function start() {
 function route() {
   page?.stop();
   const hash = location.hash;
+  if (hash.startsWith("#/v3/")) {
+    const [view, payload] = hash.slice(5).split("/");
+    if (!brokerPages) {
+      app.main.replaceChildren(card(h("h1", {}, "Broker deals unavailable"),
+        h("p", { class: "lead" }, app.v3Error ?? "This site has no configured V3 contract.")));
+      page = null;
+    } else {
+      page = view === "d" ? brokerPages.brokerDealPage(app, payload)
+        : view === "history" ? brokerPages.brokerHistoryPage(app) : brokerPages.preparePage(app, payload);
+    }
+    scrollTo(0, 0);
+    return;
+  }
   const v2Deal = /^#\/v2\/d\/(.*)$/.exec(hash), deal = /^#\/d\/(.*)$/.exec(hash);
   page = v2Deal ? dealPageV2(app, v2Deal[1]) : hash === "#/v2/new" ? newDealPageV2(app)
     : deal ? dealPage(app, deal[1]) : hash === "#/new" ? newDealPage(app) : homePage();
@@ -74,6 +97,9 @@ function homePage() {
         + "and settle from their wallet: everything happens in one transaction, or nothing moves."
       : "Offer tokens for other tokens and send the link to the other side. They see what they pay and what they get, "
         + "and fill it from their wallet: both sides swap in one transaction, or nothing moves."),
+    app.v3 && h("div", { class: "row" },
+      h("a", { class: "button primary", href: "#/v3/new" }, "Prepare a broker deal · V3"),
+      h("a", { class: "button secondary", href: "#/v3/history" }, "Broker history")),
     h("a", { class: "button primary", href: app.v2 ? "#/v2/new" : "#/new" }, "Make a deal"),
     app.v2 && h("a", { class: "button secondary", href: "#/new" }, "Make a v1 deal: a plain swap, no fee, no vesting"),
     h("form", { class: "row", onsubmit: open }, number, version, h("button", { class: "secondary", type: "submit" }, "Open"))));

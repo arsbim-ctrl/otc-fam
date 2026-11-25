@@ -1,0 +1,57 @@
+[
+  {
+    "width": 390,
+    "kind": "immediate",
+    "deal": "0xabb5b46b64402cd9cb9effc10e78cb995ea0563848bbec61e2c2cde9863a2a1d",
+    "funding": "0xbb32076a1c10c6f4973a184abe4001b6f796b69c09e57fbb622df160380dac6b",
+    "settlement": "0xfa377232a3c615901388c8e6c24ed0ac1c08447c4be4877a57d1e1a65536852b",
+    "claim": null,
+    "settlementDelta": {
+      "FAM": {
+        "seller": "0",
+        "buyer": "1000000000000000000000000",
+        "broker": "0",
+        "treasury": "0",
+        "escrow": "-1000000000000000000000000"
+      },
+      "USDC": {
+        "seller": "122839506",
+        "buyer": "-124074072",
+        "broker": "246913",
+        "treasury": "987653",
+        "escrow": "0"
+      }
+    }
+  },
+  {
+    "width": 390,
+    "kind": "vesting",
+    "deal": "0x1d036babd908e2d77b8303bf5b386b6b2e2b55e2593c1ff17a4c721d9739b367",
+    "funding": "0x77619586f21c99bb130ded04a91c8df631e369bcae2406fa3c02e521f5ba597b",
+    "settlement": "0x6cd67b05537dcb26d2d9b09bb471145268f22bb556d5e804c4992ac3048d9376",
+    "claim": "0x465d8c122c0c39410a70841610a89f7099cf4033ee9d0c1bf5c801349d8e7972",
+    "settlementDelta": {
+      "FAM": {
+        "seller": "0",
+        "buyer": "0",
+        "broker": "0",
+        "treasury": "0",
+        "escrow": "-1000000000000000000000000"
+      },
+      "USDC": {
+        "seller": "122839506",
+        "buyer": "-124074072",
+        "broker": "246913",
+        "treasury": "987653",
+        "escrow": "0"
+      }
+    }
+  },
+  {
+    "width": 390,
+    "kind": "expired-refund",
+    "deal": "0x41276b945b1b0f7b8f805660f38a93a0a4adf28c810ff315468dc83ff11bebda",
+    "funding": "0xa70c06eb89b19caba1ddc2c5a11336cc10247de78643960423899ed3f2ae2652",
+    "refund": "0x6fc662d1364c93d990bc246fb6077d8b0657a88434a9ac7153c91901d7cf7ff0"
+  }
+]

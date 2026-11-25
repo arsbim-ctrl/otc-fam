@@ -13,26 +13,33 @@ const fail = (message) => {
   process.exit(1);
 };
 
-const v2 = process.argv[2] === "v2", name = v2 ? "OtcDealsV2" : "OtcDeals";
+const version = process.argv[2];
+const v3 = version === "v3", v2 = version === "v2";
+const versioned = v2 || v3;
+const name = v3 ? "BrokerDeals" : v2 ? "OtcDealsV2" : "OtcDeals";
 const rpcUrl = process.env.RPC_URL?.trim(), key = process.env.DEPLOYER_KEY?.trim(), treasury = process.env.TREASURY?.trim();
-if (!rpcUrl || !key || (v2 && !treasury)) {
-  fail(`Usage: RPC_URL=<the network's JSON-RPC URL> DEPLOYER_KEY=<the deployer's private key> ${v2 ? "TREASURY=<the address that receives the fees> npm run deploy:v2" : "npm run deploy"}`);
+if (!rpcUrl || !key || (versioned && !treasury)) {
+  const command = versioned ? "TREASURY=<fee treasury> npm run deploy:" + version : "npm run deploy";
+  fail("Usage: RPC_URL=<the network JSON-RPC URL> DEPLOYER_KEY=<the deployer private key> " + command);
 }
 if (!/^(0x)?[0-9a-fA-F]{64}$/.test(key)) fail("DEPLOYER_KEY is not a private key: it must be 64 hex digits, with or without 0x.");
-if (v2 && (!/^0x[0-9a-fA-F]{40}$/.test(treasury) || /^0x0{40}$/.test(treasury))) {
+if (versioned && (!/^0x[0-9a-fA-F]{40}$/.test(treasury) || /^0x0{40}$/.test(treasury))) {
   fail("TREASURY is not an address that can receive the fees: it must be 0x and 40 hex digits, and not the zero address. It can never be changed afterwards.");
 }
 
 const { abi, bytecode } = compile(`contracts/${name}.sol`, name);
 const chainId = await chainIdAt(rpcUrl);
+if (v3 && ![1337, 31337, 84532, 11155111].includes(chainId)) fail("V3 deployment is limited to local chains, Base Sepolia and Sepolia.");
+
 const deployer = new Wallet(key, new JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true }));
 console.error(`Deploying ${name} to chain ${chainId} from ${deployer.address}${v2 ? `, with treasury ${treasury}` : ""}…`);
 try {
-  const contract = await new ContractFactory(abi, bytecode, deployer).deploy(...(v2 ? [treasury] : []));
+  const contract = await new ContractFactory(abi, bytecode, deployer).deploy(...(versioned ? [treasury] : []));
   const receipt = await contract.deploymentTransaction().wait();
   const address = await contract.getAddress();
   console.error(`Deployed in block ${receipt.blockNumber} by transaction ${receipt.hash}.`);
-  console.error(v2 ? `In web/config.json, next to the others: "contractV2": "${address}", "fromBlockV2": ${receipt.blockNumber}`
+  if (v3) console.error('In web/config.json set "contractV3" to "' + address + '" and "fromBlockV3" to ' + receipt.blockNumber + ".");
+  else console.error(v2 ? `In web/config.json, next to the others: "contractV2": "${address}", "fromBlockV2": ${receipt.blockNumber}`
     : `In web/config.json: { "chainId": ${chainId}, "contract": "${address}", "rpcUrl": "<a public JSON-RPC URL of chain ${chainId}>" }`);
   console.log(address);
 } catch (e) {

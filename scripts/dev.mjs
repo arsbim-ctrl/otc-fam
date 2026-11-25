@@ -8,18 +8,50 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
-import { CHAIN_ID } from "../.launchpad/checks/round-1/chain.mjs";
+import { Wallet } from "ethers";
+import { CHAIN_ID, deploy } from "../.launchpad/checks/round-1/chain.mjs";
 import { wallet } from "../.launchpad/checks/round-1/page.mjs";
+import { compile } from "../.launchpad/checks/round-1/compile.mjs";
+import { ROOT } from "../.launchpad/checks/round-1/lib/entry.mjs";
 import { world } from "./lib/world.mjs";
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 const root = realpathSync(resolve("web")), port = Number(process.env.PORT ?? 8787), host = process.env.HOST ?? "127.0.0.1";
 
 const w = await world();
+const demoV3 = process.argv.includes("--broker");
+const keys = new Map();
 const people = { Seller: w.seller, Buyer: w.buyer, Stranger: w.other };
-await w.fam.as(w.deployer).mint(w.seller, 10_000_000n * 10n ** 18n);
-for (const who of [w.buyer, w.other]) await w.usdc.as(w.deployer).mint(who, 10_000n * 10n ** 6n);
+let v3;
+if (demoV3) {
+  for (const label of ["Seller", "Buyer", "Broker"]) {
+    const signer = Wallet.createRandom();
+    const account = signer.address.toLowerCase();
+    keys.set(account, signer);
+    people[label] = account;
+    await w.chain.fund(account);
+  }
+  const { BrokerDeals } = compile(ROOT, "contracts/BrokerDeals.sol");
+  v3 = await deploy(w.chain, w.deployer, BrokerDeals, [w.treasury]);
+}
+await w.fam.as(w.deployer).mint(people.Seller, 10_000_000n * 10n ** 18n);
+const quoteBudget = demoV3 ? 1_000_000n : 10_000n;
+for (const who of [people.Buyer, w.other]) await w.usdc.as(w.deployer).mint(who, quoteBudget * 10n ** 6n);
 const wallets = Object.fromEntries(Object.values(people).map((account) => [account, wallet(w, account)]));
+
+async function walletRequest(account, request) {
+  if (!wallets[account]) return { error: { code: 4100, message: "no such person" } };
+  if (request.method !== "eth_signTypedData_v4") return wallets[account](request);
+  const [actor, data] = request.params;
+  const signer = keys.get(account);
+  if (!signer || actor.toLowerCase() !== account) return { error: { code: 4100, message: "no signing wallet" } };
+  const { domain, types: { BrokerTerms }, message } = JSON.parse(data);
+  if (!v3 || domain.verifyingContract.toLowerCase() !== v3.address.toLowerCase() ||
+      Number(domain.chainId) !== CHAIN_ID || !Array.isArray(BrokerTerms)) {
+    return { error: { code: 4100, message: "local V3 deals only" } };
+  }
+  return { result: await signer.signTypedData(domain, { BrokerTerms }, message) };
+}
 const setup = { people, tokens: { FAM: w.fam.address, USDC: w.usdc.address }, treasury: w.treasury };
 
 const body = async (req) => {
@@ -35,7 +67,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && path === "/rpc") return json(await w.chain.publicRpc(await body(req)));
     if (req.method === "POST" && path === "/dev/wallet") {
       const { account, request } = await body(req);
-      return json(wallets[account] ? await wallets[account](request) : { error: { code: 4100, message: "no such person" } });
+      return json(await walletRequest(account, request));
     }
     if (req.method === "POST" && path === "/dev/time") {
       const { seconds } = await body(req);
@@ -44,7 +76,10 @@ const server = createServer(async (req, res) => {
       return json({ time: await w.chain.now() });
     }
     if (req.method !== "GET") return send(405, "text/plain", "GET, or POST /rpc");
-    if (path === "/config.json") return json({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: 0, rpcUrl: "rpc" });
+    if (path === "/config.json") return json({ chainId: CHAIN_ID, contract: w.legacy.address, contractV2: w.deals.address, fromBlockV2: 0, contractV3: v3?.address, fromBlockV3: 0, rpcUrl: "rpc" });
+    if (demoV3 && path === "/vendor/ethers.js") {
+      return send(200, TYPES[".js"], readFileSync("node_modules/ethers/dist/ethers.min.js"));
+    }
     if (path === "/dev/wallet.js") return send(200, TYPES[".js"], `window.__dev = ${JSON.stringify(setup)};\n${readFileSync(new URL("./dev-wallet.js", import.meta.url), "utf8")}`);
     const file = join(root, path.endsWith("/") ? `${path}index.html` : path);
     const real = existsSync(file) ? realpathSync(file) : null;
@@ -60,7 +95,7 @@ server.listen(port, host, () => {
   console.log(`otc.fam on a local chain: http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.address().port}/\n`);
   for (const [name, address] of Object.entries(people)) console.log(`${name.padEnd(9)} ${address}`);
   console.log(`FAM       ${setup.tokens.FAM}  (18 decimals; the seller holds 10,000,000)`);
-  console.log(`USDC      ${setup.tokens.USDC}  (6 decimals; the buyer and the stranger hold 10,000 each)`);
+  console.log(`USDC      ${setup.tokens.USDC}  (6 decimals; the buyer and the stranger hold ${quoteBudget.toLocaleString("en-US")} each)`);
   console.log(`Treasury  ${setup.treasury}\n`);
   console.log("The bar at the bottom of the page chooses whose wallet the browser has, and moves the chain's time. Ctrl-C stops it.");
 });

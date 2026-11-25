@@ -216,3 +216,22 @@ main.wide > .card { max-width: 456px; margin: 0 auto; }
 @media (max-width: 420px) {
   input.mono { padding: 10px 6px; font-size: 11px; letter-spacing: -0.01em; }
 }
+
+main:has(.v3-version) { max-width: 720px; }
+.v3-version { color: var(--accent); font-size: 13px; font-weight: 700; margin: 0 0 6px; }
+.v3-nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0; }
+.v3-nav a { color: var(--accent); }
+.v3-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.v3-grid .field { min-width: 0; }
+.v3-form .primary, .v3-form > p { margin-top: 14px; }
+.v3-preview:not(:empty), .v3-receipts { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.v3-status { color: var(--accent); font-weight: 700; }
+.v3-history { list-style: none; padding: 0; }
+.v3-history-item { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.v3-receipts li { overflow-wrap: anywhere; }
+main:has(.v3-version) :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 520px) {
+  .v3-form .v3-grid { grid-template-columns: minmax(0, 1fr); }
+  .v3-history-item .row { flex-wrap: wrap; }
+  .v3-grid dd { font-size: 13px; }
+}
