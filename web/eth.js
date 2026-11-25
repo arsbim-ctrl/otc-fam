@@ -272,6 +272,17 @@ const REASONS = {
   "0xa7e67778": () => "Only the seller of this deal can cancel it.", // NotSeller(uint256)
   "0xc8e7093a": () => "Only the grant's beneficiary can claim it.", // NotBeneficiary(uint256)
   "0xf9489585": () => "Nothing has vested since the last claim: there is nothing to claim yet.", // NothingToClaim(uint256)
+  // The broker deals contract (v3) shares the reasons above that are written the same, and adds these.
+  "0xe38d022a": ([seller]) => `Only the seller, ${address(seller)}, can fund this deal or take its tokens back.`, // NotSeller(address)
+  "0x0eed4964": ([buyer]) => `This deal is for ${address(buyer)}: only that address can settle it.`, // NotBuyer(address)
+  "0x9a7d38d9": ([signer]) => `That is not ${address(signer)}'s signature of these exact terms for this contract on this network. Sign again with that wallet.`, // BadSignature(address)
+  "0x2af71f10": ([seller, nonce]) => `The seller, ${address(seller)}, has already funded a deal with nonce ${uint(nonce)}, and a seller can use a nonce once. Ask the broker for a new link.`, // NonceUsed(address,uint256)
+  "0x47386530": () => "This deal is not waiting for settlement: it is not funded yet, or it was settled or refunded.", // NotFunded(bytes32)
+  "0xf18c0fda": () => "This deal has expired: it can no longer be settled.", // DealExpired(bytes32)
+  "0x197f3135": () => "This deal's fixed vesting start has passed, so it can no longer be settled. Its seller can take the tokens back.", // StartPassed(bytes32)
+  "0x4d28212f": () => "The broker must be an address of its own: not the seller's, not the buyer's and not the deal contract's.", // BadBroker()
+  "0x0e4596ac": () => "The broker's share is more than all of the fees.", // BrokerShareTooLarge()
+  "0x359e75e7": () => "This kind of delivery is not supported.", // BadDelivery()
 };
 
 // What a wallet or a node says in its own words when it refuses, and the sentence the page says instead.
@@ -292,8 +303,9 @@ function revertData(error) {
 }
 
 /**
- * What went wrong, for the person: always a plain sentence. A refusal in their wallet, a deal contract's reason, the
- * page's own words, or a known refusal of the wallet or the node; whatever else they say is not shown as it came.
+ * What went wrong, for the person: a refusal in their wallet, a deal contract's reason, the page's own words, or a
+ * known refusal of the wallet or the node, each as a plain sentence. An error the page does not recognise is shown
+ * in the node's own words (the first line of its message), as round 1 showed it: that is all there is to go on.
  */
 export function explain(error) {
   if (error?.plain) return error.message;
@@ -306,6 +318,6 @@ export function explain(error) {
     if (data.startsWith("0x08c379a0")) return `The transaction would fail: ${decodeText(`0x${data.slice(10)}`)}.`; // Error(string)
     return "The transaction would fail on the chain, so it was not sent.";
   }
-  const raw = String(error?.message ?? error ?? "");
-  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? "Your wallet or the network refused this request, and nothing was sent. Try again in a moment.";
+  const raw = String(error?.message ?? error);
+  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? raw.split("\n")[0];
 }

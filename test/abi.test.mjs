@@ -25,7 +25,13 @@ test("every error of OtcDeals has words on the page, and the words carry its arg
   assert.equal(explain({ code: 4001, message: "User rejected the request." }), "You declined in your wallet. Nothing was sent.");
 });
 
-test("whatever a wallet or a node says in its own words, the page says a plain sentence and never repeats theirs", () => {
+test("a refusal the page recognises is said as a plain sentence, and one it does not is shown in the node's own words, as in round 1", () => {
+  // Round 1's fallback, kept: the first line of the node's message, unchanged.
+  for (const message of ["Internal JSON-RPC error.", "header not found", "TypeError: Cannot read properties of undefined (reading 'gasPrice')\n    at eval (inpage.js:1:10)"]) {
+    assert.equal(explain(Object.assign(new Error(message), { code: -32000 })), message.split("\n")[0]);
+  }
+  assert.equal(explain({ code: -32603, message: "missing trie node 0xabc" }), "missing trie node 0xabc");
+  assert.equal(explain("some text"), "some text");
   const refusals = [
     ["insufficient funds for gas * price + value: address 0x5e6F708192a3B4c5D6E7f8091A2b3c4d5E6f7081 have 0 want 21000000000000", /too little of the network's own coin \(ETH\) to pay the network fee/],
     ["Sender doesn't have enough funds to send tx. The max upfront cost is: 2100000 and the sender's account only has: 0", /too little of the network's own coin \(ETH\)/],
@@ -33,15 +39,12 @@ test("whatever a wallet or a node says in its own words, the page says a plain s
     ["nonce too low: next nonce 12, tx nonce 11", /already has a transaction waiting/],
     ["replacement transaction underpriced", /already has a transaction waiting/],
     ["execution reverted", /would fail on the chain, so it was not sent/],
-    ["Internal JSON-RPC error.", /^Your wallet or the network refused this request, and nothing was sent\./],
-    ["TypeError: Cannot read properties of undefined (reading 'gasPrice') at eval (inpage.js:1:10)", /^Your wallet or the network refused this request/],
   ];
   for (const [message, expected] of refusals) {
     const said = explain(Object.assign(new Error(message), { code: -32000 }));
     assert.match(said, expected, message);
-    assert.ok(!said.includes(message.slice(0, 20)), `the node's words are not shown: ${said}`);
+    assert.ok(!said.includes(message.slice(0, 20)), `a known refusal is not repeated word for word: ${said}`);
   }
-  assert.match(explain(undefined), /refused this request/);
 });
 
 test("a token's symbol is read as an ABI string or as bytes32 (as MKR's is), without characters that change the text's direction", async () => {

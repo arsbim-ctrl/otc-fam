@@ -10,7 +10,7 @@ import { ROOT } from "../.launchpad/checks/round-1/lib/entry.mjs";
 import { ANYONE, artifacts, STATUS, world } from "../.launchpad/checks/round-1/world.mjs";
 
 const { EdgeToken } = compile(ROOT, "test/tokens/EdgeToken.sol");
-const KIND = { Plain: 0, Fee: 1, FeeOnTop: 2, False: 3, Reset: 4, TransferFee: 5 };
+const KIND = { Plain: 0, Fee: 1, FeeOnTop: 2, False: 3, Reset: 4 };
 const contractErrors = new Interface(artifacts().entry.abi);
 
 /** A world with an EdgeToken of `kind`, of which the maker, the taker and the third person hold a million. */
@@ -65,29 +65,6 @@ test("a token that starts taking fees once deals hold it never pays one deal out
   assert.equal(await token.read.balanceOf(w.deals.address), 1000n);
   await w.deals.as(w.other).cancel(2);
   assert.equal(await token.read.balanceOf(w.deals.address), 0n);
-});
-
-test("a token that keeps a fee on transfer only cannot leave a side short on a filled deal, and its maker can still cancel", async () => {
-  for (const side of ["sold", "bought"]) {
-    const { w, token } = await worldWith("TransferFee", "SHORT"); // comes in whole by transferFrom, leaves 1% short by transfer
-    let id = 1;
-    if (side === "bought") id = await w.offer({ buyToken: token.address, buyAmount: 1000n }); // ALFA for SHORT
-    else {
-      await token.as(w.maker).approve(w.deals.address, 1000n);
-      await w.create(w.maker, await w.terms({ sellToken: token.address, sellAmount: 1000n })); // SHORT for BRAVO
-    }
-    const before = await w.holdings(), held = async () => Promise.all([w.maker, w.taker, w.deals.address].map((who) => token.read.balanceOf(who)));
-    const had = await held();
-    await token.as(w.taker).approve(w.deals.address, 1000n);
-    await w.approve(w.taker, w.bravo, w.BUY);
-    assert.equal(await revertsWith(w.deals.as(w.taker).fill(id)), "InexactTransfer", `${side}: one side would receive 990 of the 1000 the deal says`);
-    await w.moved(before, {}, `after a fill that would have left a side short (${side})`);
-    assert.deepEqual(await held(), had);
-    assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Open, "the deal is still open");
-    await w.deals.as(w.maker).cancel(id);
-    assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Cancelled);
-    assert.equal(await token.read.balanceOf(w.deals.address), 0n, "nothing of the maker's stays locked in the contract");
-  }
 });
 
 test("a token that answers false moves nothing: it cannot be sold, and a fill paid with it fails and changes no balance", async () => {

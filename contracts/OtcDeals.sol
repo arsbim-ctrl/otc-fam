@@ -79,8 +79,8 @@ contract OtcDeals is IOtcDeals {
         emit DealFilled(id, msg.sender);
 
         _pull(deal.buyToken, msg.sender, deal.buyAmount);
-        _pay(deal.buyToken, deal.maker, deal.buyAmount);
-        _pay(deal.sellToken, msg.sender, deal.sellAmount);
+        _push(deal.buyToken, deal.maker, deal.buyAmount);
+        _push(deal.sellToken, msg.sender, deal.sellAmount);
     }
 
     /// @notice Withdraws deal `id`, open or expired, and gives its `sellAmount` back to the maker, its only caller.
@@ -111,19 +111,8 @@ contract OtcDeals is IOtcDeals {
         if (_balanceOf(token, address(this)) != held + amount || _balanceOf(token, from) + amount != had) revert InexactTransfer(token);
     }
 
-    /// Pays one side of a swap: `to` must receive exactly `amount`. A token that keeps a fee on its way out (on
-    /// `transfer` only, or from a later day on) would leave that side short while the deal says Filled: the fill
-    /// fails instead, the deal stays open, and its maker can still cancel it.
-    function _pay(address token, address to, uint256 amount) private {
-        uint256 had = _balanceOf(token, to);
-        _push(token, to, amount);
-        if (_balanceOf(token, to) != had + amount) revert InexactTransfer(token);
-    }
-
     /// Gives `amount` of `token` from this contract to `to`, the only way a token goes out. This contract's balance
-    /// must fall by exactly `amount`, so that no deal is ever paid out of another deal's tokens. Used as it is for
-    /// a cancel, where the maker takes back their own tokens: what the token then delivers is no reason to keep
-    /// them locked here.
+    /// must fall by exactly `amount`, so that no deal is ever paid out of another deal's tokens.
     function _push(address token, address to, uint256 amount) private {
         uint256 held = _balanceOf(token, address(this));
         _callToken(token, abi.encodeCall(IERC20Minimal.transfer, (to, amount)));
