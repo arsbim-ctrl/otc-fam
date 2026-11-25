@@ -1,7 +1,7 @@
 // #/v3/deals: the broker deals of one person, by role. The list has two sources. This browser's own: the links a
 // broker prepared here and the deals opened here, kept in the browser's storage, which is the only place a deal that
-// is not funded yet can be known from. And the chain's: every deal that names one address as seller or broker, and
-// every deal that address settled as buyer, found by the contract's events, so the list is the same in any browser.
+// is not funded yet can be known from. And the chain's: every funded deal that names one address as its seller, its
+// broker or its buyer, found by the contract's events, so the list is the same in any browser.
 // The address is the connected wallet's, or one typed in (reading needs no wallet). Whatever the source, each deal's
 // state is read from the chain now: awaiting funding, funded, settled, refunded or expired, with its pair, its price,
 // the broker's share, its deadline and its receipt, and with the two things a list is for: the link, and a way to

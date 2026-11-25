@@ -20,7 +20,7 @@ const pageTerms = (t) => Object.fromEntries(FIELDS.map(([name, type]) => [name, 
 test("each selector and topic in web/v3.js is the keccak of the signature written next to it, and names something the contract has", () => {
   const source = readFileSync("web/v3.js", "utf8"), tuple = /const TERMS = "(.*)";/.exec(source)[1];
   const pairs = [...source.matchAll(/"(0x[0-9a-f]{8}|0x[0-9a-f]{64})",? \/\/ (\w+\(.*\))$/gm)];
-  assert.equal(pairs.length, 16, "the 12 calls and the 4 events");
+  assert.equal(pairs.length, 17, "the 12 calls and the 5 events");
   for (const [, hex, written] of pairs) {
     const signature = written.replace("TERMS", tuple);
     assert.equal(hex, id(signature).slice(0, hex.length), signature);
@@ -104,7 +104,8 @@ test("the page refuses, before any wallet is asked, the terms the contract would
   assert.equal(flawOf(v, here), null);
   for (const [changes, error] of [[{ allocation: 0n }, "ZeroAmount"], [{ quote: 0n }, "ZeroAmount"], [{ quoteToken: t.baseToken }, "SameToken"], [{ buyer: `0x${"0".repeat(40)}` }, "NoBuyer"],
     [{ buyer: t.seller }, "BuyerIsSeller"], [{ broker: t.seller }, "BadBroker"], [{ broker: t.buyer }, "BadBroker"], [{ broker: here }, "BadBroker"], [{ broker: `0x${"0".repeat(40)}` }, "BadBroker"],
-    [{ brokerBps: 10_001n }, "BrokerShareTooLarge"], [{ delivery: 2n }, "BadDelivery"], [{ cliffSeconds: 1n }, "ScheduleOnImmediate"], [{ delivery: 1n }, "BadSchedule"]]) {
+    [{ brokerBps: 10_001n }, "BrokerShareTooLarge"], [{ delivery: 2n }, "BadDelivery"], [{ cliffSeconds: 1n }, "ScheduleOnImmediate"], [{ delivery: 1n }, "BadSchedule"],
+    [{ quote: 2n ** 256n - 1n }, "QuoteTooLarge"], [{ delivery: 1n, durationSeconds: 2n ** 64n - 1n }, "ScheduleTooLong"]]) {
     const terms = { ...t, ...changes };
     assert.ok(flawOf(terms, here), `${error}: the page says why ${JSON.stringify(changes, (_, x) => (typeof x === "bigint" ? `${x}` : x))} cannot be funded`);
     // The contract refuses the same terms with that error, whoever signs them.
@@ -117,6 +118,9 @@ test("the page refuses, before any wallet is asked, the terms the contract would
     ["awaiting", "funded", "expired", "expired", "settled", "refunded"]);
   assert.deepEqual([stateOf(fixed, "funded", expiry - 100), stateOf(fixed, "funded", expiry - 99), settleBy(fixed), settleBy(t)], ["funded", "expired", expiry - 100, expiry],
     "a fixed vesting start ends a deal sooner than its expiry");
+  assert.deepEqual([stateOf(fixed, "unfunded", expiry - 101), stateOf(fixed, "unfunded", expiry - 100)], ["awaiting", "expired"],
+    "a deal can be settled in the second of its fixed start, but no longer funded then: the contract asks for a start in the future");
+  assert.equal(money(1_000_000n, 65_535).treasuryFee, 0n, "a share the contract would refuse never shows as a negative amount");
 });
 
 test("every error BrokerDeals can revert with from the page has words there, and the words carry its arguments", () => {

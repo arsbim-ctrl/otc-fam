@@ -5,7 +5,7 @@
 // buyer signs the same terms and settles. After a vesting settlement it is the grant's page too (v2-grant.js draws
 // it), and every transaction is listed as a receipt (v3-receipt.js). A link that ends with a deal's ID works as
 // well, once the deal is funded: the chain then has its terms.
-import { approveExactly, explain, same, transact } from "./eth.js";
+import { approveExactly, explain, same, say, transact } from "./eth.js";
 import { flow } from "./flow.js";
 import { action, amount, card, copyButton, fact, fromNow, h, head, leg, networkName, NO_WALLET, notice, secondary, short, show, span, TOKEN_WARNING, utc } from "./ui.js";
 import { formatAmount, isAddress } from "./units.js";
@@ -32,7 +32,8 @@ export function dealPageV3(app, path) {
   const onFocus = () => s.busy || load();
   addEventListener("focus", onFocus);
   app.main.classList.add("wide");
-  const presses = flow({ app, s, key: `otcfam:pending:${config.chainId}:${v3?.contract}:v3:${payload.slice(0, 66)}`, render,
+  // The remembered transaction is this link's own: the whole of its end, since two deals of the same people begin alike.
+  const presses = flow({ app, s, key: `otcfam:pending:${config.chainId}:${v3?.contract}:v3:${payload.slice(0, 320)}`, render,
     async settle(receipt, label) {
       if (receipt?.transactionHash) s.receipt = { what: label.replace(/…$/, ""), hash: receipt.transactionHash, block: Number(receipt.blockNumber), gas: BigInt(receipt.gasUsed) };
       await load();
@@ -155,7 +156,7 @@ export function dealPageV3(app, path) {
         h("strong", {}, vesting ? "Vesting delivery" : "Immediate delivery"),
         vesting ? ": the buyer gets a new grant that unlocks over time. Settled does not mean unlocked." : ": the buyer gets the tokens in the settlement transaction."),
       h("p", { class: "lead" }, lead(st, role, vesting)),
-      h("p", { class: `turn ${turn.who}`, testid: "next-actor", "data-actor": turn.who }, h("strong", {}, turn.title), " ", turn.why),
+      h("p", { class: `turn ${turn.who}`, testid: "next-actor", "data-actor": turn.who, role: "status" }, h("strong", {}, turn.title), " ", turn.why),
       waiting(),
       leg(payLabel, m.buyerTotal, q, "pay", `Price ${amount(t.quote, q)} + 0.5% buyer fee ${amount(m.buyerFee, q)}`),
       h("div", { class: "swap-arrow", "aria-hidden": "true" }, "↓"),
@@ -359,10 +360,12 @@ export function dealPageV3(app, path) {
 
   /** The account's signature of the deal's terms: asked of the wallet once, then kept while this page is open. */
   async function signature(stage) {
-    const key = `${s.id}:${wallet.account}`;
+    const account = wallet.account, key = `${s.id}:${account}`;
     if (!signed.has(key)) {
       stage("Sign the deal's terms in your wallet: it shows the same terms as this page. Signing sends nothing.");
-      signed.set(key, await signTerms(app, s.t));
+      const signature = await signTerms(app, s.t);
+      if (wallet.account !== account) throw say("Your wallet changed account while it was signing. Press again to sign with the account it has now.");
+      signed.set(key, signature);
     }
     return signed.get(key);
   }

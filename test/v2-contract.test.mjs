@@ -465,3 +465,70 @@ test("the treasury is fixed at deployment, and besides createDeal, fill, cancel 
     assert.ok(!abi.some((f) => f.type === "fallback" || f.type === "receive" || f.stateMutability === "payable"), "nothing is payable, and there is no fallback");
   }
 });
+
+test("R2-03: a token that returns false or charges a fee during fill() reverts everything, and holdings() are equal before and after", async () => {
+  const deliveries = ["terms", "vesting"]; // w.terms: delivered at once; w.vesting: into a new grant
+  /** fill() of deal `id` reverts with `error`: nobody's holdings change, the deal is still funded and no grant is left behind. */
+  const fillReverts = async (w, id, before, error, what) => {
+    assert.equal(await revertsWith(w.deals.as(w.buyer).fill(id)), error, what);
+    assert.deepEqual(await w.holdings(), before, `${what}: holdings() before and after fill()`);
+    const deal = await w.deals.read.getDeal(id);
+    assert.deepEqual([deal.status, deal.grantId], [STATUS.Funded, 0n], `${what}: the deal is still funded`);
+    assert.equal((await w.deals.read.getGrant(id)).custodian, ZERO, `${what}: no grant is left behind`);
+  };
+
+  // The payment token misbehaves: the deal is funded in a plain base token, and fill() is where the payment token is first asked to move.
+  for (const [kind, error] of [["False", "TransferFailed"], ["Fee", "InexactTransfer"], ["FeeOnTop", "InexactTransfer"], ["TransferFee", "InexactTransfer"]]) {
+    for (const delivery of deliveries) {
+      const w = await world();
+      const pay = await w.token("PAY", 6, kind);
+      const t = await w[delivery]({ quoteToken: pay.address });
+      const id = await w.fund(t);
+      await w.ready(t);
+      await pay.as(w.deployer).mint(w.buyer, t.quote); // more than the payment in hand, so that a fee on top can be charged
+      const before = await w.holdings();
+      await fillReverts(w, id, before, error, `${delivery}, a payment token of kind ${kind}`);
+      await w.deals.as(w.seller).cancel(id);
+      assert.deepEqual(await w.moved(before), { "deals.FAM": -ALLOCATION, "seller.FAM": ALLOCATION }, `${kind}: the seller cancels and holds the whole allocation again`);
+    }
+  }
+
+  // The base token misbehaves. createDeal already refuses one that answers false or takes a fee as it comes in: nothing moves, and there is no deal to fill.
+  for (const [kind, error] of [["False", "TransferFailed"], ["Fee", "InexactTransfer"], ["FeeOnTop", "InexactTransfer"]]) {
+    const w = await world();
+    const base = await w.token("BASE", 18, kind);
+    await base.as(w.deployer).mint(w.seller, 2n * ALLOCATION);
+    await base.as(w.seller).approve(w.deals.address, 2n * ALLOCATION);
+    const before = await w.holdings();
+    assert.equal(await revertsWith(w.deals.as(w.seller).createDeal(await w.terms({ baseToken: base.address }))), error, `createDeal, a base token of kind ${kind}`);
+    assert.deepEqual(await w.holdings(), before, `${kind}: holdings() before and after createDeal()`);
+    assert.equal((await w.deals.read.getDeal(1)).status, STATUS.None);
+  }
+  // So fill() meets such a base token only when it comes in whole (a fee on transfer only), or when it starts to misbehave after
+  // the deal is funded, as an upgradeable token can. `cancel` is what the seller's cancel does meanwhile: it returns the allocation
+  // short of the token's own fee, or it waits with that error until the token behaves again.
+  for (const [kind, error, cancel] of [["TransferFee", "InexactTransfer", "short"], ["False", "TransferFailed", "TransferFailed"], ["Fee", "InexactTransfer", "short"],
+    ["FeeOnTop", "InexactTransfer", "InexactTransfer"]]) {
+    for (const delivery of deliveries) {
+      const w = await world();
+      const base = await w.token("BASE", 18);
+      const t = await w[delivery]({ baseToken: base.address });
+      const id = await w.fund(t);
+      await w.fund(t); // a second deal in the same token, whose allocation must not pay for the first
+      await w.ready(t);
+      await base.as(w.deployer).setKind(KIND[kind]);
+      const before = await w.holdings();
+      await fillReverts(w, id, before, error, `${delivery}, a base token of kind ${kind}`);
+      if (cancel !== "short") {
+        assert.equal(await revertsWith(w.deals.as(w.seller).cancel(id)), cancel, `${kind}: the cancel waits for the token too`);
+        assert.deepEqual(await w.holdings(), before, `${kind}: holdings() before and after the refused cancel()`);
+        assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Funded);
+        await base.as(w.deployer).setKind(KIND.Plain);
+      }
+      await w.deals.as(w.seller).cancel(id);
+      assert.deepEqual(await w.moved(before), { "deals.BASE": -ALLOCATION, "seller.BASE": cancel === "short" ? ALLOCATION - ALLOCATION / 100n : ALLOCATION },
+        `${kind}: the seller cancels, the contract gives up exactly the allocation, and the second deal's tokens stay`);
+      assert.equal((await w.deals.read.getDeal(id)).status, STATUS.Cancelled);
+    }
+  }
+});

@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import { formatAmount } from "../web/units.js";
 import { packTerms } from "../web/v3.js";
 import { browse, closeBrowser, DESKTOP, fits, offered, PHONE, pressUntil, read, seen, serve, shows, signerFor, until } from "./lib/site.mjs";
-import { ALLOCATION, DAY, feesOf, QUOTE, STATUS3, world3 } from "./lib/world3.mjs";
+import { ALLOCATION, feesOf, QUOTE, STATUS3, world3 } from "./lib/world3.mjs";
 
 const folder = resolve(process.argv[2] ?? "screens");
 mkdirSync(folder, { recursive: true });

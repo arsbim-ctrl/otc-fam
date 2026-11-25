@@ -353,8 +353,9 @@ test("R3-05: a signature declined in the wallet, a transaction declined after si
   assert.equal(await statusOf(w, id), STATUS3.Settled);
 }));
 
-test("R3-05: a page reloaded while its settlement is on its way takes it up again, and ends with the receipt", () => onSite(async (site, w) => {
-  const t = await w.terms3(), id = await w.fund3(t);
+test("R3-05: a page reloaded while its settlement is on its way takes it up again, and ends with the receipt; another deal of the same people does not take it for its own", () => onSite(async (site, w) => {
+  const t = await w.terms3(), id = await w.fund3(t), twin = await w.terms3();
+  await w.fund3(twin);
   await w.usdc.as(w.deployer).mint(w.buyer, TOTAL);
   await browse(site, linkTo(w, t), { wallet: signerFor(w, "buyer") }, async (page) => {
     const held = { on: false }; // while it is on, the page is told that no transaction has a receipt yet
@@ -370,6 +371,13 @@ test("R3-05: a page reloaded while its settlement is on its way takes it up agai
     await page.reload();
     await until(async () => (await read(page)).includes("This page was reloaded while transaction 0x"), "the page waiting for its transaction again");
     assert.equal(await page.getByTestId("stop-waiting").count(), 1, "the person can stop waiting");
+    // The same seller's deal with the same buyer in the same tokens is another link: it is not waiting for anything.
+    await page.goto(`${site.url}/${linkTo(w, twin)}`);
+    await says(page, "deal-id", w.idOf(twin));
+    await state(page, "funded");
+    assert.equal(await page.getByTestId("waiting").count(), 0, "the other deal's page does not take up this deal's transaction");
+    await page.goto(`${site.url}/${linkTo(w, t)}`);
+    await until(async () => (await page.getByTestId("waiting").count()) === 1, "the first deal's page still waiting for its transaction");
     held.on = false;
     await noticeSays(page, "The transaction sent before this page was reloaded is confirmed.");
     await state(page, "settled");
@@ -408,7 +416,7 @@ test("R3-05: the history lists a person's deals by role, from this browser and f
     await page.getByTestId("who").fill(w.seller);
     await listed(page, { [ids.settled]: "settled as seller", [ids.refunded]: "refunded as seller", [ids.funded]: "funded as seller" }, "the same deals, as their seller");
     await page.getByTestId("who").fill(w.buyer);
-    await listed(page, { [ids.settled]: "settled as buyer" }, "what the buyer settled");
+    await listed(page, { [ids.settled]: "settled as buyer", [ids.refunded]: "refunded as buyer", [ids.funded]: "funded as buyer" }, "and as their buyer: also the funded one, which waits for the buyer");
     await page.getByTestId("who").fill(w.other);
     await listed(page, {}, "nothing for a stranger");
   });

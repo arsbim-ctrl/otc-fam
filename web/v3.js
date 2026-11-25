@@ -22,6 +22,7 @@ const SELECTOR = {
 };
 const TOPIC = {
   funded: "0x6443a239b8c4af787b362a9af5f4d9ed48e90d4f215a4f00bdbf5fd2bccfa603", // BrokerDealFunded(bytes32,address,address)
+  offered: "0x757a3aa40ef7150669aed69c5d490e7db039f0d7fa92109dde5b10cc3614b6c5", // BrokerDealOffered(bytes32,address)
   settled: "0x03b817016100b7370d323dc856d4538d5782b8134ea2a859b4e89503e6adc72c", // BrokerDealSettled(bytes32,address,uint256,uint256,uint256,uint256,uint256)
   refunded: "0xd7c7f553c7294348d6136ac53cde27eb143f355e50cd1acf79d158bdea774bc7", // BrokerDealRefunded(bytes32)
   claimed: "0x617847aec64ffd2e4a19d71c3e0062f744212a6f13486fec81d004b3a5c8fb2e", // GrantClaimed(uint256,address,uint256)
@@ -50,7 +51,8 @@ export const BPS = 10_000n;
  */
 export function money(quote, brokerBps) {
   const fee = (quote * FEE_BPS) / BPS, feePool = 2n * fee, brokerFee = (feePool * BigInt(brokerBps)) / BPS;
-  return { quote, buyerFee: fee, sellerFee: fee, buyerTotal: quote + fee, sellerNet: quote - fee, feePool, brokerFee, treasuryFee: feePool - brokerFee };
+  // A share above all of the fees is refused by the contract; the page then says so, and shows no negative amount.
+  return { quote, buyerFee: fee, sellerFee: fee, buyerTotal: quote + fee, sellerNet: quote - fee, feePool, brokerFee, treasuryFee: brokerFee > feePool ? 0n : feePool - brokerFee };
 }
 
 /** "20%" or "12.5%" for a share in hundredths of a percent. */
@@ -90,6 +92,7 @@ export function unpackTerms(text) {
 export function flawOf(t, contract) {
   const zero = (a) => /^0x0{40}$/.test(a);
   if (t.allocation === 0n || t.quote === 0n) return "Both amounts must be more than zero.";
+  if (t.quote + (t.quote * FEE_BPS) / BPS >= 2n ** 256n) return "That price is too large for the fee to be added to it.";
   if (same(t.baseToken, t.quoteToken)) return "The token sold and the payment token are the same.";
   if (zero(t.buyer)) return "The terms name no buyer.";
   if (same(t.buyer, t.seller)) return "The buyer and the seller are the same address.";
@@ -99,6 +102,7 @@ export function flawOf(t, contract) {
     if (t.fixedStart || t.cliffSeconds || t.durationSeconds) return "Immediate delivery takes no vesting schedule.";
   } else if (t.delivery === VESTING) {
     if (t.cliffSeconds >= t.durationSeconds) return "The vesting must last more than zero seconds, and its cliff must be shorter than the whole vesting.";
+    if ((t.fixedStart || t.expiry) + t.durationSeconds >= 2n ** 64n) return "That vesting schedule ends too far in the future to be written on the chain.";
   } else return "This kind of delivery is not supported.";
   return null;
 }
@@ -145,7 +149,8 @@ export const claimData = (grantId) => encode(SELECTOR.claim, grantId);
 export function stateOf(t, status, now) {
   if (status === "settled" || status === "refunded") return status;
   // A grant never starts before it is funded: once a fixed vesting start has passed, the deal can go no further.
-  const startPassed = t.delivery === VESTING && t.fixedStart > 0n && now > Number(t.fixedStart);
+  // It can still be settled in the very second of that start, but no longer funded then.
+  const startPassed = t.delivery === VESTING && t.fixedStart > 0n && (status === "funded" ? now > Number(t.fixedStart) : now >= Number(t.fixedStart));
   if (now >= Number(t.expiry) || startPassed) return "expired";
   return status === "funded" ? "funded" : "awaiting";
 }
@@ -233,14 +238,14 @@ export class DealsV3 {
   }
 
   /**
-   * The ids of the deals the chain has for `who` in each role, newest first: as seller and as broker, the deals
-   * that were funded; as buyer, the deals that `who` settled. A deal that was never funded is not on the chain.
+   * The ids of the deals the chain has for `who` as seller, as broker or as buyer, newest first: the deals that
+   * were funded, found by the events that name each of the three. A deal that was never funded is not on the chain.
    */
   async dealsOf(who) {
     const topic = `0x${word(who)}`;
-    const [seller, broker, buyer] = await Promise.all([this.logs([TOPIC.funded, null, topic]), this.logs([TOPIC.funded, null, null, topic]), this.logs([TOPIC.settled, null, topic])]);
+    const found = await Promise.all([this.logs([TOPIC.funded, null, topic]), this.logs([TOPIC.funded, null, null, topic]), this.logs([TOPIC.offered, null, topic])]);
     const ids = new Map();
-    for (const log of [...seller, ...broker, ...buyer]) ids.set(log.topics[1], Math.max(ids.get(log.topics[1]) ?? 0, Number(log.blockNumber)));
+    for (const log of found.flat()) ids.set(log.topics[1], Math.max(ids.get(log.topics[1]) ?? 0, Number(log.blockNumber)));
     return [...ids].sort((a, b) => b[1] - a[1]).map(([id]) => id);
   }
 

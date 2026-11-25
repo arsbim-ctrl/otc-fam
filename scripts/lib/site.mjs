@@ -1,10 +1,11 @@
-// The page on a world (world.mjs), as a person gets it: built by "npm run build", served from dist/ on
-// 127.0.0.1 with a config.json that names both deal contracts and a read-only JSON-RPC endpoint, and opened in
+// The page on a world (world.mjs, world3.mjs), as a person gets it: built by the build script, served on 127.0.0.1
+// with a config.json that names the world's deal contracts and a read-only JSON-RPC endpoint, and opened in
 // Chromium at a phone's or a desktop's width, with a stand-in wallet as window.ethereum or with no wallet at all.
-// The tests (test/v2-page.test.mjs) and the scenes (scripts/play.mjs) both use it.
+// The page tests (test/v2-page.test.mjs, test/v3-page.test.mjs) and the scenes (scripts/play.mjs, play3.mjs) use it.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { extname, join, sep } from "node:path";
 import { chromium } from "playwright";
 import { CHAIN_ID } from "../../.launchpad/checks/round-1/chain.mjs";
@@ -17,11 +18,16 @@ export const PHONE = { width: 390, height: 844 }, DESKTOP = { width: 1440, heigh
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
 let built;
-/** dist/, made once by the build script. */
+/**
+ * The built site, made once by the build script in a folder of this process's own: test files run side by side,
+ * and one that rebuilt a shared dist/ would pull the files from under the others.
+ */
 function dist() {
   built ??= (() => {
-    execFileSync(process.execPath, ["scripts/build.mjs"], { cwd: ROOT, stdio: "ignore" });
-    return realpathSync(join(ROOT, "dist"));
+    const out = mkdtempSync(join(tmpdir(), "otcfam-site-"));
+    process.on("exit", () => rmSync(out, { recursive: true, force: true }));
+    execFileSync(process.execPath, ["scripts/build.mjs", out], { cwd: ROOT, stdio: "ignore" });
+    return realpathSync(out);
   })();
   return built;
 }

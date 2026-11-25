@@ -32,6 +32,7 @@ test("a refusal the page recognises is said as a plain sentence, and one it does
   }
   assert.equal(explain({ code: -32603, message: "missing trie node 0xabc" }), "missing trie node 0xabc");
   assert.equal(explain("some text"), "some text");
+  for (const silent of [undefined, {}, { code: -32603 }, new Error("")]) assert.match(explain(silent), /refused this request without saying why/, "no message at all: there are no words of the node's to show");
   const refusals = [
     ["insufficient funds for gas * price + value: address 0x5e6F708192a3B4c5D6E7f8091A2b3c4d5E6f7081 have 0 want 21000000000000", /too little of the network's own coin \(ETH\) to pay the network fee/],
     ["Sender doesn't have enough funds to send tx. The max upfront cost is: 2100000 and the sender's account only has: 0", /too little of the network's own coin \(ETH\)/],

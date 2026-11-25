@@ -53,6 +53,9 @@ contract BrokerDeals is IBrokerDeals {
     error NothingToClaim(uint256 grantId);
     error Reentered();
 
+    /// Not part of IBrokerDeals: emitted with BrokerDealFunded, which names the seller and the broker, so that the
+    /// buyer too can find the deals that wait for it.
+    event BrokerDealOffered(bytes32 indexed dealId, address indexed buyer);
     /// Not part of IBrokerDeals: a claim's own record, for receipts.
     event GrantClaimed(uint256 indexed grantId, address indexed beneficiary, uint256 amount);
 
@@ -123,6 +126,7 @@ contract BrokerDeals is IBrokerDeals {
         deal.terms = terms;
         deal.status = FUNDED;
         emit BrokerDealFunded(dealId, terms.seller, terms.broker);
+        emit BrokerDealOffered(dealId, terms.buyer);
 
         TokenMoves.take(terms.baseToken, terms.seller, terms.allocation);
     }
@@ -279,7 +283,7 @@ contract BrokerDeals is IBrokerDeals {
     }
 
     /// Whether `signature` is `signer`'s signature of `digest`: 65 bytes (r, s, v), with `s` in the lower half
-    /// of the curve's order so that one signature has one form.
+    /// of the curve's order: its mirror in the upper half, which signs the same digest, is refused.
     function _signed(address signer, bytes32 digest, bytes calldata signature) private pure returns (bool) {
         if (signature.length != 65) return false;
         bytes32 r = bytes32(signature[0:32]);

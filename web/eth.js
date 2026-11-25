@@ -318,6 +318,7 @@ export function explain(error) {
     if (data.startsWith("0x08c379a0")) return `The transaction would fail: ${decodeText(`0x${data.slice(10)}`)}.`; // Error(string)
     return "The transaction would fail on the chain, so it was not sent.";
   }
-  const raw = String(error?.message ?? error);
-  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? raw.split("\n")[0];
+  const raw = typeof error?.message === "string" ? error.message : typeof error === "string" ? error : "";
+  // With no message at all there are no words of the node's to show.
+  return REFUSALS.find(([pattern]) => pattern.test(raw))?.[1] ?? (raw.split("\n")[0] || "Your wallet or the network refused this request without saying why. Nothing was sent. Try again in a moment.");
 }
