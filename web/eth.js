@@ -131,14 +131,15 @@ export class Chain {
    * The receipt of transaction `hash`, once it is in a block. `from` and `nonce` (the sender, and the number the
    * transaction was sent with) let it notice a transaction that the wallet replaced: it fails then, with `replaced`.
    * A replacement is said only after three looks in a row found one, over a second at least: a node that lags
-   * behind another for a moment is not one.
+   * behind another for a moment is not one. A caller with its own replacement tracker can provide the verified result.
    */
-  async receipt(hash, from, nonce = null) {
+  async receipt(hash, from, nonce = null, replacement) {
     for (let waited = 0, pause = 250, gone = 0; waited < 600_000; waited += pause, pause = Math.min(pause * 2, 3000)) {
       const receipt = await this.rpc("eth_getTransactionReceipt", [hash]);
-      if (receipt) return receipt;
-      gone = from && (await this.overtaken(hash, from, nonce)) ? gone + 1 : 0;
-      if (gone >= 3) {
+      if (receipt && (!replacement || (same(receipt.transactionHash, hash)
+          && (receipt.status === "0x1" || receipt.status === "0x0")))) return receipt;
+      if (!replacement) gone = from && (await this.overtaken(hash, from, nonce)) ? gone + 1 : 0;
+      if (replacement ? replacement() : gone >= 3) {
         throw say("Your wallet replaced this transaction (it was sped up or cancelled), so this page cannot follow it. "
           + "The page has read the chain again: what it shows now is what happened.", { replaced: true });
       }
@@ -160,9 +161,9 @@ export class Chain {
   }
 
   /** The receipt of `hash` once it is in a block and succeeded; fails, in words, if it failed there or was replaced. */
-  async confirmed(hash, from, nonce) {
-    const receipt = await this.receipt(hash, from, nonce);
-    if (receipt.status !== "0x1") throw say("The transaction failed on the chain, and nothing moved. Try again.");
+  async confirmed(hash, from, nonce, replacement) {
+    const receipt = await this.receipt(hash, from, nonce, replacement);
+    if (receipt.status !== "0x1") throw say("The transaction failed on the chain, and nothing moved. Try again.", { reverted: true });
     return receipt;
   }
 }
@@ -223,14 +224,16 @@ const NO_FEE = "This wallet has too little of the network's own coin (ETH) to pa
  * is mined. `stage(text)` tells the person where it stands, and `sent(hash, nonce)`, if given, runs as soon as the
  * wallet has sent it. A transaction the chain would refuse is never sent. Whether the wallet can pay the network
  * fee is the wallet's to say (some have it paid for them): its refusal is worded by explain().
+ * V3 supplies `confirmBroadcast(hash)` to own persistence and confirmation from the instant a hash is returned.
  */
-export async function transact({ chain, wallet, config }, to, data, stage, what, sent, from = wallet.account) {
+export async function transact({ chain, wallet, config }, to, data, stage, what, sent, from = wallet.account, confirmBroadcast) {
   if (!same(wallet.account, from)) throw say("Your wallet changed accounts. Connect the designated wallet, then try again.");
   await chain.call(to, data, from);
-  const count = await chain.rpc("eth_getTransactionCount", [from, "latest"]).then(BigInt, () => null);
+  const count = confirmBroadcast ? null : await chain.rpc("eth_getTransactionCount", [from, "latest"]).then(BigInt, () => null);
   stage(`${what}. Confirm it in your wallet.`);
   const hash = await wallet.send({ to, data }, config.chainId, from);
-  // The wallet's node knows the number it gave the transaction; failing that, the account's count before it was sent.
+  if (confirmBroadcast) return confirmBroadcast(hash);
+  // The legacy replacement tracker falls back to the account's count before sending.
   const nonce = (await wallet.nonceOf(hash)) ?? count;
   sent?.(hash, nonce);
   stage(`${what}. Sent: waiting for the network to confirm it.`);
@@ -238,14 +241,14 @@ export async function transact({ chain, wallet, config }, to, data, stage, what,
 }
 
 /** Approves `spender` (the round 1 deal contract unless given) for exactly `units` of `token`: one deal's amount, never more. */
-export async function approveExactly(app, token, units, allowance, stage, spender = app.config.contract, from = app.wallet.account, sent) {
+export async function approveExactly(app, token, units, allowance, stage, spender = app.config.contract, from = app.wallet.account, sent, confirmBroadcast) {
   const data = approveData(spender, units);
   // Some tokens (USDT among them) refuse to change an approval that is not zero: it is set to zero first.
   if (allowance > 0n && (await app.chain.call(token.address, data, from).then(() => false, () => true))) {
-    await transact(app, token.address, approveData(spender, 0n), stage, `Setting your ${token.symbol} approval to zero first`, sent, from);
+    await transact(app, token.address, approveData(spender, 0n), stage, `Setting your ${token.symbol} approval to zero first`, sent, from, confirmBroadcast);
   }
   const exact = token.decimals == null ? `${units} raw units` : `${formatAmount(units, token.decimals)} ${token.symbol}`;
-  await transact(app, token.address, data, stage, `Approving ${exact}`, sent, from);
+  await transact(app, token.address, data, stage, `Approving ${exact}`, sent, from, confirmBroadcast);
 }
 
 // Why a deal contract refused a call, in words: its errors by selector, with their arguments' words. The first eleven

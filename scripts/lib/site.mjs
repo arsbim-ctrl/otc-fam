@@ -102,7 +102,7 @@ export async function browse(site, hash, { wallet = null, size = PHONE } = {}, s
   const context = await (await browser).newContext({ locale: "en-US", timezoneId: "UTC", viewport: size });
   const reported = [];
   try {
-    context.setDefaultTimeout(5000);
+    context.setDefaultTimeout(Number(process.env.OTC_TEST_BROWSER_TIMEOUT ?? 5000));
     if (wallet) {
       await context.exposeBinding("__standWallet", (_source, request) => wallet(request));
       await context.addInitScript(injectWallet);

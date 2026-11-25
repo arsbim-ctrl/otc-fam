@@ -34,8 +34,8 @@ export function explorerOf({ chainId, explorerUrl }) {
   return url ? url.replace(/\/+$/, "") : null;
 }
 /** A transaction's hash in full: a link to it on the `explorer`, in a new tab, when the network has one and the hash is one. */
-export const transaction = (hash, explorer) => (explorer && /^0x[0-9a-f]{64}$/i.test(hash)
-  ? h("a", { class: "mono", href: `${explorer}/tx/${hash}`, target: "_blank", rel: "noopener noreferrer", title: "Look this transaction up on the block explorer" }, hash)
+export const transaction = (hash, explorer, testid) => (explorer && /^0x[0-9a-f]{64}$/i.test(hash)
+  ? h("a", { class: "mono", testid, href: `${explorer}/tx/${hash}`, target: "_blank", rel: "noopener noreferrer", title: "Look this transaction up on the block explorer" }, hash)
   : h("span", { class: "mono" }, hash));
 export const amount = (units, token) => `${formatAmount(units, token.decimals)} ${token.symbol}`;
 export const short = (address) => `${address.slice(0, 6)}…${address.slice(-4)}`;

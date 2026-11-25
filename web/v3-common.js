@@ -1,4 +1,4 @@
-import { h, card, fact, networkName, notice, TOKEN_WARNING, utc, amount, span } from "./ui.js";
+import { h, card, fact, networkName, notice, show, TOKEN_WARNING, utc, amount, span } from "./ui.js";
 import { same } from "./eth.js";
 import { labels, pack, unpack } from "./v3.js";
 
@@ -18,6 +18,17 @@ export const actionButton = (id, text, run, disabled = false, style = "primary")
   { class: style, type: "button", testid: id, onclick: run, disabled }, text);
 export const section = (title, ...children) => card(h("h2", {}, title), ...children);
 export const heading = (title) => h("h1", { tabindex: "-1", class: "broker-heading" }, title);
+
+// A refreshed list can move a deal to a different row. Restore the focused control by its identity.
+export function showBroker(container, view, fallback) {
+  const active = document.activeElement;
+  const id = container.contains(active) && active.getAttribute("data-testid");
+  show(container, view);
+  if (!id || document.activeElement.getAttribute("data-testid") === id) return;
+  const current = container.querySelector(`[data-testid="${CSS.escape(id)}"]`);
+  if (!current) fallback?.()?.focus({ preventScroll: true });
+  else if (!current.disabled) current.focus({ preventScroll: true });
+}
 
 export function readTokens(chain, { baseToken, quoteToken }) {
   return Promise.all([baseToken, quoteToken].map(address => chain.token(address).catch(() => ({ address, decimals: null, symbol: "" }))));

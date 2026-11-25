@@ -1,9 +1,9 @@
 import { abi, authorize, dealState, payment, unpack } from "./v3.js";
 import { approveExactly, explain, same, say, transact } from "./eth.js";
-import { card, fact, h, leg, notice, show, transaction, utc } from "./ui.js";
+import { card, fact, h, leg, notice, transaction, utc } from "./ui.js";
 import {
   actionButton, copyLink, createHref, deliveryText, displayNetwork, emptyPage, feeFacts, heading, listenForUpdates,
-  mono, nav, percent, problem, rawTerms, readTokens, section, statePill, tokenWarning, valueOf,
+  mono, nav, percent, problem, rawTerms, readTokens, section, showBroker, statePill, tokenWarning, valueOf,
 } from "./v3-common.js";
 
 const failures = {
@@ -60,7 +60,7 @@ function receiptCard(app, state, id) {
           ? `The beneficiary claimed ${valueOf(event.amount, base)}. No fees were paid.`
           : descriptions[event.name]),
         h("span", { class: "when" }, `Block ${event.block} · ${depth} confirmation${depth === 1 ? "" : "s"}`),
-        transaction(event.hash, app.explorer),
+        transaction(event.hash, app.explorer, `broker-receipt-${event.hash}-${event.name}`),
         settled && feeFacts(payment(terms, event), quote, treasury),
         settled && event.grantId !== 0n && h("dl", { class: "facts" }, fact("Grant ID", mono(event.grantId)),
           grant && fact("Grant vault", mono(grant.custodian))));
@@ -123,7 +123,9 @@ export function brokerDealPage(app, packed) {
     try {
       const record = JSON.parse(sessionStorage.getItem(key));
       if (record && /^0x[\da-f]{64}$/i.test(record.hash) && [terms.seller, terms.buyer].some(a => same(a, record.from))) {
-        return { ...record, nonce: record.nonce == null ? null : BigInt(record.nonce) };
+        // Earlier V3 records could contain an estimated nonce. The hash still identifies the broadcast.
+        const nonce = record.nonceVerified === true && /^[0-9]+$/.test(record.nonce) ? BigInt(record.nonce) : null;
+        return { hash: record.hash, from: record.from, nonce };
       }
     } catch { /* Wallet and chain reconciliation also works without session storage. */ }
     return null;
@@ -132,26 +134,70 @@ export function brokerDealPage(app, packed) {
   function remember(record) {
     pending = record;
     try {
-      if (record) sessionStorage.setItem(key, JSON.stringify({ ...record, nonce: record.nonce?.toString() }));
-      else sessionStorage.removeItem(key);
+      if (record) {
+        const { hash, from, nonce } = record;
+        sessionStorage.setItem(key, JSON.stringify({ hash, from, nonce: nonce?.toString() ?? null, nonceVerified: nonce !== null }));
+      } else sessionStorage.removeItem(key);
     } catch { /* The current page still tracks the hash. */ }
   }
 
+  function clear(record) {
+    if (pending !== record) return;
+    fresh = false;
+    remember(null);
+  }
+
+  function replacementObserved(record) {
+    if (stopped || record.checking || record.observations >= 3) return !stopped && record.observations >= 3;
+    record.checking = true;
+    void (async () => {
+      const { hash, from } = record;
+      const tx = await chain.rpc("eth_getTransactionByHash", [hash]);
+      if (pending !== record || stopped) return;
+      if (tx !== null) {
+        const matches = same(tx?.hash, hash) && same(tx.from, from) && /^0x[0-9a-f]+$/i.test(tx.nonce);
+        const nonce = matches ? BigInt(tx.nonce) : null;
+        if (matches && record.nonce === null) {
+          record.nonce = nonce;
+          remember(record);
+        }
+        if (!matches || nonce !== record.nonce || tx.blockNumber != null) {
+          record.observations = 0;
+          return;
+        }
+      }
+      // Account count is evidence only after an exact nonce was observed for this hash and sender.
+      const displaced = record.nonce !== null && BigInt(await chain.rpc("eth_getTransactionCount", [from, "latest"])) > record.nonce;
+      record.observations = displaced ? (record.observations ?? 0) + 1 : 0;
+    })().catch(() => { record.observations = 0; }).finally(() => { record.checking = false; });
+    return false;
+  }
+
   async function followPending() {
-    if (!pending || busy) return;
-    const { hash, from, nonce } = pending;
-    const receipt = await chain.rpc("eth_getTransactionReceipt", [hash]);
-    if (receipt) {
-      remember(null);
-      if (receipt.status !== "0x1") message = { kind: "error", text: "The transaction reverted. The page has checked the deal again." };
-    } else if (await chain.overtaken(hash, from, nonce)) {
-      // Wait for more than one observation when a wallet and public RPC disagree about the latest block.
-      pending.observations = (pending.observations ?? 0) + 1;
-      if (pending.observations < 3) return;
-      remember(null);
+    const record = pending;
+    if (!record || busy) return;
+    const receipt = await chain.rpc("eth_getTransactionReceipt", [record.hash]);
+    if (pending !== record || busy || stopped) return;
+    if (same(receipt?.transactionHash, record.hash) && (receipt.status === "0x1" || receipt.status === "0x0")) {
+      clear(record);
+      if (receipt.status === "0x0") message = { kind: "error", text: "The transaction reverted. The page has checked the deal again." };
+    } else if (replacementObserved(record)) {
+      clear(record);
       message = { kind: "warn", text: "Your wallet replaced the transaction. The latest onchain state is shown below." };
-    } else {
-      pending.observations = 0;
+    }
+  }
+
+  async function confirmBroadcast(hash, from) {
+    const record = { hash, from, nonce: null };
+    remember(record);
+    stage("");
+    try {
+      const receipt = await chain.confirmed(hash, from, null, () => replacementObserved(record));
+      if (!stopped) clear(record);
+      return receipt;
+    } catch (error) {
+      if (!stopped && (error?.replaced || error?.reverted)) clear(record);
+      throw error;
     }
   }
 
@@ -173,6 +219,7 @@ export function brokerDealPage(app, packed) {
     }
     refreshing = true;
     try {
+      await followPending();
       const block = await v3.block();
       const proposalData = await v3.readProposal(proposal, block.number);
       const current = {
@@ -196,14 +243,13 @@ export function brokerDealPage(app, packed) {
         ]);
         current.check = { token, need, held, allowance, account, actor };
       }
-      await followPending();
       data = current;
       receipts = events;
       fresh = true;
       readError = "";
     } catch (error) {
       fresh = false;
-      readError = describe(error);
+      readError = pending ? "The submitted transaction is still being tracked. Try refreshing again." : describe(error);
     } finally {
       refreshing = false;
       if (!stopped) render();
@@ -221,14 +267,15 @@ export function brokerDealPage(app, packed) {
   }
 
   async function run(task) {
-    if (busy) return;
+    if (busy || pending) return;
     busy = true;
     message = null;
     try {
       await task();
     } catch (error) {
-      if (error?.replaced) remember(null);
-      message = { kind: "error", text: describe(error) };
+      message = pending
+        ? { kind: "warn", text: "The submitted transaction is still being tracked. Use Refresh from chain to check its status." }
+        : { kind: error?.replaced ? "warn" : "error", text: describe(error) };
     } finally {
       busy = false;
       progress = "";
@@ -257,9 +304,9 @@ export function brokerDealPage(app, packed) {
       throw say("The deal’s onchain state changed. Review the latest state and available actions.");
     }
 
+    const track = hash => confirmBroadcast(hash, from);
     if (check && check.allowance < check.need) {
-      await approveExactly(app, check.token, check.need, check.allowance, stage, v3.contract, from,
-        (hash, nonce) => remember({ hash, nonce, from }));
+      await approveExactly(app, check.token, check.need, check.allowance, stage, v3.contract, from, undefined, track);
     } else {
       let args = [kind === "claim" ? latest.grantId : id];
       if (kind === "fund" || kind === "settle") {
@@ -269,9 +316,8 @@ export function brokerDealPage(app, packed) {
       }
       const wording = { fund: "Funding deal", settle: "Settling deal", refund: "Refunding escrow", claim: "Claiming vested tokens" };
       await transact(app, v3.contract, abi.encodeFunctionData(kind, args), stage, wording[kind],
-        (hash, nonce) => remember({ hash, nonce, from }), from);
+        undefined, from, track);
     }
-    remember(null);
     fresh = false;
   }
 
@@ -322,7 +368,7 @@ export function brokerDealPage(app, packed) {
       // Reserve the action region so wallet requests and refreshes leave the focused control in place.
       h("div", { class: "action" }, controls),
       h("div", { class: "broker-message" }, progress && notice({ kind: "info", text: progress }),
-        pending && h("p", { class: "notice info", role: "status" }, "Submitted · awaiting network confirmation ", transaction(pending.hash, app.explorer)),
+        pending && h("p", { class: "notice info", role: "status" }, "Submitted · awaiting network confirmation ", transaction(pending.hash, app.explorer, "broker-pending-transaction")),
         message && notice(message)));
   }
 
@@ -334,7 +380,7 @@ export function brokerDealPage(app, packed) {
     const tokenLeg = (label, units, token, side) => token.decimals == null
       ? h("div", { class: "leg" }, fact(label, `${units} raw units`, h("span", { class: "block mono" }, token.address)))
       : leg(label, units, token, side);
-    show(main, h("div", { class: "broker-layout" },
+    showBroker(main, h("div", { class: "broker-layout" },
       nav(),
       card(h("div", { class: "card-head" }, heading("Private broker deal"), data && statePill(data.state)),
         created && h("p", { class: "delivery", role: "status" }, created.saved
@@ -349,8 +395,8 @@ export function brokerDealPage(app, packed) {
           fact("Seller", mono(t.seller)), fact("Buyer", mono(t.buyer)), fact("Broker", mono(t.broker)),
           fact("Deadline", utc(t.expiry)), fact("Network", displayNetwork(domain.chainId)),
           fact("V3 verifying contract", mono(v3.contract)), fact("Deal ID", mono(id, "broker-deal-id"))),
-        readError && problem(`Could not refresh chain data. ${readError}`),
-        !data && !readError && h("p", { class: "hint", role: "status" }, "Reading the deal’s onchain status…"),
+        h("div", {}, readError && problem(`Could not refresh chain data. ${readError}`),
+          !data && !readError && h("p", { class: "hint", role: "status" }, "Reading the deal’s onchain status…")),
         h("div", { class: "broker-link-actions" }, copyLink(link),
           h("a", { class: "button secondary", href: createHref(domain, t), testid: "broker-duplicate" }, "Duplicate terms"),
           actionButton("broker-refresh", "Refresh from chain", refresh, false, "secondary"))),
@@ -359,7 +405,8 @@ export function brokerDealPage(app, packed) {
         feeFacts(payment(t), quote, data?.treasury), rawTerms(domain, t)),
       data && section("Wallet actions", actions()),
       data?.grant && grantCard(data),
-      data?.status > 0 && receiptCard(app, { data, receipts }, id)));
+      data?.status > 0 && receiptCard(app, { data, receipts }, id)),
+    () => main.querySelector('[data-testid="broker-refresh"]'));
   }
 
   return { update, stop() { stopped = true; stopWatching(); } };

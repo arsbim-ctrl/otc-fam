@@ -1,13 +1,15 @@
-import { explain } from "./eth.js";
-import { card, h, notice, show, transaction, utc } from "./ui.js";
+import { explain, same } from "./eth.js";
+import { card, h, notice, transaction, utc } from "./ui.js";
 import { dealState, payment } from "./v3.js";
 import {
   actionButton, copyLink, createHref, dealHref, displayNetwork, heading, listenForUpdates,
-  mono, nav, percent, problem, readTokens, roleWallets, savedLinks, statePill, valueOf,
+  mono, nav, percent, problem, readTokens, roleWallets, savedLinks, showBroker, statePill, valueOf,
 } from "./v3-common.js";
 
 const WINDOW = 10_000;
 const roleTitle = { broker: "Broker", seller: "Seller", buyer: "Buyer" };
+const receiptForStatus = { 1: "BrokerDealFunded", 2: "BrokerDealSettled", 3: "BrokerDealRefunded" };
+const receiptLabel = { BrokerDealFunded: "Funding", BrokerDealSettled: "Settlement", BrokerDealRefunded: "Refund" };
 
 export function historyPage({ main, chain, v3, wallet, explorer }) {
   document.title = "Broker deal history · otc.fam";
@@ -48,6 +50,7 @@ export function historyPage({ main, chain, v3, wallet, explorer }) {
   }
 
   async function connect() {
+    const wasFocused = controls.contains(document.activeElement);
     connecting = true;
     walletError = "";
     render();
@@ -58,6 +61,7 @@ export function historyPage({ main, chain, v3, wallet, explorer }) {
     } finally {
       connecting = false;
       update();
+      if (!stopped && wasFocused && wallet.account && document.activeElement === document.body) select.focus();
     }
   }
 
@@ -85,12 +89,14 @@ export function historyPage({ main, chain, v3, wallet, explorer }) {
         const batch = await Promise.all(unique.slice(start, start + 8).map(async (id) => {
           const local = localById.get(id);
           const deal = local ? await v3.readProposal(local, block.number) : await v3.deal(id, block.number);
-          if (!deal.status && !local) return null;
+          if ((!deal.status && !local) || !same(deal.terms[selected], owner)) return null;
           const [tokens, events] = await Promise.all([
             readTokens(chain, deal.terms),
-            deal.status > 1 ? v3.receipts(id, block.number).catch(() => []) : [],
+            deal.status ? v3.receipts(id, block.number).catch(() => []) : [],
           ]);
-          return { ...deal, id, tokens, events, local, state: dealState(deal.status, deal.terms, block.time, deal.used) };
+          const event = events.findLast(item => item.name === receiptForStatus[deal.status])
+            ?? events.findLast(item => item.name === "BrokerDealFunded");
+          return { ...deal, id, tokens, event, local, state: dealState(deal.status, deal.terms, block.time, deal.used) };
         }));
         if (!valid()) return;
         found.push(...batch.filter(Boolean));
@@ -119,22 +125,22 @@ export function historyPage({ main, chain, v3, wallet, explorer }) {
 
   function render() {
     if (stopped) return;
-    show(controls, h("div", { class: "history-wallet" }, wallet?.account
-      ? h("p", { class: "hint" }, `${roleTitle[role]} wallet `, mono(wallet.account))
+    showBroker(controls, h("div", { class: "history-wallet" }, wallet?.account
+      ? [h("p", { class: "hint" }, `${roleTitle[role]} wallet `, mono(wallet.account)),
+        actionButton("broker-history-refresh", "Refresh from chain", refresh, false, "secondary")]
       : wallet ? actionButton("broker-history-connect", "Connect wallet", connect, connecting, "secondary")
         : h("p", { class: "hint" }, "Open the history in a browser with a wallet to see its deals."),
-    walletError && problem(walletError)));
+    walletError && problem(walletError)), () => select);
 
     const content = [];
-    if (error) content.push(problem(`Could not refresh this history. ${error}`), actionButton("broker-history-refresh", "Retry", refresh, false, "secondary"));
+    if (error) content.push(problem(`Could not refresh this history. ${error}`));
     if (account) {
       if (rows === null && loading) content.push(notice({ kind: "info", text: "Reading deal history…" }));
       if (rows?.length === 0) content.push(card(h("p", { class: "hint", testid: "broker-history-empty" },
         `No ${role} deals found for this wallet in the blocks shown.`)));
       if (rows?.length) content.push(h("ul", { class: "broker-history-list", testid: "broker-history-list" }, rows.map(row => {
-        const { terms, state, id, tokens: [base, quote] } = row;
+        const { terms, state, id, event, tokens: [base, quote] } = row;
         const link = dealHref(v3.domain, terms);
-        const event = row.events.findLast(item => item.name !== "BrokerDealFunded");
         return h("li", {}, card(
           h("div", { class: "card-head" },
             h("h2", {}, h("a", { href: link, testid: `broker-history-deal-${id}` }, `${base.symbol || "Base"} / ${quote.symbol || "Quote"}`)),
@@ -145,14 +151,16 @@ export function historyPage({ main, chain, v3, wallet, explorer }) {
             h("div", {}, h("dt", {}, "Broker share"), h("dd", {}, `${percent(terms.brokerBps)} · ${valueOf(payment(terms).brokerFee, quote)}`)),
             h("div", {}, h("dt", {}, "Deadline"), h("dd", {}, utc(terms.expiry))),
             h("div", {}, h("dt", {}, "Network"), h("dd", {}, displayNetwork(v3.domain.chainId)))),
-          event && h("p", { class: "hint" }, event.name === "BrokerDealSettled" ? "Settlement transaction " : "Refund transaction ",
-            transaction(event.hash, explorer)),
+          h("div", {}, event
+            ? h("p", { class: "hint" }, `${receiptLabel[event.name]} transaction · confirmed in block ${event.block} `,
+              transaction(event.hash, explorer, `broker-history-receipt-${id}`))
+            : row.status > 0 && h("p", { class: "hint" }, "Receipt unavailable. Refresh to check again.")),
           h("div", { class: "broker-link-actions" }, copyLink(link, `copy-${id}`),
-            h("a", { class: "button secondary", href: createHref(v3.domain, terms) }, "Duplicate terms"))));
+            h("a", { class: "button secondary", href: createHref(v3.domain, terms), testid: `broker-history-duplicate-${id}` }, "Duplicate terms"))));
       })));
       if (firstBlock > v3.fromBlock) content.push(actionButton("broker-history-older", "Load older onchain deals", older, loading, "secondary"));
     }
-    show(view, h("div", { class: "broker-history-results" }, content));
+    showBroker(view, h("div", { class: "broker-history-results" }, content), () => select);
   }
 
   return { update, stop() { stopped = true; stopWatching(); } };
