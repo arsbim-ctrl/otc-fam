@@ -109,8 +109,11 @@ export function h(tag, props, ...children) {
  * Wherever the two have the same kind of node at the same place, the old one stays and takes the new one's text,
  * attributes and handlers: a button the person has tabbed to is still the same button, and selected text stays selected.
  */
-function morph(from, to) {
-  if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) {
+function morph(from, to, strict = false) {
+  // `strict`: an element that would become one with another handle is replaced, not changed in place. A button the
+  // person has focused then never turns into another button under their finger: it goes, and the focus with it.
+  const handle = (node) => (node.nodeType === Node.ELEMENT_NODE ? node.getAttribute("data-testid") : null);
+  if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName || (strict && handle(from) !== handle(to))) {
     from.replaceWith(to);
     return to;
   }
@@ -122,7 +125,7 @@ function morph(from, to) {
   for (const { name } of [...from.attributes]) if (!to.hasAttribute(name)) from.removeAttribute(name);
   listen(from, to.__on ?? {});
   const old = [...from.childNodes], next = [...to.childNodes];
-  next.forEach((child, i) => (i < old.length ? morph(old[i], child) : from.append(child)));
+  next.forEach((child, i) => (i < old.length ? morph(old[i], child, strict) : from.append(child)));
   for (const child of old.slice(next.length)) child.remove();
   return from;
 }
@@ -143,11 +146,14 @@ if (typeof document !== "undefined") {
  * `over`: the focus then neither falls back to the top of the page nor lands on another button with the old handle.
  */
 export function show(container, view, otherwise, over = false) {
-  const current = container.firstElementChild;
-  if (current && container.childNodes.length === 1) morph(current, view);
+  const current = container.firstElementChild, had = keep, inside = container.contains(document.activeElement);
+  // A page that names where the focus goes (even null, for "nowhere just now") has its elements replaced by handle.
+  if (current && container.childNodes.length === 1) morph(current, view, otherwise !== undefined);
   else container.replaceChildren(view);
+  // A focus this redraw took away, by replacing its element, is still where the person put it: its handle stands.
+  if (inside && !container.contains(document.activeElement)) keep = had;
   if (!keep || container.contains(document.activeElement)) return;
-  const at = (handle) => container.querySelector(`[data-testid="${CSS.escape(handle)}"]`);
+  const at =(handle) => container.querySelector(`[data-testid="${CSS.escape(handle)}"]`);
   const wanted = at(keep), instead = otherwise ? at(otherwise) : null;
   // Only a focus that is nowhere is sent elsewhere: one the person put outside the container stays where it is.
   const nowhere = !document.activeElement || document.activeElement === document.body;
@@ -198,14 +204,18 @@ export function action({ steps, step, button, hint, notice: message, extra, anno
     steps && h("ol", { class: "steps" }, steps.map((name, i) => h("li", { class: i < step ? "done" : i === step ? "now" : "" }, name))),
     button && h("button", { class: `primary${button.label.length > 28 ? " long" : ""}`, type: "button", testid: "primary-action", disabled: !button.run,
       onclick: button.run && ((e) => press(e, button.run)) }, button.label),
-    hint && h("p", { class: "hint", role: announce ? "status" : null }, hint),
+    // An announced hint has its paragraph from the start of the press, still empty: a screen reader follows a region it already knows.
+    (hint || announce) && h("p", { class: "hint", role: announce ? "status" : null }, hint || null),
     message && notice(message),
     extra);
 }
 
-/** A button that copies the link `text`. `failed` is what it says when the browser gives no clipboard: where to copy the link from by hand. */
-export function copyButton(text, failed = "Copying failed: copy the link from the address bar") {
-  return h("button", { class: "secondary", type: "button", testid: "copy-link", onclick: async (e) => {
+/**
+ * A button that copies the link `text`. `failed` is what it says when the browser gives no clipboard: where to copy
+ * the link from by hand. `testid` is its handle, for a page that has a second such button.
+ */
+export function copyButton(text, failed = "Copying failed: copy the link from the address bar", testid = "copy-link") {
+  return h("button", { class: "secondary", type: "button", testid, onclick: async (e) => {
     const button = e.currentTarget;
     const copied = navigator.clipboard ? await navigator.clipboard.writeText(text).then(() => true, () => false) : false;
     button.textContent = copied ? "Link copied" : failed;

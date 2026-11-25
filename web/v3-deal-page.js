@@ -110,7 +110,10 @@ export function dealPageV3(app, path) {
     if (shown !== null && st !== shown) movedOn = true;
     shown = st;
     show(app.main, view(), s.busy ? null : "next-actor", movedOn);
-    if (!s.busy) movedOn = false;
+    if (!s.busy) {
+      movedOn = false;
+      walletSeen = walletNow(); // the wallet as the page has now shown it: a late event that tells of this same state clears nothing
+    }
     clearTimeout(timer);
     const left = s.t && (s.status === "unfunded" || s.status === "funded") ? settleBy(s.t) - now() : -1;
     // The page turns to "expired" on time.
@@ -274,7 +277,7 @@ export function dealPageV3(app, path) {
   function sellerActions(t, role, m, give) {
     const steps = walletSteps(s.base, "Sign and fund"), me = wallet?.account;
     if (s.busy) return action({ steps, step: s.busy.step, button: { label: s.busy.label }, hint: busyHint(), announce: true });
-    if (!wallet) return action({ steps, step: 0, button: { label: "Connect the seller's wallet to fund" }, notice: { kind: "info", text: NO_WALLET }, extra: copyButton(fullLink()) });
+    if (!wallet) return action({ steps, step: 0, button: { label: "Connect the seller's wallet to fund" }, notice: { kind: "info", text: NO_WALLET }, extra: copyButton(fullLink(), undefined, "copy-link-first") });
     if (!me) {
       return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: `Only the seller, ${t.seller}, can fund this deal. Connect that wallet. Nothing is sent yet.`, notice: s.notice });
     }
@@ -299,7 +302,7 @@ export function dealPageV3(app, path) {
     const q = s.quote, steps = walletSteps(q, "Sign and settle"), me = wallet?.account, total = amount(m.buyerTotal, q), vesting = t.delivery === VESTING;
     if (s.busy?.step === null) return action({ hint: busyHint(), announce: true, extra: secondary("refund-action", s.busy.label) });
     if (s.busy) return action({ steps: role === "seller" ? null : steps, step: s.busy.step, button: { label: s.busy.label }, hint: busyHint(), announce: true });
-    if (!wallet) return action({ steps, step: 0, button: { label: "Connect the buyer's wallet to settle" }, notice: { kind: "info", text: NO_WALLET }, extra: copyButton(fullLink()) });
+    if (!wallet) return action({ steps, step: 0, button: { label: "Connect the buyer's wallet to settle" }, notice: { kind: "info", text: NO_WALLET }, extra: copyButton(fullLink(), undefined, "copy-link-first") });
     if (!me) {
       return action({ steps, step: 0, button: { label: "Connect wallet", run: connect }, hint: `Only the buyer, ${t.buyer}, can settle this deal. Connect that wallet. Nothing is sent yet.`, notice: s.notice });
     }

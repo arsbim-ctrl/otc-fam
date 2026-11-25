@@ -584,6 +584,40 @@ test("R3-05: the seller's funding can be done from the keyboard alone: the butto
   });
 }));
 
+test("R3-05: a wallet that connects from the keyboard and is not the one whose turn it is finds the focus on the line that says whose turn it is", () => onSite(async (site, w) => {
+  const t = await w.terms3(), id = await w.fund3(t);
+  await browse(site, linkTo(w, t), { wallet: signerFor(w, "other") }, async (page) => {
+    await page.getByTestId("primary-action").focus();
+    await page.keyboard.press("Enter"); // Connect wallet
+    await noticeSays(page, `Only the buyer, ${w.buyer}, can settle this deal.`);
+    // The button is gone and the deal has not moved: the focus is not lost, and it is on no button.
+    await until(() => page.evaluate(() => document.activeElement?.dataset.testid === "next-actor"), "the focus on the line that says whose turn it is");
+    assert.equal(await page.getByTestId("primary-action").count(), 0);
+    assert.equal(await page.getByTestId("copy-link").count(), 1, "one Copy link button, with the terms");
+  });
+  assert.equal(await statusOf(w, id), STATUS3.Funded);
+}));
+
+test("R3-05: a focused button never becomes another button in place: when the wallet itself returns to the right network, the focus leaves Switch for the status line, not for Refund", () => onSite(async (site, w) => {
+  const soon = (await w.chain.now()) + 300;
+  const t = await w.terms3({ expiry: soon }), id = await w.fund3(t);
+  await w.at(soon);
+  let chainId = "0x1";
+  const wallet = signerFor(w, "seller", (request) => (request.method === "eth_chainId" ? { result: chainId } : null));
+  await browse(site, linkTo(w, t), { wallet }, async (page) => {
+    await state(page, "expired");
+    await page.getByTestId("connect-action").click();
+    await says(page, "primary-action", "Switch to Local test chain");
+    await page.getByTestId("primary-action").focus();
+    // The seller switches in the wallet, not on the page: where "Switch" was, the page now offers the refund.
+    chainId = "0x7a69";
+    await walletSays(page, "chainChanged", chainId);
+    await until(async () => (await page.getByTestId("refund-action").count()) === 1 && (await page.getByTestId("refund-action").isEnabled()), "the refund button once the wallet is on the right network");
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), "next-actor", "the focus is on the status line: another Enter refunds nothing");
+  });
+  assert.equal(await statusOf(w, id), STATUS3.Funded);
+}));
+
 for (const [width, size] of SIZES) {
   test(`R3-05: at ${width} width the buyer settles from the keyboard alone, and the focus then rests on the line that says the deal is settled`, () => onSite(async (site, w) => {
     const t = await w.terms3(), id = await w.fund3(t);

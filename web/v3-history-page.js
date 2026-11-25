@@ -57,7 +57,7 @@ export function historyPageV3(app) {
         const deal = await v3.deal(id), t = deal.terms ?? known.get(id).terms;
         // Terms that can never be funded await nothing: they break a rule of the contract, or their seller's nonce is spent.
         const flawed = deal.status === "unfunded" && Boolean(flawOf(t, v3.contract));
-        const [base, quote, spent] = await Promise.all([chain.token(t.baseToken), chain.token(t.quoteToken), deal.status === "unfunded" && !flawed ? v3.nonceUsed(t.seller, t.nonce) : false]);
+        const [base, quote, spent] = await Promise.all([chain.token(t.baseToken), chain.token(t.quoteToken), deal.status === "unfunded" && !flawed ? v3.nonceUsed(t.seller, t.nonce).catch(() => false) : false]); // unread, the nonce is not known to be spent
         return { id, t, base, quote, status: deal.status, state: flawed || spent ? "void" : stateOf(t, deal.status, Math.max(block.time, Date.now() / 1000)), role: roleOf(address, t, known.get(id)?.how),
           how: known.get(id)?.how ?? null, at: known.get(id)?.at ?? 0, receipt: receipts.get(id) ?? null };
       }).map((row) => row.catch(() => null)))).filter(Boolean); // a deal whose tokens do not answer cannot be shown, or funded
