@@ -1,0 +1,7 @@
+
+> otc-fam@0.1.0 check
+> node .launchpad/checks/round-1/run.mjs && node .launchpad/checks/round-2/run.mjs && node .launchpad/checks/round-3/run.mjs
+
+16/16 checks passed
+7/7 checks passed
+5/5 checks passed
